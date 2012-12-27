@@ -8,7 +8,7 @@ type Treap struct {
 // Compare returns an integer comparing the two items
 // lexicographically. The result will be 0 if a==b, -1 if a < b, and
 // +1 if a > b.
-type Compare func(a, b Item) int
+type Compare func(a, b interface{}) int
 
 // Item can be anything.
 type Item interface{}

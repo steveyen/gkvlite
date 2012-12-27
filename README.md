@@ -40,7 +40,7 @@ Example
         "github.com/steveyen/gtreap"
     )
     
-    func stringCompare(a, b Item) int {
+    func stringCompare(a, b interface{}) int {
 	    return bytes.Compare([]byte(a.(string)), []byte(b.(string)))
     }
     
