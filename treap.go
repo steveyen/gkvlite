@@ -74,7 +74,7 @@ func (t *Treap) union(this *node, that *node) *node {
 			right:    t.union(this.right, right),
 		}
 	}
-	// We don't use middle because that has precendence.
+	// We don't use middle because the "that" has precendence.
 	left, _, right := t.split(this, that.item)
 	return &node{
 		item:     that.item,
