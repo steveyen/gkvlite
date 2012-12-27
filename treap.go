@@ -2,6 +2,7 @@ package treap
 
 type Treap struct {
 	compare Compare
+	root    node
 }
 
 // Compare returns an integer comparing the two items
@@ -12,3 +13,9 @@ type Compare func(a, b Item) int
 // Item can be anything.
 type Item interface{}
 
+type node struct {
+	item     Item
+	priority int
+	left     *node
+	right    *node
+}
