@@ -11,10 +11,12 @@ type Treap struct {
 // +1 if a > b.
 type Compare func(a, b Item) int
 
-// Item can be anything.
+// Key and Item can be anything.
+type Key interface{}
 type Item interface{}
 
 type node struct {
+	key      Key
 	item     Item
 	priority int
 	left     *node
@@ -23,4 +25,19 @@ type node struct {
 
 func NewTreap(c Compare) *Treap {
 	return &Treap{compare: c, root: nil}
+}
+
+func (t *Treap) Count() int {
+	return t.count
+}
+
+func (t *Treap) Get(key Key) Item {
+	if t.root == nil {
+		return nil
+	}
+	return t.root.get(key)
+}
+
+func (n *node) get(key Key) Item {
+	return nil
 }
