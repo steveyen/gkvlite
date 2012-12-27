@@ -144,4 +144,17 @@ func TestVisit(t *testing.T) {
 
 	// The x treap should be unchanged.
 	visitX()
+
+	if x.Min() != "a" {
+		t.Errorf("expected min of a")
+	}
+	if x.Max() != "e" {
+		t.Errorf("expected max of d")
+	}
+	if y.Min() != "b" {
+		t.Errorf("expected min of b")
+	}
+	if y.Max() != "f" {
+		t.Errorf("expected max of f")
+	}
 }

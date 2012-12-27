@@ -24,10 +24,35 @@ func NewTreap(c Compare) *Treap {
 	return &Treap{compare: c, root: nil}
 }
 
-func (t *Treap) Get(target Item) Item {
-	if t.root == nil {
+func (t *Treap) Min() Item {
+	n := t.root
+	if n == nil {
 		return nil
 	}
+	for {
+		if n.left == nil {
+			return n.item
+		}
+		n = n.left
+	}
+	return nil
+}
+
+func (t *Treap) Max() Item {
+	n := t.root
+	if n == nil {
+		return nil
+	}
+	for {
+		if n.right == nil {
+			return n.item
+		}
+		n = n.right
+	}
+	return nil
+}
+
+func (t *Treap) Get(target Item) Item {
 	n := t.root
 	for {
 		if n == nil {
