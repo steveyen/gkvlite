@@ -61,26 +61,26 @@ func (t *Treap) union(this *node, that *node) *node {
 		left, middle, right := t.split(that, this.item)
 		if middle == nil {
 			return &node{
-				item: this.item,
+				item:     this.item,
 				priority: this.priority,
-				left: t.union(this.left, left),
-				right: t.union(this.right, right),
+				left:     t.union(this.left, left),
+				right:    t.union(this.right, right),
 			}
 		}
 		return &node{
-			item: middle.item,
+			item:     middle.item,
 			priority: middle.priority,
-			left: t.union(this.left, left),
-			right: t.union(this.right, right),
+			left:     t.union(this.left, left),
+			right:    t.union(this.right, right),
 		}
 	}
 	// We don't use middle because that has precendence.
 	left, _, right := t.split(this, that.item)
-	return &node {
-		item: that.item,
+	return &node{
+		item:     that.item,
 		priority: that.priority,
-		left: t.union(left, that.left),
-		right: t.union(right, that.right),
+		left:     t.union(left, that.left),
+		right:    t.union(right, that.right),
 	}
 }
 
@@ -101,17 +101,17 @@ func (t *Treap) split(n *node, s Item) (*node, *node, *node) {
 	if c < 0 {
 		left, middle, right := t.split(n.left, s)
 		return left, middle, &node{
-			item: n.item,
+			item:     n.item,
 			priority: n.priority,
-			left: right,
-			right: n.right,
+			left:     right,
+			right:    n.right,
 		}
 	}
 	left, middle, right := t.split(n.right, s)
 	return &node{
-		item: n.item,
+		item:     n.item,
 		priority: n.priority,
-		left: n.left,
-		right: left,
+		left:     n.left,
+		right:    left,
 	}, middle, right
 }

@@ -14,8 +14,9 @@ func TestTreap(t *testing.T) {
 	if x == nil {
 		t.Errorf("expected NewTreap to work")
 	}
+
 	tests := []struct {
-		op string
+		op  string
 		val string
 		pri int
 		exp string
