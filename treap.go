@@ -144,3 +144,25 @@ func (t *Treap) join(this *node, that *node) *node {
 		right:    that.right,
 	}
 }
+
+type ItemVisitor func(i Item) bool
+
+// Visit items greater-than-or-equal to the pivot.
+func (t *Treap) VisitAscend(pivot Item, visitor ItemVisitor) {
+	t.visitAscend(t.root, pivot, visitor)
+}
+
+func (t *Treap) visitAscend(n *node, pivot Item, visitor ItemVisitor) bool {
+	if n == nil {
+		return true
+	}
+	if t.compare(pivot, n.item) <= 0 {
+		if !t.visitAscend(n.left, pivot, visitor) {
+			return false
+		}
+		if !visitor(n.item) {
+			return false
+		}
+	}
+	return t.visitAscend(n.right, pivot, visitor)
+}

@@ -82,3 +82,40 @@ func TestTreap(t *testing.T) {
 		}
 	}
 }
+
+func load(x *Treap, arr []string) *Treap {
+	for i, s := range arr {
+		x = x.Upsert(s, i)
+	}
+	return x
+}
+
+func visitExpect(t *testing.T, x *Treap, start string, arr []string) {
+	n := 0
+	x.VisitAscend(start, func(i Item) bool {
+		if i.(string) != arr[n] {
+			t.Errorf("expected visit item: %v, saw: %v", arr[n], i)
+		}
+		n++
+		return true
+	})
+	if n != len(arr) {
+		t.Errorf("expected # visit callbacks: %v, saw: %v", len(arr), n)
+	}
+}
+
+func TestVisit(t *testing.T) {
+	x := NewTreap(stringCompare)
+	x = load(x, []string{"e", "d", "c", "b", "a"})
+	visitExpect(t, x, "a", []string{"a", "b", "c", "d", "e"})
+	visitExpect(t, x, "a1", []string{"b", "c", "d", "e"})
+	visitExpect(t, x, "b", []string{"b", "c", "d", "e"})
+	visitExpect(t, x, "b1", []string{"c", "d", "e"})
+	visitExpect(t, x, "c", []string{"c", "d", "e"})
+	visitExpect(t, x, "c1", []string{"d", "e"})
+	visitExpect(t, x, "d", []string{"d", "e"})
+	visitExpect(t, x, "d1", []string{"e"})
+	visitExpect(t, x, "e", []string{"e"})
+	visitExpect(t, x, "f", []string{})
+}
+
