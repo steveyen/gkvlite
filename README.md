@@ -15,7 +15,8 @@ which can share internal nodes with the previous treap.  All nodes in
 this implementation are read-only after their creation.  This allows
 concurrent readers to operate safely with concurrent writers as
 modifications only create new data structures and never modify
-existing data structures.
+existing data structures.  This is a simple approach to achieving MVCC
+or multi-version concurrency control.
 
 By heap, items in the treap follow the heap-priority property, where a
 parent node will have higher priority than its left and right children
