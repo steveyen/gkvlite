@@ -14,13 +14,34 @@ func TestTreap(t *testing.T) {
 	if x == nil {
 		t.Errorf("expected NewTreap to work")
 	}
-	i := x.Get("not-there")
-	if i != nil {
-		t.Errorf("expected no item")
+	tests := []struct {
+		op string
+		val string
+		pri int
+		exp string
+	}{
+		{"get", "not-there", -1, "NIL"},
+		{"ups", "a", 1, ""},
+		{"get", "a", -1, "a"},
+		{"ups", "b", 2, ""},
+		{"get", "a", -1, "a"},
+		{"get", "b", -1, "b"},
+		{"ups", "c", 3, ""},
+		{"get", "a", -1, "a"},
+		{"get", "b", -1, "b"},
+		{"get", "c", -1, "c"},
+		{"get", "not-there", -1, "NIL"},
 	}
-	x = x.Upsert("a", 1)
-	i = x.Get("a")
-	if i != "a" {
-		t.Errorf("expected item")
+
+	for testIdx, test := range tests {
+		switch test.op {
+		case "get":
+			i := x.Get(test.val)
+			if i != test.exp && !(i == nil && test.exp == "NIL") {
+				t.Errorf("test: %v, on Get, expected: %v, got: %v", testIdx, test.exp, i)
+			}
+		case "ups":
+			x = x.Upsert(test.val, test.pri)
+		}
 	}
 }
