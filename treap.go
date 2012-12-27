@@ -1,4 +1,4 @@
-package treap
+package gtreap
 
 type Treap struct {
 	compare Compare
@@ -10,7 +10,7 @@ type Treap struct {
 // +1 if a > b.
 type Compare func(a, b Item) int
 
-// Key and Item can be anything.
+// Item can be anything.
 type Item interface{}
 
 type node struct {
