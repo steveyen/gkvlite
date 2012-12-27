@@ -2,7 +2,6 @@ package treap
 
 type Treap struct {
 	compare Compare
-	count   int
 	root    *node
 }
 
@@ -22,21 +21,14 @@ type node struct {
 }
 
 func NewTreap(c Compare) *Treap {
-	return &Treap{compare: c, count: 0, root: nil}
-}
-
-func (t *Treap) Count() int {
-	return t.count
+	return &Treap{compare: c, root: nil}
 }
 
 func (t *Treap) Get(target Item) Item {
 	if t.root == nil {
 		return nil
 	}
-	return t.get(t.root, target)
-}
-
-func (t *Treap) get(n *node, target Item) Item {
+	n := t.root
 	for {
 		if n == nil {
 			break
@@ -51,4 +43,75 @@ func (t *Treap) get(n *node, target Item) Item {
 		}
 	}
 	return nil
+}
+
+func (t *Treap) Upsert(item Item, itemPriority int) *Treap {
+	r := t.union(t.root, &node{item: item, priority: itemPriority})
+	return &Treap{compare: t.compare, root: r}
+}
+
+func (t *Treap) union(this *node, that *node) *node {
+	if this == nil {
+		return that
+	}
+	if that == nil {
+		return this
+	}
+	if this.priority > that.priority {
+		left, middle, right := t.split(that, this.item)
+		if middle == nil {
+			return &node{
+				item: this.item,
+				priority: this.priority,
+				left: t.union(this.left, left),
+				right: t.union(this.right, right),
+			}
+		}
+		return &node{
+			item: middle.item,
+			priority: middle.priority,
+			left: t.union(this.left, left),
+			right: t.union(this.right, right),
+		}
+	}
+	// We don't use middle because that has precendence.
+	left, _, right := t.split(this, that.item)
+	return &node {
+		item: that.item,
+		priority: that.priority,
+		left: t.union(left, that.left),
+		right: t.union(right, that.right),
+	}
+}
+
+// Splits a treap into two treaps based on a split item "s".
+// The result tuple-3 means (left, X, right), where X is either...
+// nil - meaning the item s was not in the original treap.
+// non-null - returning the node that had item s.
+// The tuple-3's left result has items < s,
+// and the tuple-3's right result has items > s.
+func (t *Treap) split(n *node, s Item) (*node, *node, *node) {
+	if n == nil {
+		return nil, nil, nil
+	}
+	c := t.compare(s, n.item)
+	if c == 0 {
+		return n.left, n, n.right
+	}
+	if c < 0 {
+		left, middle, right := t.split(n.left, s)
+		return left, middle, &node{
+			item: n.item,
+			priority: n.priority,
+			left: right,
+			right: n.right,
+		}
+	}
+	left, middle, right := t.split(n.right, s)
+	return &node{
+		item: n.item,
+		priority: n.priority,
+		left: n.left,
+		right: left,
+	}, middle, right
 }
