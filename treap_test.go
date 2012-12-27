@@ -37,6 +37,35 @@ func TestTreap(t *testing.T) {
 		{"get", "b", -1, "b"},
 		{"get", "c", -1, "c"},
 		{"get", "not-there", -1, "NIL"},
+		{"del", "a", -1, ""},
+		{"get", "a", -1, "NIL"},
+		{"get", "b", -1, "b"},
+		{"get", "c", -1, "c"},
+		{"get", "not-there", -1, "NIL"},
+		{"ups", "a", 10, ""},
+		{"get", "a", -1, "a"},
+		{"get", "b", -1, "b"},
+		{"get", "c", -1, "c"},
+		{"get", "not-there", -1, "NIL"},
+		{"del", "a", -1, ""},
+		{"del", "b", -1, ""},
+		{"del", "c", -1, ""},
+		{"get", "a", -1, "NIL"},
+		{"get", "b", -1, "NIL"},
+		{"get", "c", -1, "NIL"},
+		{"get", "not-there", -1, "NIL"},
+		{"del", "a", -1, ""},
+		{"del", "b", -1, ""},
+		{"del", "c", -1, ""},
+		{"get", "a", -1, "NIL"},
+		{"get", "b", -1, "NIL"},
+		{"get", "c", -1, "NIL"},
+		{"get", "not-there", -1, "NIL"},
+		{"ups", "a", 10, ""},
+		{"get", "a", -1, "a"},
+		{"get", "b", -1, "NIL"},
+		{"get", "c", -1, "NIL"},
+		{"get", "not-there", -1, "NIL"},
 	}
 
 	for testIdx, test := range tests {
@@ -48,6 +77,8 @@ func TestTreap(t *testing.T) {
 			}
 		case "ups":
 			x = x.Upsert(test.val, test.pri)
+		case "del":
+			x = x.Delete(test.val)
 		}
 	}
 }

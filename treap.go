@@ -115,3 +115,32 @@ func (t *Treap) split(n *node, s Item) (*node, *node, *node) {
 		right:    left,
 	}, middle, right
 }
+
+func (t *Treap) Delete(target Item) *Treap {
+	left, _, right := t.split(t.root, target)
+	return &Treap{compare: t.compare, root: t.join(left, right)}
+}
+
+// All the items from this are < items from that.
+func (t *Treap) join(this *node, that *node) *node {
+	if this == nil {
+		return that
+	}
+	if that == nil {
+		return this
+	}
+	if this.priority > that.priority {
+		return &node{
+			item:     this.item,
+			priority: this.priority,
+			left:     this.left,
+			right:    t.join(this.right, that),
+		}
+	}
+	return &node{
+		item:     that.item,
+		priority: that.priority,
+		left:     t.join(this, that.left),
+		right:    that.right,
+	}
+}
