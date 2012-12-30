@@ -141,7 +141,13 @@ func visitExpectPTreap(t *testing.T, x *PTreap, start string, arr []string) {
 
 func TestVisitStoreMem(t *testing.T) {
 	s, _ := NewStore(nil)
+	if s.Flush() == nil {
+		t.Errorf("expected in-memory store Flush() error")
+	}
 	x := s.AddCollection("x", bytes.Compare)
+	if s.Flush() == nil {
+		t.Errorf("expected in-memory store Flush() error")
+	}
 
 	visitExpectPTreap(t, x, "a", []string{})
 	min, err := x.Min(true)
@@ -154,6 +160,9 @@ func TestVisitStoreMem(t *testing.T) {
 	}
 
 	loadPTreap(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+	if s.Flush() == nil {
+		t.Errorf("expected in-memory store Flush() error")
+	}
 
 	visitX := func() {
 		visitExpectPTreap(t, x, "a", []string{"a", "b", "c", "d", "e"})
@@ -184,5 +193,9 @@ func TestVisitStoreMem(t *testing.T) {
 	max1, err := x.Max(true)
 	if err != nil || string(max1.Key) != "e" || string(max1.Val) != "e" {
 		t.Errorf("expected max1 of e, got: %#v, err: %#v", max1, err)
+	}
+
+	if s.Flush() == nil {
+		t.Errorf("expected in-memory store Flush() error")
 	}
 }

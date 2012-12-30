@@ -43,6 +43,23 @@ func (s *Store) RemoveCollection(name string) {
 	delete(s.coll, name)
 }
 
+func (s *Store) Flush() (err error) {
+	if s.file == nil {
+		return errors.New("no file / in-memory only, so cannot Flush()")
+	}
+	for _, t := range s.coll {
+		err = t.store.flushItems(&t.root)
+		if err != nil {
+			return err
+		}
+		err = t.store.flushNodes(&t.root)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // User-supplied key comparison func should return 0 if a == b,
 // -1 if a < b, and +1 if a > b.
 type KeyCompare func(a, b []byte) int
@@ -213,15 +230,6 @@ type PItemVisitor func(i *PItem) bool
 // Visit items greater-than-or-equal to the target.
 func (t *PTreap) VisitAscend(target []byte, withValue bool, visitor PItemVisitor) error {
 	_, err := t.store.visitAscendNode(t, &t.root, target, withValue, visitor)
-	return err
-}
-
-// Persists any unpersisted data.
-func (t *PTreap) Flush() error {
-	err := t.store.flushItems(&t.root)
-	if err == nil {
-		err = t.store.flushNodes(&t.root)
-	}
 	return err
 }
 
