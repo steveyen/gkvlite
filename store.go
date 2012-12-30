@@ -151,8 +151,8 @@ func (t *PTreap) Max(withValue bool) (*PItem, error) {
 type PItemVisitor func(i *PItem) bool
 
 // Visit items greater-than-or-equal to the target.
-func (t *PTreap) VisitAscend(target []byte, visitor PItemVisitor) error {
-	_, err := t.store.visitAscendNode(t, &t.root, target, visitor)
+func (t *PTreap) VisitAscend(target []byte, withValue bool, visitor PItemVisitor) error {
+	_, err := t.store.visitAscendNode(t, &t.root, target, withValue, visitor)
 	return err
 }
 
@@ -396,7 +396,7 @@ func (o *Store) edge(t *PTreap, withValue bool, cfn func(*pnode) *pnodeLoc) (
 }
 
 func (o *Store) visitAscendNode(t *PTreap, n *pnodeLoc, target []byte,
-	visitor PItemVisitor) (bool, error) {
+	withValue bool, visitor PItemVisitor) (bool, error) {
 	nNode, err := o.loadNodeLoc(n)
 	if err != nil {
 		return false, err
@@ -409,13 +409,19 @@ func (o *Store) visitAscendNode(t *PTreap, n *pnodeLoc, target []byte,
 		return false, err
 	}
 	if t.compare(target, nItem.item.Key) <= 0 {
-		keepGoing, err := o.visitAscendNode(t, &nNode.node.left, target, visitor)
+		keepGoing, err := o.visitAscendNode(t, &nNode.node.left, target, withValue, visitor)
 		if err != nil || !keepGoing {
 			return false, err
+		}
+		if withValue {
+			nItem, err = o.loadItemLoc(nItem)
+			if err != nil {
+				return false, err
+			}
 		}
 		if !visitor(nItem.item) {
 			return false, nil
 		}
 	}
-	return o.visitAscendNode(t, &nNode.node.right, target, visitor)
+	return o.visitAscendNode(t, &nNode.node.right, target, withValue, visitor)
 }

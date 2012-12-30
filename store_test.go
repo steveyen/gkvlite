@@ -124,7 +124,7 @@ func loadPTreap(x *PTreap, arr []string) {
 
 func visitExpectPTreap(t *testing.T, x *PTreap, start string, arr []string) {
 	n := 0
-	err := x.VisitAscend([]byte(start), func(i *PItem) bool {
+	err := x.VisitAscend([]byte(start), true, func(i *PItem) bool {
 		if string(i.Key) != arr[n] {
 			t.Errorf("expected visit item: %v, saw: %v", arr[n], i)
 		}
