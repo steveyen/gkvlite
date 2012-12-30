@@ -172,84 +172,70 @@ func (o *Store) loadItemLoc(iloc *PItemLoc, withValue bool) (*PItemLoc, error) {
 
 func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, error) {
 	thisNode, err := o.loadNodeLoc(this)
-	if err != nil {
-		return empty, err
-	}
-	thatNode, err := o.loadNodeLoc(that)
-	if err != nil {
-		return empty, err
-	}
-
-	if thisNode.isEmpty() {
-		return that, nil
-	}
-	if thatNode.isEmpty() {
-		return this, nil
-	}
-
-	thisItem, err := o.loadItemLoc(&thisNode.node.item, false)
-	if err != nil {
-		return empty, err
-	}
-	thatItem, err := o.loadItemLoc(&thatNode.node.item, false)
-	if err != nil {
-		return empty, err
-	}
-
-	if thisItem.item.Priority > thatItem.item.Priority {
-		left, middle, right, err := o.split(t, that, thisItem.item.Key)
-		if err != nil {
-			return empty, err
-		}
-		if middle.isEmpty() {
-			newLeft, err := o.union(t, &thisNode.node.left, left)
-			if err != nil {
-				return empty, err
+	if err == nil {
+		thatNode, err := o.loadNodeLoc(that)
+		if err == nil {
+			if thisNode.isEmpty() {
+				return thatNode, nil
 			}
-			newRight, err := o.union(t, &thisNode.node.right, right)
-			if err != nil {
-				return nil, err
+			if thatNode.isEmpty() {
+				return thisNode, nil
 			}
-			return &pnodeLoc{node: &pnode{
-				item:  *thisItem,
-				left:  *newLeft,
-				right: *newRight,
-			}}, nil
+			thisItem, err := o.loadItemLoc(&thisNode.node.item, false)
+			if err == nil {
+				thatItem, err := o.loadItemLoc(&thatNode.node.item, false)
+				if err == nil {
+					if thisItem.item.Priority > thatItem.item.Priority {
+						left, middle, right, err := o.split(t, that, thisItem.item.Key)
+						if err == nil {
+							if middle.isEmpty() {
+								newLeft, err := o.union(t, &thisNode.node.left, left)
+								if err == nil {
+									newRight, err := o.union(t, &thisNode.node.right, right)
+									if err == nil {
+										return &pnodeLoc{node: &pnode{
+											item:  *thisItem,
+											left:  *newLeft,
+											right: *newRight,
+										}}, nil
+									}
+								}
+							} else {
+								newLeft, err := o.union(t, &thisNode.node.left, left)
+								if err == nil {
+									newRight, err := o.union(t, &thisNode.node.right, right)
+									if err == nil {
+										return &pnodeLoc{node: &pnode{
+											item:  middle.node.item,
+											left:  *newLeft,
+											right: *newRight,
+										}}, nil
+									}
+								}
+							}
+						}
+					} else {
+						// We don't use middle because the "that" node has precendence.
+						left, _, right, err := o.split(t, this, thatItem.item.Key)
+						if err == nil {
+							newLeft, err := o.union(t, left, &thatNode.node.left)
+							if err == nil {
+								newRight, err := o.union(t, right, &thatNode.node.right)
+								if err == nil {
+									return &pnodeLoc{node: &pnode{
+										item:  *thatItem,
+										left:  *newLeft,
+										right: *newRight,
+									}}, nil
+								}
+							}
+						}
+					}
+				}
+			}
 		}
-
-		newLeft, err := o.union(t, &thisNode.node.left, left)
-		if err != nil {
-			return empty, err
-		}
-		newRight, err := o.union(t, &thisNode.node.right, right)
-		if err != nil {
-			return empty, err
-		}
-		return &pnodeLoc{node: &pnode{
-			item:  middle.node.item,
-			left:  *newLeft,
-			right: *newRight,
-		}}, nil
 	}
-
-	// We don't use middle because the "that" node has precendence.
-	left, _, right, err := o.split(t, this, thatItem.item.Key)
-	if err != nil {
-		return empty, err
-	}
-	newLeft, err := o.union(t, left, &thatNode.node.left)
-	if err != nil {
-		return empty, err
-	}
-	newRight, err := o.union(t, right, &thatNode.node.right)
-	if err != nil {
-		return empty, err
-	}
-	return &pnodeLoc{node: &pnode{
-		item:  *thatItem,
-		left:  *newLeft,
-		right: *newRight,
-	}}, nil
+	return empty, err
 }
 
 // Splits a treap into two treaps based on a split key "s".  The
@@ -303,10 +289,10 @@ func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, error) {
 		thatNode, err := o.loadNodeLoc(that)
 		if err == nil {
 			if thisNode.isEmpty() {
-				return that, nil
+				return thatNode, nil
 			}
 			if thatNode.isEmpty() {
-				return this, nil
+				return thisNode, nil
 			}
 			thisItem, err := o.loadItemLoc(&thisNode.node.item, false)
 			if err == nil {
