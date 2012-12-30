@@ -58,12 +58,10 @@ func (s *Store) Flush() (err error) {
 		return errors.New("no file / in-memory only, so cannot Flush()")
 	}
 	for _, t := range s.coll {
-		err = t.store.flushItems(&t.root)
-		if err != nil {
+		if err = t.store.flushItems(&t.root); err != nil {
 			return err
 		}
-		err = t.store.flushNodes(&t.root)
-		if err != nil {
+		if err = t.store.flushNodes(&t.root); err != nil {
 			return err
 		}
 	}
@@ -106,8 +104,7 @@ func (nloc *pnodeLoc) write(o *Store) error {
 		nloc.node.item.loc.write(b)
 		nloc.node.left.loc.write(b)
 		nloc.node.right.loc.write(b)
-		_, err := o.file.WriteAt(b.Bytes()[:length], offset)
-		if err != nil {
+		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 			return err
 		}
 		o.size = o.size + int64(length)
@@ -142,8 +139,7 @@ func (i *pitemLoc) write(o *Store) error {
 			binary.Write(b, binary.BigEndian, int32(i.item.Priority))
 			b.Write(i.item.Key)
 			b.Write(i.item.Val)
-			_, err := o.file.WriteAt(b.Bytes()[:length], offset)
-			if err != nil {
+			if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 				return err
 			}
 			o.size = o.size + int64(length)
@@ -203,24 +199,21 @@ func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
 }
 
 // Replace or insert an item of a given key.
-func (t *PTreap) Upsert(item *PItem) error {
-	r, err := t.store.union(t, &t.root,
+func (t *PTreap) Upsert(item *PItem) (err error) {
+	if r, err := t.store.union(t, &t.root,
 		&pnodeLoc{node: &pnode{item: pitemLoc{item: &PItem{
 			Key:      item.Key,
 			Val:      item.Val,
 			Priority: item.Priority,
-		}}}})
-	if err == nil {
+		}}}}); err == nil {
 		t.root = *r
 	}
 	return err
 }
 
-func (t *PTreap) Delete(key []byte) error {
-	left, _, right, err := t.store.split(t, &t.root, key)
-	if err == nil {
-		r, err := t.store.join(left, right)
-		if err == nil {
+func (t *PTreap) Delete(key []byte) (err error) {
+	if left, _, right, err := t.store.split(t, &t.root, key); err == nil {
+		if r, err := t.store.join(left, right); err == nil {
 			t.root = *r
 		}
 	}
@@ -247,12 +240,10 @@ func (o *Store) flushItems(nloc *pnodeLoc) (err error) {
 	if nloc == nil || nloc.loc != nil || nloc.node == nil {
 		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
 	}
-	err = o.flushItems(&nloc.node.left)
-	if err != nil {
+	if err = o.flushItems(&nloc.node.left); err != nil {
 		return err
 	}
-	err = nloc.node.item.write(o) // Write items in key order.
-	if err != nil {
+	if err = nloc.node.item.write(o); err != nil { // Write items in key order.
 		return err
 	}
 	return o.flushItems(&nloc.node.right)
@@ -262,12 +253,10 @@ func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
 	if nloc == nil || nloc.loc != nil || nloc.node == nil {
 		return nil // Flush only non-empty, unpersisted nodes.
 	}
-	err = o.flushNodes(&nloc.node.left)
-	if err != nil {
+	if err = o.flushNodes(&nloc.node.left); err != nil {
 		return err
 	}
-	err = o.flushNodes(&nloc.node.right)
-	if err != nil {
+	if err = o.flushNodes(&nloc.node.right); err != nil {
 		return err
 	}
 	return nloc.write(o) // Write nodes in children-first order.
@@ -287,29 +276,22 @@ func (o *Store) loadItemLoc(iloc *pitemLoc, withValue bool) (*pitemLoc, error) {
 	return iloc, nil
 }
 
-func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, error) {
-	thisNode, err := o.loadNodeLoc(this)
-	if err == nil {
-		thatNode, err := o.loadNodeLoc(that)
-		if err == nil {
+func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) {
+	if thisNode, err := o.loadNodeLoc(this); err == nil {
+		if thatNode, err := o.loadNodeLoc(that); err == nil {
 			if thisNode.isEmpty() {
 				return thatNode, nil
 			}
 			if thatNode.isEmpty() {
 				return thisNode, nil
 			}
-			thisItem, err := o.loadItemLoc(&thisNode.node.item, false)
-			if err == nil {
-				thatItem, err := o.loadItemLoc(&thatNode.node.item, false)
-				if err == nil {
+			if thisItem, err := o.loadItemLoc(&thisNode.node.item, false); err == nil {
+				if thatItem, err := o.loadItemLoc(&thatNode.node.item, false); err == nil {
 					if thisItem.item.Priority > thatItem.item.Priority {
-						left, middle, right, err := o.split(t, that, thisItem.item.Key)
-						if err == nil {
+						if left, middle, right, err := o.split(t, that, thisItem.item.Key); err == nil {
 							if middle.isEmpty() {
-								newLeft, err := o.union(t, &thisNode.node.left, left)
-								if err == nil {
-									newRight, err := o.union(t, &thisNode.node.right, right)
-									if err == nil {
+								if newLeft, err := o.union(t, &thisNode.node.left, left); err == nil {
+									if newRight, err := o.union(t, &thisNode.node.right, right); err == nil {
 										return &pnodeLoc{node: &pnode{
 											item:  *thisItem,
 											left:  *newLeft,
@@ -318,10 +300,8 @@ func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, err
 									}
 								}
 							} else {
-								newLeft, err := o.union(t, &thisNode.node.left, left)
-								if err == nil {
-									newRight, err := o.union(t, &thisNode.node.right, right)
-									if err == nil {
+								if newLeft, err := o.union(t, &thisNode.node.left, left); err == nil {
+									if newRight, err := o.union(t, &thisNode.node.right, right); err == nil {
 										return &pnodeLoc{node: &pnode{
 											item:  middle.node.item,
 											left:  *newLeft,
@@ -333,12 +313,9 @@ func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, err
 						}
 					} else {
 						// We don't use middle because the "that" node has precendence.
-						left, _, right, err := o.split(t, this, thatItem.item.Key)
-						if err == nil {
-							newLeft, err := o.union(t, left, &thatNode.node.left)
-							if err == nil {
-								newRight, err := o.union(t, right, &thatNode.node.right)
-								if err == nil {
+						if left, _, right, err := o.split(t, this, thatItem.item.Key); err == nil {
+							if newLeft, err := o.union(t, left, &thatNode.node.left); err == nil {
+								if newRight, err := o.union(t, right, &thatNode.node.right); err == nil {
 									return &pnodeLoc{node: &pnode{
 										item:  *thatItem,
 										left:  *newLeft,
@@ -400,24 +377,19 @@ func (o *Store) split(t *PTreap, n *pnodeLoc, s []byte) (
 }
 
 // All the keys from this are < keys from that.
-func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, error) {
-	thisNode, err := o.loadNodeLoc(this)
-	if err == nil {
-		thatNode, err := o.loadNodeLoc(that)
-		if err == nil {
+func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) {
+	if thisNode, err := o.loadNodeLoc(this); err == nil {
+		if thatNode, err := o.loadNodeLoc(that); err == nil {
 			if thisNode.isEmpty() {
 				return thatNode, nil
 			}
 			if thatNode.isEmpty() {
 				return thisNode, nil
 			}
-			thisItem, err := o.loadItemLoc(&thisNode.node.item, false)
-			if err == nil {
-				thatItem, err := o.loadItemLoc(&thatNode.node.item, false)
-				if err == nil {
+			if thisItem, err := o.loadItemLoc(&thisNode.node.item, false); err == nil {
+				if thatItem, err := o.loadItemLoc(&thatNode.node.item, false); err == nil {
 					if thisItem.item.Priority > thatItem.item.Priority {
-						newRight, err := o.join(&thisNode.node.right, that)
-						if err == nil {
+						if newRight, err := o.join(&thisNode.node.right, that); err == nil {
 							return &pnodeLoc{node: &pnode{
 								item:  *thisItem,
 								left:  thisNode.node.left,
@@ -425,8 +397,7 @@ func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, error) {
 							}}, nil
 						}
 					} else {
-						newLeft, err := o.join(this, &thatNode.node.left)
-						if err == nil {
+						if newLeft, err := o.join(this, &thatNode.node.left); err == nil {
 							return &pnodeLoc{node: &pnode{
 								item:  *thatItem,
 								left:  *newLeft,
@@ -453,8 +424,7 @@ func (o *Store) edge(t *PTreap, withValue bool, cfn func(*pnode) *pnodeLoc) (
 			return nil, err
 		}
 		if child.isEmpty() {
-			i, err := o.loadItemLoc(&n.node.item, false)
-			if err == nil {
+			if i, err := o.loadItemLoc(&n.node.item, false); err == nil {
 				if withValue {
 					i, err = o.loadItemLoc(i, true)
 				}
