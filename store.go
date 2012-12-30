@@ -93,7 +93,7 @@ func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
 		if err != nil || n.isEmpty() {
 			break
 		}
-		i, err := t.store.loadMetaItemLoc(&n.node.item)
+		i, err := t.store.loadItemLoc(&n.node.item, false)
 		if err != nil {
 			return nil, err
 		}
@@ -107,7 +107,7 @@ func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
 			n, err = t.store.loadNodeLoc(&n.node.right)
 		} else {
 			if withValue {
-				t.store.loadItemLoc(i)
+				t.store.loadItemLoc(i, true)
 			}
 			return i.item, nil
 		}
@@ -163,14 +163,7 @@ func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
 	return nloc, nil
 }
 
-func (o *Store) loadItemLoc(iloc *PItemLoc) (*PItemLoc, error) {
-	if iloc != nil && iloc.item == nil && iloc.loc != nil {
-		// TODO.
-	}
-	return iloc, nil
-}
-
-func (o *Store) loadMetaItemLoc(iloc *PItemLoc) (*PItemLoc, error) {
+func (o *Store) loadItemLoc(iloc *PItemLoc, withValue bool) (*PItemLoc, error) {
 	if iloc != nil && iloc.item == nil && iloc.loc != nil {
 		// TODO.
 	}
@@ -201,11 +194,11 @@ func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, err
 		return this, nil
 	}
 
-	thisItem, err := o.loadMetaItemLoc(&thisNode.node.item)
+	thisItem, err := o.loadItemLoc(&thisNode.node.item, false)
 	if err != nil {
 		return empty, err
 	}
-	thatItem, err := o.loadMetaItemLoc(&thatNode.node.item)
+	thatItem, err := o.loadItemLoc(&thatNode.node.item, false)
 	if err != nil {
 		return empty, err
 	}
@@ -277,7 +270,7 @@ func (o *Store) split(t *PTreap, n *pnodeLoc, s []byte) (
 	if err != nil || nNode.isEmpty() {
 		return empty, empty, empty, err
 	}
-	nItem, err := o.loadMetaItemLoc(&nNode.node.item)
+	nItem, err := o.loadItemLoc(&nNode.node.item, false)
 	if err != nil {
 		return empty, empty, empty, err
 	}
@@ -335,11 +328,11 @@ func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, error) {
 		return this, nil
 	}
 
-	thisItem, err := o.loadMetaItemLoc(&thisNode.node.item)
+	thisItem, err := o.loadItemLoc(&thisNode.node.item, false)
 	if err != nil {
 		return empty, err
 	}
-	thatItem, err := o.loadMetaItemLoc(&thatNode.node.item)
+	thatItem, err := o.loadItemLoc(&thatNode.node.item, false)
 	if err != nil {
 		return empty, err
 	}
@@ -379,10 +372,10 @@ func (o *Store) edge(t *PTreap, withValue bool, cfn func(*pnode) *pnodeLoc) (
 			return nil, err
 		}
 		if child.isEmpty() {
-			i, err := o.loadMetaItemLoc(&n.node.item)
+			i, err := o.loadItemLoc(&n.node.item, false)
 			if err == nil {
 				if withValue {
-					i, err = o.loadItemLoc(i)
+					i, err = o.loadItemLoc(i, true)
 				}
 				if err == nil {
 					return i.item, nil
@@ -404,7 +397,7 @@ func (o *Store) visitAscendNode(t *PTreap, n *pnodeLoc, target []byte,
 	if nNode.isEmpty() {
 		return true, nil
 	}
-	nItem, err := o.loadMetaItemLoc(&nNode.node.item)
+	nItem, err := o.loadItemLoc(&nNode.node.item, false)
 	if err != nil {
 		return false, err
 	}
@@ -414,7 +407,7 @@ func (o *Store) visitAscendNode(t *PTreap, n *pnodeLoc, target []byte,
 			return false, err
 		}
 		if withValue {
-			nItem, err = o.loadItemLoc(nItem)
+			nItem, err = o.loadItemLoc(nItem, true)
 			if err != nil {
 				return false, err
 			}
