@@ -40,11 +40,9 @@ func (s *Store) GetCollection(name string) *PTreap {
 }
 
 func (s *Store) GetCollectionNames() []string {
-	res := make([]string, len(s.coll))
-	i := 0
+	res := make([]string, len(s.coll))[:0]
 	for name, _ := range s.coll {
-		res[i] = name
-		i++
+		res = append(res, name)
 	}
 	return res
 }

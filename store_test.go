@@ -154,6 +154,12 @@ func TestVisitStoreMem(t *testing.T) {
 	if len(s.GetCollectionNames()) != 1 || s.GetCollectionNames()[0] != "x" {
 		t.Errorf("expected 1 coll name x")
 	}
+	if s.GetCollection("x") != x {
+		t.Errorf("expected coll x to be the same")
+	}
+	if s.GetCollection("y") != nil {
+		t.Errorf("expected coll y to be nil")
+	}
 
 	visitExpectPTreap(t, x, "a", []string{})
 	min, err := x.Min(true)
