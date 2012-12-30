@@ -53,6 +53,8 @@ func (s *Store) RemoveCollection(name string) {
 	delete(s.coll, name)
 }
 
+// Writes any unpersisted data to file.  Users might also file.Sync()
+// afterwards for extra data-loss protection.
 func (s *Store) Flush() (err error) {
 	if s.file == nil {
 		return errors.New("no file / in-memory only, so cannot Flush()")
