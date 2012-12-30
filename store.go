@@ -299,51 +299,43 @@ func (o *Store) split(t *PTreap, n *pnodeLoc, s []byte) (
 // All the keys from this are < keys from that.
 func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, error) {
 	thisNode, err := o.loadNodeLoc(this)
-	if err != nil {
-		return empty, err
-	}
-	thatNode, err := o.loadNodeLoc(that)
-	if err != nil {
-		return empty, err
-	}
-
-	if thisNode.isEmpty() {
-		return that, nil
-	}
-	if thatNode.isEmpty() {
-		return this, nil
-	}
-
-	thisItem, err := o.loadItemLoc(&thisNode.node.item, false)
-	if err != nil {
-		return empty, err
-	}
-	thatItem, err := o.loadItemLoc(&thatNode.node.item, false)
-	if err != nil {
-		return empty, err
-	}
-
-	if thisItem.item.Priority > thatItem.item.Priority {
-		newRight, err := o.join(&thisNode.node.right, that)
-		if err != nil {
-			return empty, err
+	if err == nil {
+		thatNode, err := o.loadNodeLoc(that)
+		if err == nil {
+			if thisNode.isEmpty() {
+				return that, nil
+			}
+			if thatNode.isEmpty() {
+				return this, nil
+			}
+			thisItem, err := o.loadItemLoc(&thisNode.node.item, false)
+			if err == nil {
+				thatItem, err := o.loadItemLoc(&thatNode.node.item, false)
+				if err == nil {
+					if thisItem.item.Priority > thatItem.item.Priority {
+						newRight, err := o.join(&thisNode.node.right, that)
+						if err == nil {
+							return &pnodeLoc{node: &pnode{
+								item:  *thisItem,
+								left:  thisNode.node.left,
+								right: *newRight,
+							}}, nil
+						}
+					} else {
+						newLeft, err := o.join(this, &thatNode.node.left)
+						if err == nil {
+							return &pnodeLoc{node: &pnode{
+								item:  *thatItem,
+								left:  *newLeft,
+								right: thatNode.node.right,
+							}}, nil
+						}
+					}
+				}
+			}
 		}
-		return &pnodeLoc{node: &pnode{
-			item:  *thisItem,
-			left:  thisNode.node.left,
-			right: *newRight,
-		}}, nil
 	}
-
-	newLeft, err := o.join(this, &thatNode.node.left)
-	if err != nil {
-		return empty, err
-	}
-	return &pnodeLoc{node: &pnode{
-		item:  *thatItem,
-		left:  *newLeft,
-		right: thatNode.node.right,
-	}}, nil
+	return empty, err
 }
 
 func (o *Store) edge(t *PTreap, withValue bool, cfn func(*pnode) *pnodeLoc) (
