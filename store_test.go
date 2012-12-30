@@ -153,7 +153,7 @@ func TestVisitStoreMem(t *testing.T) {
 		t.Errorf("expected no max, got: %v, err: %v", max, err)
 	}
 
-	loadPTreap(x, []string{"e", "d", "c", "b", "a"})
+	loadPTreap(x, []string{"e", "d", "a", "c", "b", "c", "a"})
 
 	visitX := func() {
 		visitExpectPTreap(t, x, "a", []string{"a", "b", "c", "d", "e"})

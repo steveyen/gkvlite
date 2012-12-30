@@ -108,7 +108,7 @@ func TestVisit(t *testing.T) {
 	x := NewTreap(stringCompare)
 	visitExpect(t, x, "a", []string{})
 
-	x = load(x, []string{"e", "d", "c", "b", "a"})
+	x = load(x, []string{"e", "d", "c", "c", "a", "b", "a"})
 
 	visitX := func() {
 		visitExpect(t, x, "a", []string{"a", "b", "c", "d", "e"})
