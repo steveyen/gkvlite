@@ -103,7 +103,7 @@ type pitemLoc struct {
 	item *PItem // Can be nil if item is not fetched into memory yet.
 }
 
-func (i *pitemLoc) writeItem(o *Store) error {
+func (i *pitemLoc) write(o *Store) error {
 	if i.loc == nil {
 		if i.item != nil {
 			offset := o.size
@@ -214,6 +214,7 @@ func (t *PTreap) VisitAscend(target []byte, withValue bool, visitor PItemVisitor
 	return err
 }
 
+// Persists any unpersisted data.
 func (t *PTreap) Flush() error {
 	err := t.store.flushItems(&t.root)
 	if err == nil {
@@ -224,13 +225,13 @@ func (t *PTreap) Flush() error {
 
 func (o *Store) flushItems(nloc *pnodeLoc) (err error) {
 	if nloc == nil || nloc.loc != nil || nloc.node == nil {
-		return nil
+		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
 	}
 	err = o.flushItems(&nloc.node.left)
 	if err != nil {
 		return err
 	}
-	err = nloc.node.item.writeItem(o) // Write items in key order.
+	err = nloc.node.item.write(o) // Write items in key order.
 	if err != nil {
 		return err
 	}
@@ -239,7 +240,7 @@ func (o *Store) flushItems(nloc *pnodeLoc) (err error) {
 
 func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
 	if nloc == nil || nloc.loc != nil || nloc.node == nil {
-		return nil
+		return nil // Flush only non-empty, unpersisted nodes.
 	}
 	err = o.flushNodes(&nloc.node.left)
 	if err != nil {
@@ -249,7 +250,7 @@ func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
 	if err != nil {
 		return err
 	}
-	return nloc.write(o) // Write nodes in depth order.
+	return nloc.write(o) // Write nodes in children-first order.
 }
 
 func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
