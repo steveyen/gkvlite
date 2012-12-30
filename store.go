@@ -39,6 +39,16 @@ func (s *Store) GetCollection(name string) *PTreap {
 	return s.coll[name]
 }
 
+func (s *Store) GetCollectionNames() []string {
+	res := make([]string, len(s.coll))
+	i := 0
+	for name, _ := range s.coll {
+		res[i] = name
+		i++
+	}
+	return res
+}
+
 func (s *Store) RemoveCollection(name string) {
 	delete(s.coll, name)
 }

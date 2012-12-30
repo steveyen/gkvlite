@@ -144,9 +144,15 @@ func TestVisitStoreMem(t *testing.T) {
 	if s.Flush() == nil {
 		t.Errorf("expected in-memory store Flush() error")
 	}
+	if len(s.GetCollectionNames()) != 0 {
+		t.Errorf("expected no coll names on empty store")
+	}
 	x := s.AddCollection("x", bytes.Compare)
 	if s.Flush() == nil {
 		t.Errorf("expected in-memory store Flush() error")
+	}
+	if len(s.GetCollectionNames()) != 1 || s.GetCollectionNames()[0] != "x" {
+		t.Errorf("expected 1 coll name x")
 	}
 
 	visitExpectPTreap(t, x, "a", []string{})
