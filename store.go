@@ -71,7 +71,7 @@ func (nloc *pnodeLoc) isEmpty() bool {
 }
 
 func (nloc *pnodeLoc) write(o *Store) error {
-	if nloc.loc == nil {
+	if nloc != nil && nloc.loc == nil && nloc.node != nil {
 		offset := o.size
 		length := 4 + ploc_length + ploc_length + ploc_length
 		b := bytes.NewBuffer(make([]byte, length)[:0])
