@@ -1,6 +1,8 @@
 package gtreap
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"os"
 )
@@ -16,6 +18,7 @@ import (
 type Store struct {
 	coll map[string]*PTreap
 	file *os.File
+	size int64
 }
 
 func NewStore(file *os.File) (*Store, error) {
@@ -61,6 +64,23 @@ func (nloc *pnodeLoc) isEmpty() bool {
 	return nloc == nil || (nloc.loc == nil && nloc.node == nil)
 }
 
+func (nloc *pnodeLoc) writeNode(o *Store) error {
+	offset := o.size
+	length := 4 + 12 + 12 + 12
+	b := bytes.NewBuffer(make([]byte, length)[:0])
+	binary.Write(b, binary.BigEndian, uint32(length))
+	nloc.node.item.loc.write(b)
+	nloc.node.left.loc.write(b)
+	nloc.node.right.loc.write(b)
+	_, err := o.file.WriteAt(b.Bytes()[:length], offset)
+	if err != nil {
+		return err
+	}
+	o.size = o.size + int64(length)
+	nloc.loc = &ploc{offset: offset, length: uint32(length)}
+	return nil
+}
+
 var empty = &pnodeLoc{}
 
 // A persisted node.
@@ -81,10 +101,44 @@ type PItemLoc struct {
 	item *PItem // Can be nil if item is not fetched into memory yet.
 }
 
+func (i *PItemLoc) writeItem(o *Store) error {
+	if i.loc == nil {
+		if i.item != nil {
+			offset := o.size
+			length := 4 + 4 + 4 + 4 + len(i.item.Key) + len(i.item.Val)
+			b := bytes.NewBuffer(make([]byte, length)[:0])
+			binary.Write(b, binary.BigEndian, uint32(length))
+			binary.Write(b, binary.BigEndian, uint32(len(i.item.Key)))
+			binary.Write(b, binary.BigEndian, uint32(len(i.item.Val)))
+			binary.Write(b, binary.BigEndian, int32(i.item.Priority))
+			b.Write(i.item.Key)
+			b.Write(i.item.Val)
+			_, err := o.file.WriteAt(b.Bytes()[:length], offset)
+			if err != nil {
+				return err
+			}
+			o.size = o.size + int64(length)
+			i.loc = &ploc{offset: offset, length: uint32(length)}
+		} else {
+			return errors.New("flushItems saw node with no itemLoc and no item")
+		}
+	}
+	return nil
+}
+
 // Offset/location of persisted range of bytes.
 type ploc struct {
 	offset int64  // Usable for os.Seek/ReadAt/WriteAt() at file offset 0.
 	length uint32 // Number of bytes.
+}
+
+func (p *ploc) write(b *bytes.Buffer) {
+	if p != nil {
+		binary.Write(b, binary.BigEndian, p.offset)
+		binary.Write(b, binary.BigEndian, p.length)
+	} else {
+		(&ploc{}).write(b)
+	}
 }
 
 func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
@@ -98,7 +152,7 @@ func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
 			return nil, err
 		}
 		if i == nil || i.item == nil || i.item.Key == nil {
-			panic("no item after loadMetaItemLoc() in get()")
+			return nil, errors.New("no item after loadMetaItemLoc() in get()")
 		}
 		c := t.compare(key, i.item.Key)
 		if c < 0 {
@@ -154,6 +208,44 @@ type PItemVisitor func(i *PItem) bool
 func (t *PTreap) VisitAscend(target []byte, withValue bool, visitor PItemVisitor) error {
 	_, err := t.store.visitAscendNode(t, &t.root, target, withValue, visitor)
 	return err
+}
+
+func (t *PTreap) Flush() error {
+	err := t.store.flushItems(&t.root)
+	if err == nil {
+		err = t.store.flushNodes(&t.root)
+	}
+	return err
+}
+
+func (o *Store) flushItems(nloc *pnodeLoc) (err error) {
+	if nloc == nil || nloc.loc != nil || nloc.node == nil {
+		return nil
+	}
+	err = o.flushItems(&nloc.node.left)
+	if err != nil {
+		return err
+	}
+	err = nloc.node.item.writeItem(o) // Write items in key order.
+	if err != nil {
+		return err
+	}
+	return o.flushItems(&nloc.node.right)
+}
+
+func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
+	if nloc == nil || nloc.loc != nil || nloc.node == nil {
+		return nil
+	}
+	err = o.flushNodes(&nloc.node.left)
+	if err != nil {
+		return err
+	}
+	err = o.flushNodes(&nloc.node.right)
+	if err != nil {
+		return err
+	}
+	return nloc.node.left.writeNode(o) // Write nodes in depth order.
 }
 
 func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
