@@ -85,7 +85,7 @@ var empty = &pnodeLoc{}
 
 // A persisted node.
 type pnode struct {
-	item        PItemLoc
+	item        pitemLoc
 	left, right pnodeLoc
 }
 
@@ -96,12 +96,12 @@ type PItem struct {
 }
 
 // A persisted item and its persistence location.
-type PItemLoc struct {
+type pitemLoc struct {
 	loc  *ploc  // Can be nil if item is dirty (not yet persisted).
 	item *PItem // Can be nil if item is not fetched into memory yet.
 }
 
-func (i *PItemLoc) writeItem(o *Store) error {
+func (i *pitemLoc) writeItem(o *Store) error {
 	if i.loc == nil {
 		if i.item != nil {
 			offset := o.size
@@ -172,7 +172,7 @@ func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
 // Replace or insert an item of a given key.
 func (t *PTreap) Upsert(item *PItem) error {
 	r, err := t.store.union(t, &t.root,
-		&pnodeLoc{node: &pnode{item: PItemLoc{item: &PItem{
+		&pnodeLoc{node: &pnode{item: pitemLoc{item: &PItem{
 			Key:      item.Key,
 			Val:      item.Val,
 			Priority: item.Priority,
@@ -255,7 +255,7 @@ func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
 	return nloc, nil
 }
 
-func (o *Store) loadItemLoc(iloc *PItemLoc, withValue bool) (*PItemLoc, error) {
+func (o *Store) loadItemLoc(iloc *pitemLoc, withValue bool) (*pitemLoc, error) {
 	if iloc != nil && iloc.item == nil && iloc.loc != nil {
 		// TODO.
 	}
