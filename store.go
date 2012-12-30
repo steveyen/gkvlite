@@ -338,7 +338,7 @@ func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc,
 // result is (left, middle, right), where left treap has keys < s,
 // right treap has keys > s, and middle is either...
 // * empty/nil - meaning key s was not in the original treap.
-// * non-empty - returning the pnodeLoc that had item s.
+// * non-empty - returning the original pnodeLoc/item that had key s.
 func (o *Store) split(t *PTreap, n *pnodeLoc, s []byte) (
 	*pnodeLoc, *pnodeLoc, *pnodeLoc, error) {
 	nNode, err := o.loadNodeLoc(n)
@@ -378,7 +378,7 @@ func (o *Store) split(t *PTreap, n *pnodeLoc, s []byte) (
 	}}, middle, right, nil
 }
 
-// All the keys from this are < keys from that.
+// All the keys from this should be < keys from that.
 func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) {
 	if thisNode, err := o.loadNodeLoc(this); err == nil {
 		if thatNode, err := o.loadNodeLoc(that); err == nil {
