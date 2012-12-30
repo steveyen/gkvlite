@@ -181,13 +181,6 @@ func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, err
 	}
 
 	if thisNode.isEmpty() {
-		thisNode = empty
-	}
-	if thatNode.isEmpty() {
-		thatNode = empty
-	}
-
-	if thisNode.isEmpty() {
 		return that, nil
 	}
 	if thatNode.isEmpty() {
@@ -312,13 +305,6 @@ func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (*pnodeLoc, error) {
 	thatNode, err := o.loadNodeLoc(that)
 	if err != nil {
 		return empty, err
-	}
-
-	if thisNode.isEmpty() {
-		thisNode = empty
-	}
-	if thatNode.isEmpty() {
-		thatNode = empty
 	}
 
 	if thisNode.isEmpty() {
