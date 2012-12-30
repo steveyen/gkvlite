@@ -139,11 +139,13 @@ func (p *ploc) write(b *bytes.Buffer) {
 		binary.Write(b, binary.BigEndian, p.offset)
 		binary.Write(b, binary.BigEndian, p.length)
 	} else {
-		(&ploc{}).write(b)
+		ploc_empty.write(b)
 	}
 }
 
 const ploc_length int = 8 + 4
+
+var ploc_empty *ploc = &ploc{}
 
 func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
 	n, err := t.store.loadNodeLoc(&t.root)
