@@ -54,6 +54,12 @@ type PTreap struct {
 	root    pnodeLoc
 }
 
+// A persisted node.
+type pnode struct {
+	item        pitemLoc
+	left, right pnodeLoc
+}
+
 // A persisted node and its persistence location.
 type pnodeLoc struct {
 	loc  *ploc  // Can be nil if node is dirty (not yet persisted).
@@ -64,30 +70,26 @@ func (nloc *pnodeLoc) isEmpty() bool {
 	return nloc == nil || (nloc.loc == nil && nloc.node == nil)
 }
 
-func (nloc *pnodeLoc) writeNode(o *Store) error {
-	offset := o.size
-	length := 4 + 12 + 12 + 12
-	b := bytes.NewBuffer(make([]byte, length)[:0])
-	binary.Write(b, binary.BigEndian, uint32(length))
-	nloc.node.item.loc.write(b)
-	nloc.node.left.loc.write(b)
-	nloc.node.right.loc.write(b)
-	_, err := o.file.WriteAt(b.Bytes()[:length], offset)
-	if err != nil {
-		return err
+func (nloc *pnodeLoc) write(o *Store) error {
+	if nloc.loc == nil {
+		offset := o.size
+		length := 4 + ploc_length + ploc_length + ploc_length
+		b := bytes.NewBuffer(make([]byte, length)[:0])
+		binary.Write(b, binary.BigEndian, uint32(length))
+		nloc.node.item.loc.write(b)
+		nloc.node.left.loc.write(b)
+		nloc.node.right.loc.write(b)
+		_, err := o.file.WriteAt(b.Bytes()[:length], offset)
+		if err != nil {
+			return err
+		}
+		o.size = o.size + int64(length)
+		nloc.loc = &ploc{offset: offset, length: uint32(length)}
 	}
-	o.size = o.size + int64(length)
-	nloc.loc = &ploc{offset: offset, length: uint32(length)}
 	return nil
 }
 
 var empty = &pnodeLoc{}
-
-// A persisted node.
-type pnode struct {
-	item        pitemLoc
-	left, right pnodeLoc
-}
 
 // A persisted item.
 type PItem struct {
@@ -140,6 +142,8 @@ func (p *ploc) write(b *bytes.Buffer) {
 		(&ploc{}).write(b)
 	}
 }
+
+const ploc_length int = 8 + 4
 
 func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
 	n, err := t.store.loadNodeLoc(&t.root)
@@ -245,7 +249,7 @@ func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
 	if err != nil {
 		return err
 	}
-	return nloc.node.left.writeNode(o) // Write nodes in depth order.
+	return nloc.write(o) // Write nodes in depth order.
 }
 
 func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
