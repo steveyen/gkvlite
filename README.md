@@ -81,13 +81,14 @@ Examples
     c.Set([]byte("tesla"), []byte("$$$$"))
     
     // Retrieve values.
-    mercedesPrice, err := c.Get("mercedes")
-    thisIsNil, err := c.Get("the-lunar-rover")
+    mercedesPrice, err := c.Get([]byte("mercedes"))
+    thisIsNil, err := c.Get([]byte("the-lunar-rover"))
     
-    c.VisitItemsAscend("ford", func(i *Item) bool {
+    c.VisitItemsAscend([]byte("ford"), func(i *gkvlite.Item) bool {
         // This visitor callback will be invoked with every item
         // with key "ford" and onwards, in key-sorted order.
-        // So: "mercedes", "tesla".
+        // So: "mercedes", "tesla" are visited, in that ascending order,
+        // but not "bmw".
         // If we want to stop visiting, return false;
         // otherwise a true return result means keep visiting items.
         return true
@@ -98,8 +99,8 @@ Examples
     
     // The snapshot won't see modifications against the original Store.
     err = c.Delete("mercedes")
-    mercedesIsNil, err = c.Get("mercedes")
-    mercedesPriceFromSnaphot, err = snap.Get("mercedes")
+    mercedesIsNil, err = c.Get([]byte("mercedes"))
+    mercedesPriceFromSnaphot, err = snap.Get([]bytes("mercedes"))
     
     // Persist all the changes to disk.
     err := s.Flush()
@@ -109,9 +110,9 @@ Examples
     // Now, other file readers can see the data, too.
     f2, err := os.Open("/tmp/test.gkvlite")
     s2, err := gkvlite.NewStore(f2)
-    c2 := s.GetCollection("cars")
+    c2 := s.GetCollection([]byte("cars"))
     
-    bmwPrice := c2.Get("bmw")
+    bmwPrice := c2.Get([]byte("bmw"))
 
 Implementation / design
 =======================
