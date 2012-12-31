@@ -623,7 +623,7 @@ func (o *Store) readRoots() error {
 			endBuff := make([]byte, 8+2*len(MAGIC_END))
 			minSize := int64(2*len(MAGIC_BEG) + 4 + 4 + len(endBuff))
 			for {
-				for { // Scan for MAGIC_END.
+				for { // Scan backwards for MAGIC_END.
 					if o.size <= minSize {
 						return errors.New("couldn't find roots; file corrupted or wrong?")
 					}
@@ -635,11 +635,14 @@ func (o *Store) readRoots() error {
 						bytes.Equal(MAGIC_END, endBuff[8+len(MAGIC_END):]) {
 						break
 					}
-					o.size = o.size - 1 // TODO: optimizations to skip backwards faster.
+					o.size = o.size - 1 // TODO: optimizations to scan backwards faster.
 				}
 				// Read and check the roots.
 				var offset int64
-				binary.Read(bytes.NewBuffer(endBuff), binary.BigEndian, &offset)
+				err = binary.Read(bytes.NewBuffer(endBuff), binary.BigEndian, &offset)
+				if err != nil {
+					return err
+				}
 				if offset >= 0 && offset < o.size-int64(minSize) {
 					data := make([]byte, o.size-offset-int64(len(endBuff)))
 					if _, err := o.file.ReadAt(data, offset); err != nil {
