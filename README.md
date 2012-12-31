@@ -22,9 +22,9 @@ gkvlite has the following features...
   And, a Collection can have zero or more Items (key-value),
   where a Collection is like a balanced binary tree.
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
-* Atomicity - all changes across all Collections in a Store after a
-  Flush() will be atomic with respect to a process-restart/crash "at
-  the wrong time".  All changes are will be either seen or all rolled back.
+* Atomicity - all changes from all Collections during a Store.Flush()
+  will be persisted atomic.  All changes are will be either seen or all
+  rolled back.
 * Consistency - simple key-value level consistency is supported.
 * Isolation - mutations won't affect snapshots.
 * Durability - you control when you want to Flush() to disk.
