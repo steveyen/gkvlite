@@ -406,4 +406,77 @@ func TestStoreFile(t *testing.T) {
 	if i == nil || err != nil {
 		t.Errorf("expected c to be in x4.")
 	}
+
+	// ------------------------------------------------
+
+	// Exercising deletion more.
+	if err = x.Delete([]byte("c")); err != nil {
+		t.Errorf("expected Delete to have no error, err: %v", err)
+	}
+	loadPTreap(x, []string{"d", "c", "b", "b", "c"})
+	if err = x.Delete([]byte("b")); err != nil {
+		t.Errorf("expected Delete to have no error, err: %v", err)
+	}
+	if err = x.Delete([]byte("c")); err != nil {
+		t.Errorf("expected Delete to have no error, err: %v", err)
+	}
+	if err := s.Flush(); err != nil {
+		t.Errorf("expected Flush() to have no error, err: %v", err)
+	}
+	f.Sync()
+
+	f5, err := os.Open(fname) // Another file reader.
+	s5, err := NewStore(f5)
+	x5 := s5.GetCollection("x")
+
+	visitExpectPTreap(t, x, "a", []string{"a", "d"})
+	visitExpectPTreap(t, x2, "a", []string{"a"})
+	visitExpectPTreap(t, x3, "a", []string{"a", "b", "c"})
+	visitExpectPTreap(t, x4, "a", []string{"a", "c"})
+	visitExpectPTreap(t, x5, "a", []string{"a", "d"})
+
+	// ------------------------------------------------
+
+	// Exercise Min and Max.
+	mmTests := []struct {
+		coll *PTreap
+		min  string
+		max  string
+	}{
+		{x, "a", "d"},
+		{x2, "a", "a"},
+		{x3, "a", "c"},
+		{x4, "a", "c"},
+		{x5, "a", "d"},
+	}
+
+	for mmTestIdx, mmTest := range mmTests {
+		i, err = mmTest.coll.Min(true)
+		if err != nil {
+			t.Errorf("mmTestIdx: %v, expected no Min error, but got err: %v",
+				mmTestIdx, err)
+		}
+		if i == nil {
+			t.Errorf("mmTestIdx: %v, expected Min item, but got nil",
+				mmTestIdx)
+		}
+		if string(i.Key) != mmTest.min {
+			t.Errorf("mmTestIdx: %v, expected Min item key: %v, but got: %v",
+				mmTestIdx, mmTest.min, string(i.Key))
+		}
+
+		i, err = mmTest.coll.Max(true)
+		if err != nil {
+			t.Errorf("mmTestIdx: %v, expected no Max error, but got err: %v",
+				mmTestIdx, err)
+		}
+		if i == nil {
+			t.Errorf("mmTestIdx: %v, expected Max item, but got nil",
+				mmTestIdx)
+		}
+		if string(i.Key) != mmTest.max {
+			t.Errorf("mmTestIdx: %v, expected Max item key: %v, but got: %v",
+				mmTestIdx, mmTest.max, string(i.Key))
+		}
+	}
 }
