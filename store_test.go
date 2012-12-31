@@ -217,12 +217,11 @@ func TestStoreFile(t *testing.T) {
 	fname := "tmp.test"
 	os.Remove(fname)
 	f, err := os.Create(fname)
-	defer f.Close()
-	// defer os.Remove(fname)
-
 	if err != nil || f == nil {
 		t.Error("could not create file tmp.test")
 	}
+	defer f.Close()
+
 	s, err := NewStore(f)
 	if err != nil || s == nil {
 		t.Error("expected NewStore(f) to work, err: %v", err)
@@ -231,6 +230,10 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected no coll names on empty store")
 	}
 	x := s.AddCollection("x", bytes.Compare)
+	if x == nil {
+		t.Errorf("expected AddCollection() to work")
+	}
+
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected empty Flush() to have no error, err: %v", err)
 	}
@@ -243,6 +246,7 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected non-empty file after 1st Flush(), got: %v",
 			sizeAfter1stFlush)
 	}
+
 	if len(s.GetCollectionNames()) != 1 || s.GetCollectionNames()[0] != "x" {
 		t.Errorf("expected 1 coll name x")
 	}
@@ -251,5 +255,10 @@ func TestStoreFile(t *testing.T) {
 	}
 	if s.GetCollection("y") != nil {
 		t.Errorf("expected coll y to be nil")
+	}
+
+	loadPTreap(x, []string{"a"})
+	if err := s.Flush(); err != nil {
+		t.Errorf("expected single key Flush() to have no error, err: %v", err)
 	}
 }

@@ -24,8 +24,8 @@ type Store struct {
 
 const VERSION = uint32(0)
 
-var MAGIC_BEG []byte = []byte("0g1t2r3e4a5p")
-var MAGIC_END []byte = []byte("5p4a3e2r1t0g")
+var MAGIC_BEG []byte = []byte("0g1t2r")
+var MAGIC_END []byte = []byte("3e4a5p")
 
 func NewStore(file *os.File) (*Store, error) {
 	if file == nil { // Return a memory-only Store.
@@ -130,7 +130,7 @@ func (nloc *pnodeLoc) write(o *Store) error {
 			return err
 		}
 		o.size = o.size + int64(length)
-		nloc.loc = &ploc{offset: offset, length: uint32(length)}
+		nloc.loc = &ploc{Offset: offset, Length: uint32(length)}
 	}
 	return nil
 }
@@ -165,7 +165,7 @@ func (i *pitemLoc) write(o *Store) error {
 				return err
 			}
 			o.size = o.size + int64(length)
-			i.loc = &ploc{offset: offset, length: uint32(length)}
+			i.loc = &ploc{Offset: offset, Length: uint32(length)}
 		} else {
 			return errors.New("flushItems saw node with no itemLoc and no item")
 		}
@@ -175,14 +175,14 @@ func (i *pitemLoc) write(o *Store) error {
 
 // Offset/location of persisted range of bytes.
 type ploc struct {
-	offset int64  // Usable for os.Seek/ReadAt/WriteAt() at file offset 0.
-	length uint32 // Number of bytes.
+	Offset int64  // Usable for os.Seek/ReadAt/WriteAt() at file offset 0.
+	Length uint32 // Number of bytes.
 }
 
 func (p *ploc) write(b *bytes.Buffer) {
 	if p != nil {
-		binary.Write(b, binary.BigEndian, p.offset)
-		binary.Write(b, binary.BigEndian, p.length)
+		binary.Write(b, binary.BigEndian, p.Offset)
+		binary.Write(b, binary.BigEndian, p.Length)
 	} else {
 		ploc_empty.write(b)
 	}
