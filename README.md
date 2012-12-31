@@ -18,6 +18,9 @@ gkvlite has the following features...
 * Values are []byte.
 * On-disk storage for a "Store" is a single file.
 * Multiple key-value Collections are supported in a single storage file.
+  That is, one Store can have zero or more Collections.
+  And, a Collection can have zero or more Items (key-value),
+  where a Collection is like a balanced binary tree.
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
 * Atomicity - all changes across all Collections in a Store after a
   Flush() will be atomic with respect to a process-restart/crash "at
