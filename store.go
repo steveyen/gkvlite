@@ -3,6 +3,7 @@ package gtreap
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"os"
 )
@@ -20,6 +21,11 @@ type Store struct {
 	file *os.File
 	size int64
 }
+
+const VERSION = uint32(0)
+
+var MAGIC_BEG []byte = []byte("0g1t2r3e4a5p")
+var MAGIC_END []byte = []byte("5p4a3e2r1t0g")
 
 func NewStore(file *os.File) (*Store, error) {
 	if file == nil { // Return a memory-only Store.
@@ -65,7 +71,23 @@ func (s *Store) Flush() (err error) {
 			return err
 		}
 	}
-	return nil
+	if collJSON, err := json.Marshal(s.coll); err == nil {
+		offset := s.size
+		length := 2*len(MAGIC_BEG) + 4 + 4 + len(collJSON) + 8 + 2*len(MAGIC_END)
+		b := bytes.NewBuffer(make([]byte, length)[:0])
+		b.Write(MAGIC_BEG)
+		b.Write(MAGIC_BEG)
+		binary.Write(b, binary.BigEndian, uint32(VERSION))
+		binary.Write(b, binary.BigEndian, uint32(length))
+		b.Write(collJSON)
+		binary.Write(b, binary.BigEndian, int64(offset))
+		b.Write(MAGIC_END)
+		b.Write(MAGIC_END)
+		if _, err := s.file.WriteAt(b.Bytes()[:length], offset); err == nil {
+			s.size = s.size + int64(length)
+		}
+	}
+	return err
 }
 
 // User-supplied key comparison func should return 0 if a == b,
@@ -234,6 +256,10 @@ type PItemVisitor func(i *PItem) bool
 func (t *PTreap) VisitAscend(target []byte, withValue bool, visitor PItemVisitor) error {
 	_, err := t.store.visitAscendNode(t, &t.root, target, withValue, visitor)
 	return err
+}
+
+func (t *PTreap) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.root.loc)
 }
 
 func (o *Store) flushItems(nloc *pnodeLoc) (err error) {

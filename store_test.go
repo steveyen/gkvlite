@@ -218,7 +218,7 @@ func TestStoreFile(t *testing.T) {
 	os.Remove(fname)
 	f, err := os.Create(fname)
 	defer f.Close()
-	defer os.Remove(fname)
+	// defer os.Remove(fname)
 
 	if err != nil || f == nil {
 		t.Error("could not create file tmp.test")
@@ -231,8 +231,17 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected no coll names on empty store")
 	}
 	x := s.AddCollection("x", bytes.Compare)
-	if s.Flush() != nil {
-		t.Errorf("expected empty Flush() to have no error")
+	if err := s.Flush(); err != nil {
+		t.Errorf("expected empty Flush() to have no error, err: %v", err)
+	}
+	finfo, err := f.Stat()
+	if err != nil {
+		t.Errorf("expected stat to work")
+	}
+	sizeAfter1stFlush := finfo.Size()
+	if sizeAfter1stFlush == 0 {
+		t.Errorf("expected non-empty file after 1st Flush(), got: %v",
+			sizeAfter1stFlush)
 	}
 	if len(s.GetCollectionNames()) != 1 || s.GetCollectionNames()[0] != "x" {
 		t.Errorf("expected 1 coll name x")
