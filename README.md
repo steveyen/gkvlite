@@ -66,13 +66,12 @@ gkvlite has the following features...
 LICENSE
 =======
 
-MIT
+Open source - MIT licensed.
 
 Examples
 ========
 
     import (
-        "math/rand"
         "os"
         "github.com/steveyen/gkvlite"
     )
