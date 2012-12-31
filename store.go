@@ -318,7 +318,8 @@ var ploc_empty *ploc = &ploc{}
 // to save on I/O and memory resources, especially for large values.
 // The returned Item should be treated as immutable.
 func (t *Collection) Get(key []byte, withValue bool) (*Item, error) {
-	n, err := t.store.loadNodeLoc(&t.root)
+	n := &t.root
+	err := n.read(t.store)
 	for {
 		if err != nil || n.isEmpty() {
 			break
@@ -332,9 +333,11 @@ func (t *Collection) Get(key []byte, withValue bool) (*Item, error) {
 		}
 		c := t.compare(key, i.item.Key)
 		if c < 0 {
-			n, err = t.store.loadNodeLoc(&n.node.left)
+			n = &n.node.left
+			err = n.read(t.store)
 		} else if c > 0 {
-			n, err = t.store.loadNodeLoc(&n.node.right)
+			n = &n.node.right
+			err = n.read(t.store)
 		} else {
 			if withValue {
 				i, err = t.store.loadItemLoc(i, withValue)
@@ -435,13 +438,6 @@ func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
 	return nloc.write(o) // Write nodes in children-first order.
 }
 
-func (o *Store) loadNodeLoc(nloc *nodeLoc) (*nodeLoc, error) {
-	if err := nloc.read(o); err != nil {
-		return nil, err
-	}
-	return nloc, nil
-}
-
 func (o *Store) loadItemLoc(iloc *itemLoc, withValue bool) (*itemLoc, error) {
 	if err := iloc.read(o, withValue); err != nil {
 		return nil, err
@@ -450,23 +446,23 @@ func (o *Store) loadItemLoc(iloc *itemLoc, withValue bool) (*itemLoc, error) {
 }
 
 func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
-	if thisNode, err := o.loadNodeLoc(this); err == nil {
-		if thatNode, err := o.loadNodeLoc(that); err == nil {
-			if thisNode.isEmpty() {
-				return thatNode, nil
+	if err := this.read(o); err == nil {
+		if err := that.read(o); err == nil {
+			if this.isEmpty() {
+				return that, nil
 			}
-			if thatNode.isEmpty() {
-				return thisNode, nil
+			if that.isEmpty() {
+				return this, nil
 			}
-			if thisItem, err := o.loadItemLoc(&thisNode.node.item, false); err == nil {
-				if thatItem, err := o.loadItemLoc(&thatNode.node.item, false); err == nil {
+			if thisItem, err := o.loadItemLoc(&this.node.item, false); err == nil {
+				if thatItem, err := o.loadItemLoc(&that.node.item, false); err == nil {
 					if thisItem.item.Priority > thatItem.item.Priority {
 						left, middle, right, err := o.split(t, that, thisItem.item.Key)
 						if err == nil {
 							if middle.isEmpty() {
-								newLeft, err := o.union(t, &thisNode.node.left, left)
+								newLeft, err := o.union(t, &this.node.left, left)
 								if err == nil {
-									newRight, err := o.union(t, &thisNode.node.right, right)
+									newRight, err := o.union(t, &this.node.right, right)
 									if err == nil {
 										return &nodeLoc{node: &node{
 											item:  *thisItem,
@@ -476,9 +472,9 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 									}
 								}
 							} else {
-								newLeft, err := o.union(t, &thisNode.node.left, left)
+								newLeft, err := o.union(t, &this.node.left, left)
 								if err == nil {
-									newRight, err := o.union(t, &thisNode.node.right, right)
+									newRight, err := o.union(t, &this.node.right, right)
 									if err == nil {
 										return &nodeLoc{node: &node{
 											item:  middle.node.item,
@@ -493,9 +489,9 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 						// We don't use middle because the "that" node has precendence.
 						left, _, right, err := o.split(t, this, thatItem.item.Key)
 						if err == nil {
-							newLeft, err := o.union(t, left, &thatNode.node.left)
+							newLeft, err := o.union(t, left, &that.node.left)
 							if err == nil {
-								newRight, err := o.union(t, right, &thatNode.node.right)
+								newRight, err := o.union(t, right, &that.node.right)
 								if err == nil {
 									return &nodeLoc{node: &node{
 										item:  *thatItem,
@@ -520,69 +516,68 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 // * non-empty - returning the original nodeLoc/item that had key s.
 func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	*nodeLoc, *nodeLoc, *nodeLoc, error) {
-	nNode, err := o.loadNodeLoc(n)
-	if err != nil || nNode.isEmpty() {
+	if err := n.read(o); err != nil || n.isEmpty() {
 		return empty, empty, empty, err
 	}
-	nItem, err := o.loadItemLoc(&nNode.node.item, false)
+	nItem, err := o.loadItemLoc(&n.node.item, false)
 	if err != nil {
 		return empty, empty, empty, err
 	}
 
 	c := t.compare(s, nItem.item.Key)
 	if c == 0 {
-		return &nNode.node.left, n, &nNode.node.right, nil
+		return &n.node.left, n, &n.node.right, nil
 	}
 
 	if c < 0 {
-		left, middle, right, err := o.split(t, &nNode.node.left, s)
+		left, middle, right, err := o.split(t, &n.node.left, s)
 		if err != nil {
 			return empty, empty, empty, err
 		}
 		return left, middle, &nodeLoc{node: &node{
 			item:  *nItem,
 			left:  *right,
-			right: nNode.node.right,
+			right: n.node.right,
 		}}, nil
 	}
 
-	left, middle, right, err := o.split(t, &nNode.node.right, s)
+	left, middle, right, err := o.split(t, &n.node.right, s)
 	if err != nil {
 		return empty, empty, empty, err
 	}
 	return &nodeLoc{node: &node{
 		item:  *nItem,
-		left:  nNode.node.left,
+		left:  n.node.left,
 		right: *left,
 	}}, middle, right, nil
 }
 
 // All the keys from this should be < keys from that.
 func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
-	if thisNode, err := o.loadNodeLoc(this); err == nil {
-		if thatNode, err := o.loadNodeLoc(that); err == nil {
-			if thisNode.isEmpty() {
-				return thatNode, nil
+	if err := this.read(o); err == nil {
+		if err := that.read(o); err == nil {
+			if this.isEmpty() {
+				return that, nil
 			}
-			if thatNode.isEmpty() {
-				return thisNode, nil
+			if that.isEmpty() {
+				return this, nil
 			}
-			if thisItem, err := o.loadItemLoc(&thisNode.node.item, false); err == nil {
-				if thatItem, err := o.loadItemLoc(&thatNode.node.item, false); err == nil {
+			if thisItem, err := o.loadItemLoc(&this.node.item, false); err == nil {
+				if thatItem, err := o.loadItemLoc(&that.node.item, false); err == nil {
 					if thisItem.item.Priority > thatItem.item.Priority {
-						if newRight, err := o.join(&thisNode.node.right, that); err == nil {
+						if newRight, err := o.join(&this.node.right, that); err == nil {
 							return &nodeLoc{node: &node{
 								item:  *thisItem,
-								left:  thisNode.node.left,
+								left:  this.node.left,
 								right: *newRight,
 							}}, nil
 						}
 					} else {
-						if newLeft, err := o.join(this, &thatNode.node.left); err == nil {
+						if newLeft, err := o.join(this, &that.node.left); err == nil {
 							return &nodeLoc{node: &node{
 								item:  *thatItem,
 								left:  *newLeft,
-								right: thatNode.node.right,
+								right: that.node.right,
 							}}, nil
 						}
 					}
@@ -594,14 +589,14 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 }
 
 func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
-	*Item, error) {
-	n, err := o.loadNodeLoc(&t.root)
-	if err != nil || n.isEmpty() {
+	res *Item, err error) {
+	n := &t.root
+	if err = n.read(o); err != nil || n.isEmpty() {
 		return nil, err
 	}
 	for {
-		child, err := o.loadNodeLoc(cfn(n.node))
-		if err != nil {
+		child := cfn(n.node)
+		if err := child.read(o); err != nil {
 			return nil, err
 		}
 		if child.isEmpty() {
@@ -622,19 +617,18 @@ func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
 
 func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 	withValue bool, visitor ItemVisitor) (bool, error) {
-	nNode, err := o.loadNodeLoc(n)
-	if err != nil {
+	if err := n.read(o); err != nil {
 		return false, err
 	}
-	if nNode.isEmpty() {
+	if n.isEmpty() {
 		return true, nil
 	}
-	nItem, err := o.loadItemLoc(&nNode.node.item, false)
+	nItem, err := o.loadItemLoc(&n.node.item, false)
 	if err != nil {
 		return false, err
 	}
 	if t.compare(target, nItem.item.Key) <= 0 {
-		keepGoing, err := o.visitAscendNode(t, &nNode.node.left, target, withValue, visitor)
+		keepGoing, err := o.visitAscendNode(t, &n.node.left, target, withValue, visitor)
 		if err != nil || !keepGoing {
 			return false, err
 		}
@@ -648,7 +642,7 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 			return false, nil
 		}
 	}
-	return o.visitAscendNode(t, &nNode.node.right, target, withValue, visitor)
+	return o.visitAscendNode(t, &n.node.right, target, withValue, visitor)
 }
 
 func (o *Store) writeRoots() (err error) {
