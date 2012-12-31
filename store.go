@@ -14,7 +14,7 @@ import (
 	"os"
 )
 
-// A persistent store holding collections of ordered keys & values.
+// A persistable store holding collections of ordered keys & values.
 // The persistence is append-only based on immutable, copy-on-write
 // treaps for robustness.  This implementation is single-threaded, so
 // users should serialize their accesses.
@@ -102,30 +102,30 @@ func (s *Store) Flush() (err error) {
 // -1 if a < b, and +1 if a > b.
 type KeyCompare func(a, b []byte) int
 
-// A persisted collection of ordered key-values (Item's).
+// A persistable collection of ordered key-values (Item's).
 type Collection struct {
 	store   *Store
 	compare KeyCompare
-	root    pnodeLoc
+	root    nodeLoc
 }
 
 // A persisted node.
-type pnode struct {
-	item        pitemLoc
-	left, right pnodeLoc
+type node struct {
+	item        itemLoc
+	left, right nodeLoc
 }
 
 // A persisted node and its persistence location.
-type pnodeLoc struct {
-	loc  *ploc  // Can be nil if node is dirty (not yet persisted).
-	node *pnode // Can be nil if node is not fetched into memory yet.
+type nodeLoc struct {
+	loc  *ploc // Can be nil if node is dirty (not yet persisted).
+	node *node // Can be nil if node is not fetched into memory yet.
 }
 
-func (nloc *pnodeLoc) isEmpty() bool {
+func (nloc *nodeLoc) isEmpty() bool {
 	return nloc == nil || (nloc.loc.isEmpty() && nloc.node == nil)
 }
 
-func (nloc *pnodeLoc) write(o *Store) error {
+func (nloc *nodeLoc) write(o *Store) error {
 	if nloc != nil && nloc.loc.isEmpty() && nloc.node != nil {
 		offset := o.size
 		length := ploc_length + ploc_length + ploc_length
@@ -148,14 +148,14 @@ func (nloc *pnodeLoc) write(o *Store) error {
 	return nil
 }
 
-func (nloc *pnodeLoc) read(o *Store) (err error) {
+func (nloc *nodeLoc) read(o *Store) (err error) {
 	if nloc != nil && nloc.node == nil && !nloc.loc.isEmpty() {
 		b := make([]byte, nloc.loc.Length)
 		if _, err := o.file.ReadAt(b, nloc.loc.Offset); err != nil {
 			return err
 		}
 		buf := bytes.NewBuffer(b)
-		n := &pnode{}
+		n := &node{}
 		p := &ploc{}
 		if p, err = p.read(buf); err != nil {
 			return err
@@ -176,7 +176,7 @@ func (nloc *pnodeLoc) read(o *Store) (err error) {
 	return nil
 }
 
-var empty = &pnodeLoc{}
+var empty = &nodeLoc{}
 
 // A persisted item.
 type Item struct {
@@ -185,12 +185,12 @@ type Item struct {
 }
 
 // A persisted item and its persistence location.
-type pitemLoc struct {
+type itemLoc struct {
 	loc  *ploc // Can be nil if item is dirty (not yet persisted).
 	item *Item // Can be nil if item is not fetched into memory yet.
 }
 
-func (i *pitemLoc) write(o *Store) error {
+func (i *itemLoc) write(o *Store) error {
 	if i.loc.isEmpty() {
 		if i.item != nil {
 			offset := o.size
@@ -214,7 +214,7 @@ func (i *pitemLoc) write(o *Store) error {
 	return nil
 }
 
-func (i *pitemLoc) read(o *Store, withValue bool) (err error) {
+func (i *itemLoc) read(o *Store, withValue bool) (err error) {
 	if i != nil && (i.item == nil || (i.item.Val == nil && withValue)) && !i.loc.isEmpty() {
 		b := make([]byte, i.loc.Length)
 		if _, err := o.file.ReadAt(b, i.loc.Offset); err != nil {
@@ -237,7 +237,7 @@ func (i *pitemLoc) read(o *Store, withValue bool) (err error) {
 		}
 		hdrLength := 4 + 4 + 4 + 4
 		if length != uint32(hdrLength)+keyLength+valLength {
-			return errors.New("mismatched pitemLoc lengths")
+			return errors.New("mismatched itemLoc lengths")
 		}
 		item.Key = b[hdrLength : hdrLength+int(keyLength)]
 		if withValue {
@@ -326,7 +326,7 @@ func (t *Collection) Get(key []byte, withValue bool) (*Item, error) {
 // Replace or insert an item of a given key.
 func (t *Collection) Upsert(item *Item) (err error) {
 	if r, err := t.store.union(t, &t.root,
-		&pnodeLoc{node: &pnode{item: pitemLoc{item: &Item{
+		&nodeLoc{node: &node{item: itemLoc{item: &Item{
 			Key:      item.Key,
 			Val:      item.Val,
 			Priority: item.Priority,
@@ -348,12 +348,12 @@ func (t *Collection) Delete(key []byte) (err error) {
 
 // Retreives the item with the "smallest" key.
 func (t *Collection) Min(withValue bool) (*Item, error) {
-	return t.store.edge(t, withValue, func(n *pnode) *pnodeLoc { return &n.left })
+	return t.store.edge(t, withValue, func(n *node) *nodeLoc { return &n.left })
 }
 
 // Retreives the item with the "largest" key.
 func (t *Collection) Max(withValue bool) (*Item, error) {
-	return t.store.edge(t, withValue, func(n *pnode) *pnodeLoc { return &n.right })
+	return t.store.edge(t, withValue, func(n *node) *nodeLoc { return &n.right })
 }
 
 type ItemVisitor func(i *Item) bool
@@ -379,7 +379,7 @@ func (t *Collection) UnmarshalJSON(d []byte) (err error) {
 	return err
 }
 
-func (o *Store) flushItems(nloc *pnodeLoc) (err error) {
+func (o *Store) flushItems(nloc *nodeLoc) (err error) {
 	if nloc == nil || !nloc.loc.isEmpty() || nloc.node == nil {
 		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
 	}
@@ -392,7 +392,7 @@ func (o *Store) flushItems(nloc *pnodeLoc) (err error) {
 	return o.flushItems(&nloc.node.right)
 }
 
-func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
+func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
 	if nloc == nil || !nloc.loc.isEmpty() || nloc.node == nil {
 		return nil // Flush only non-empty, unpersisted nodes.
 	}
@@ -405,21 +405,21 @@ func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
 	return nloc.write(o) // Write nodes in children-first order.
 }
 
-func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
+func (o *Store) loadNodeLoc(nloc *nodeLoc) (*nodeLoc, error) {
 	if err := nloc.read(o); err != nil {
 		return nil, err
 	}
 	return nloc, nil
 }
 
-func (o *Store) loadItemLoc(iloc *pitemLoc, withValue bool) (*pitemLoc, error) {
+func (o *Store) loadItemLoc(iloc *itemLoc, withValue bool) (*itemLoc, error) {
 	if err := iloc.read(o, withValue); err != nil {
 		return nil, err
 	}
 	return iloc, nil
 }
 
-func (o *Store) union(t *Collection, this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) {
+func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 	if thisNode, err := o.loadNodeLoc(this); err == nil {
 		if thatNode, err := o.loadNodeLoc(that); err == nil {
 			if thisNode.isEmpty() {
@@ -438,7 +438,7 @@ func (o *Store) union(t *Collection, this *pnodeLoc, that *pnodeLoc) (res *pnode
 								if err == nil {
 									newRight, err := o.union(t, &thisNode.node.right, right)
 									if err == nil {
-										return &pnodeLoc{node: &pnode{
+										return &nodeLoc{node: &node{
 											item:  *thisItem,
 											left:  *newLeft,
 											right: *newRight,
@@ -450,7 +450,7 @@ func (o *Store) union(t *Collection, this *pnodeLoc, that *pnodeLoc) (res *pnode
 								if err == nil {
 									newRight, err := o.union(t, &thisNode.node.right, right)
 									if err == nil {
-										return &pnodeLoc{node: &pnode{
+										return &nodeLoc{node: &node{
 											item:  middle.node.item,
 											left:  *newLeft,
 											right: *newRight,
@@ -467,7 +467,7 @@ func (o *Store) union(t *Collection, this *pnodeLoc, that *pnodeLoc) (res *pnode
 							if err == nil {
 								newRight, err := o.union(t, right, &thatNode.node.right)
 								if err == nil {
-									return &pnodeLoc{node: &pnode{
+									return &nodeLoc{node: &node{
 										item:  *thatItem,
 										left:  *newLeft,
 										right: *newRight,
@@ -487,9 +487,9 @@ func (o *Store) union(t *Collection, this *pnodeLoc, that *pnodeLoc) (res *pnode
 // result is (left, middle, right), where left treap has keys < s,
 // right treap has keys > s, and middle is either...
 // * empty/nil - meaning key s was not in the original treap.
-// * non-empty - returning the original pnodeLoc/item that had key s.
-func (o *Store) split(t *Collection, n *pnodeLoc, s []byte) (
-	*pnodeLoc, *pnodeLoc, *pnodeLoc, error) {
+// * non-empty - returning the original nodeLoc/item that had key s.
+func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
+	*nodeLoc, *nodeLoc, *nodeLoc, error) {
 	nNode, err := o.loadNodeLoc(n)
 	if err != nil || nNode.isEmpty() {
 		return empty, empty, empty, err
@@ -509,7 +509,7 @@ func (o *Store) split(t *Collection, n *pnodeLoc, s []byte) (
 		if err != nil {
 			return empty, empty, empty, err
 		}
-		return left, middle, &pnodeLoc{node: &pnode{
+		return left, middle, &nodeLoc{node: &node{
 			item:  *nItem,
 			left:  *right,
 			right: nNode.node.right,
@@ -520,7 +520,7 @@ func (o *Store) split(t *Collection, n *pnodeLoc, s []byte) (
 	if err != nil {
 		return empty, empty, empty, err
 	}
-	return &pnodeLoc{node: &pnode{
+	return &nodeLoc{node: &node{
 		item:  *nItem,
 		left:  nNode.node.left,
 		right: *left,
@@ -528,7 +528,7 @@ func (o *Store) split(t *Collection, n *pnodeLoc, s []byte) (
 }
 
 // All the keys from this should be < keys from that.
-func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) {
+func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 	if thisNode, err := o.loadNodeLoc(this); err == nil {
 		if thatNode, err := o.loadNodeLoc(that); err == nil {
 			if thisNode.isEmpty() {
@@ -541,7 +541,7 @@ func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) 
 				if thatItem, err := o.loadItemLoc(&thatNode.node.item, false); err == nil {
 					if thisItem.item.Priority > thatItem.item.Priority {
 						if newRight, err := o.join(&thisNode.node.right, that); err == nil {
-							return &pnodeLoc{node: &pnode{
+							return &nodeLoc{node: &node{
 								item:  *thisItem,
 								left:  thisNode.node.left,
 								right: *newRight,
@@ -549,7 +549,7 @@ func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) 
 						}
 					} else {
 						if newLeft, err := o.join(this, &thatNode.node.left); err == nil {
-							return &pnodeLoc{node: &pnode{
+							return &nodeLoc{node: &node{
 								item:  *thatItem,
 								left:  *newLeft,
 								right: thatNode.node.right,
@@ -563,7 +563,7 @@ func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) 
 	return empty, err
 }
 
-func (o *Store) edge(t *Collection, withValue bool, cfn func(*pnode) *pnodeLoc) (
+func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
 	*Item, error) {
 	n, err := o.loadNodeLoc(&t.root)
 	if err != nil || n.isEmpty() {
@@ -590,7 +590,7 @@ func (o *Store) edge(t *Collection, withValue bool, cfn func(*pnode) *pnodeLoc) 
 	return nil, nil
 }
 
-func (o *Store) visitAscendNode(t *Collection, n *pnodeLoc, target []byte,
+func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 	withValue bool, visitor ItemVisitor) (bool, error) {
 	nNode, err := o.loadNodeLoc(n)
 	if err != nil {
