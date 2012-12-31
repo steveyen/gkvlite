@@ -76,7 +76,7 @@ func (s *Store) RemoveCollection(name string) {
 
 // Writes (appends) any unpersisted data to file.  As a
 // greater-window-of-data-loss versus higher-performance tradeoff,
-// consider having many mutations (Upsert()'s & Delete()'s) and then
+// consider having many mutations (UpsertItem()'s & Delete()'s) and then
 // have a less occasional Flush() instead of Flush()'ing after every
 // mutation.  Users may also wish to file.Sync() after a Flush() for
 // extra data-loss protection.
@@ -314,7 +314,7 @@ var ploc_empty *ploc = &ploc{}
 // need the item's value (Item.Val may be nil), which might be able
 // to save on I/O and memory resources, especially for large values.
 // The returned Item should be treated as immutable.
-func (t *Collection) Get(key []byte, withValue bool) (*Item, error) {
+func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
 	n := &t.root
 	err := n.read(t.store)
 	for {
@@ -326,7 +326,7 @@ func (t *Collection) Get(key []byte, withValue bool) (*Item, error) {
 			return nil, err
 		}
 		if i == nil || i.item == nil || i.item.Key == nil {
-			return nil, errors.New("no item after item.read() in Get()")
+			return nil, errors.New("no item after item.read() in GetItem()")
 		}
 		c := t.compare(key, i.item.Key)
 		if c < 0 {
@@ -351,7 +351,7 @@ func (t *Collection) Get(key []byte, withValue bool) (*Item, error) {
 // A random item Priority (e.g., rand.Int()) will usually work well,
 // but advanced users may consider using non-random item priorities
 // at the risk of unbalancing the lookup trees.
-func (t *Collection) Upsert(item *Item) (err error) {
+func (t *Collection) UpsertItem(item *Item) (err error) {
 	if r, err := t.store.union(t, &t.root,
 		&nodeLoc{node: &node{item: itemLoc{item: &Item{
 			Key:      item.Key,

@@ -77,7 +77,7 @@ func TestStoreMem(t *testing.T) {
 	for testIdx, test := range tests {
 		switch test.op {
 		case "get":
-			i, err := x.Get([]byte(test.val), true)
+			i, err := x.GetItem([]byte(test.val), true)
 			if err != nil {
 				t.Errorf("test: %v, expected get nil error, got: %v",
 					testIdx, err)
@@ -94,7 +94,7 @@ func TestStoreMem(t *testing.T) {
 					testIdx, test.exp, i.Key)
 			}
 		case "ups":
-			err := x.Upsert(&Item{
+			err := x.UpsertItem(&Item{
 				Key:      []byte(test.val),
 				Val:      []byte(test.val),
 				Priority: int32(test.pri),
@@ -115,7 +115,7 @@ func TestStoreMem(t *testing.T) {
 
 func loadCollection(x *Collection, arr []string) {
 	for i, s := range arr {
-		x.Upsert(&Item{
+		x.UpsertItem(&Item{
 			Key:      []byte(s),
 			Val:      []byte(s),
 			Priority: int32(i),
@@ -279,20 +279,20 @@ func TestStoreFile(t *testing.T) {
 	if x2 == nil {
 		t.Errorf("expected x2 to be there")
 	}
-	i, err := x2.Get([]byte("a"), true)
+	i, err := x2.GetItem([]byte("a"), true)
 	if err != nil {
-		t.Errorf("expected s2.Get(a) to not error, err: %v", err)
+		t.Errorf("expected s2.GetItem(a) to not error, err: %v", err)
 	}
 	if i == nil {
-		t.Errorf("expected s2.Get(a) to return non-nil item")
+		t.Errorf("expected s2.GetItem(a) to return non-nil item")
 	}
 	if string(i.Key) != "a" {
-		t.Errorf("expected s2.Get(a) to return key a, got: %v", i.Key)
+		t.Errorf("expected s2.GetItem(a) to return key a, got: %v", i.Key)
 	}
 	if string(i.Val) != "a" {
-		t.Errorf("expected s2.Get(a) to return val a, got: %v", i.Val)
+		t.Errorf("expected s2.GetItem(a) to return val a, got: %v", i.Val)
 	}
-	i2, err := x2.Get([]byte("not-there"), true)
+	i2, err := x2.GetItem([]byte("not-there"), true)
 	if i2 != nil || err != nil {
 		t.Errorf("expected miss to miss nicely.")
 	}
@@ -302,11 +302,11 @@ func TestStoreFile(t *testing.T) {
 	loadCollection(x, []string{"c", "b"})
 
 	// x2 has its own snapshot, so should not see the new items.
-	i, err = x2.Get([]byte("b"), true)
+	i, err = x2.GetItem([]byte("b"), true)
 	if i != nil || err != nil {
 		t.Errorf("expected b miss to miss nicely.")
 	}
-	i, err = x2.Get([]byte("c"), true)
+	i, err = x2.GetItem([]byte("c"), true)
 	if i != nil || err != nil {
 		t.Errorf("expected c miss to miss nicely.")
 	}
@@ -317,24 +317,24 @@ func TestStoreFile(t *testing.T) {
 	}
 	f.Sync()
 
-	i, err = x2.Get([]byte("b"), true)
+	i, err = x2.GetItem([]byte("b"), true)
 	if i != nil || err != nil {
 		t.Errorf("expected b miss to still miss nicely.")
 	}
-	i, err = x2.Get([]byte("c"), true)
+	i, err = x2.GetItem([]byte("c"), true)
 	if i != nil || err != nil {
 		t.Errorf("expected c miss to still miss nicely.")
 	}
 
-	i, err = x.Get([]byte("a"), true)
+	i, err = x.GetItem([]byte("a"), true)
 	if i == nil || err != nil {
 		t.Errorf("expected a to be in x.")
 	}
-	i, err = x.Get([]byte("b"), true)
+	i, err = x.GetItem([]byte("b"), true)
 	if i == nil || err != nil {
 		t.Errorf("expected b to be in x.")
 	}
-	i, err = x.Get([]byte("c"), true)
+	i, err = x.GetItem([]byte("c"), true)
 	if i == nil || err != nil {
 		t.Errorf("expected c to be in x.")
 	}
@@ -364,15 +364,15 @@ func TestStoreFile(t *testing.T) {
 	visitExpectCollection(t, x2, "a", []string{"a"})
 	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
 
-	i, err = x3.Get([]byte("a"), true)
+	i, err = x3.GetItem([]byte("a"), true)
 	if i == nil || err != nil {
 		t.Errorf("expected a to be in x3.")
 	}
-	i, err = x3.Get([]byte("b"), true)
+	i, err = x3.GetItem([]byte("b"), true)
 	if i == nil || err != nil {
 		t.Errorf("expected b to be in x3.")
 	}
-	i, err = x3.Get([]byte("c"), true)
+	i, err = x3.GetItem([]byte("c"), true)
 	if i == nil || err != nil {
 		t.Errorf("expected c to be in x3.")
 	}
@@ -397,15 +397,15 @@ func TestStoreFile(t *testing.T) {
 	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
 	visitExpectCollection(t, x4, "a", []string{"a", "c"})
 
-	i, err = x4.Get([]byte("a"), true)
+	i, err = x4.GetItem([]byte("a"), true)
 	if i == nil || err != nil {
 		t.Errorf("expected a to be in x4.")
 	}
-	i, err = x4.Get([]byte("b"), true)
+	i, err = x4.GetItem([]byte("b"), true)
 	if i != nil || err != nil {
 		t.Errorf("expected b to not be in x4.")
 	}
-	i, err = x4.Get([]byte("c"), true)
+	i, err = x4.GetItem([]byte("c"), true)
 	if i == nil || err != nil {
 		t.Errorf("expected c to be in x4.")
 	}
@@ -498,7 +498,7 @@ func TestStoreFile(t *testing.T) {
 	s5a, err := NewStore(f5a)
 	x5a := s5a.GetCollection("x")
 
-	i, err = x5a.Get([]byte("a"), false)
+	i, err = x5a.GetItem([]byte("a"), false)
 	if i == nil {
 		t.Error("was expecting a item")
 	}
@@ -509,7 +509,7 @@ func TestStoreFile(t *testing.T) {
 		t.Error("was expecting a item with nil Val when withValue false")
 	}
 
-	i, err = x5a.Get([]byte("a"), true)
+	i, err = x5a.GetItem([]byte("a"), true)
 	if i == nil {
 		t.Error("was expecting a item")
 	}

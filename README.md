@@ -43,7 +43,7 @@ Tips
 ====
 
 To get a probabilistic O(log N) balanced tree height, you should use a
-random priority number (e.g., rand.Int()) during the Upsert()
+random priority number (e.g., rand.Int()) during the UpsertItem()
 operation.  See Examples.
 
 LICENSE
@@ -65,24 +65,24 @@ Examples
 	c := s.SetCollection("cars", nil)
     
     // Insert or replace data items.
-    c.Upsert(&gkvlite.Item{
+    c.UpsertItem(&gkvlite.Item{
         Key: []byte("tesla"),
         Val: []byte("$$$"),
         Priority: rand.Int(),
     })
-    c.Upsert(&gkvlite.Item{
+    c.UpsertItem(&gkvlite.Item{
         Key: []byte("mercedes"),
         Val: []byte("$$"),
         Priority: rand.Int(),
     })
-    c.Upsert(&gkvlite.Item{
+    c.UpsertItem(&gkvlite.Item{
         Key: []byte("bmw"),
         Val: []byte("$"),
         Priority: rand.Int(),
     })
     
-    mercedesItem, err := c.Get("mercedes", true)
-    thisIsNil, err := c.Get("the-lunar-rover", true)
+    mercedesItem, err := c.GetItem("mercedes", true)
+    thisIsNil, err := c.GetItem("the-lunar-rover", true)
     
     c.VisitAscend("ford", func(i *Item) bool {
         // This visitor callback will be invoked with every item
@@ -98,8 +98,8 @@ Examples
     
     // The snapshot won't see modifications against the original Store.
     err = c.Delete("mercedes")
-    mercedesIsNil, err = c.Get("mercedes", true)
-    mercedesFromSnaphotIsNonNil, err = snap.Get("mercedes", true)
+    mercedesIsNil, err = c.GetItem("mercedes", true)
+    mercedesFromSnaphotIsNonNil, err = snap.GetItem("mercedes", true)
 
     // Persist all the changes to disk.
     err := s.Flush()
@@ -111,7 +111,7 @@ Examples
     s2, err := NewStore(f2)
     c2 := s.GetCollection("cars")
     
-    bmwIsNonNil := c2.Get("bmw", true)
+    bmwIsNonNil := c2.GetItem("bmw", true)
 
 Implementation / design
 =======================
