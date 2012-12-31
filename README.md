@@ -109,7 +109,7 @@ Examples
     snap := s.Snapshot()
     
     // The snapshot won't see modifications against the original Store.
-    err = c.Delete("mercedes")
+    err = c.Delete([]byte("mercedes"))
     mercedesIsNil, err = c.Get([]byte("mercedes"))
     mercedesPriceFromSnaphot, err = snap.Get([]bytes("mercedes"))
     
