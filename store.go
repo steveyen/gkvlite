@@ -14,9 +14,9 @@ import (
 // treaps.  This implementation is single-threaded, so users should
 // serialize their accesses.
 //
+// TODO: saving gtreap.Store data files into a gtreap.Store data file.
 // TODO: use atomic.CAS and unsafe.Pointers for safe snapshot'ability.
 // TODO: allow read-only snapshots.
-// TODO: saving gtreap.Store data files into a gtreap.Store data file.
 //
 type Store struct {
 	Coll map[string]*PTreap `json:"c"` // Exposed only for json'ification.
