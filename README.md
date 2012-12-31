@@ -1,32 +1,43 @@
-gtreap
-------
+gkvlite
+------_
 
-gtreap is an immutable treap implementation in the Go Language
+gkvlite is a simple, ordered, key-value persistence library for Go
 
 Overview
 ========
 
-gtreap implements an immutable treap data structure in golang.
+gkvlite is a library that provides a simple key-value persistence
+implementation, inspired by SQLite and CouchDB/Couchstore.  gkvlite
+has the following features...
 
-By treap, this data structure is both a heap and a binary search tree.
+* 100% implemented in the Go Language (golang).
+* Open source license - MIT.
+* Keys are ordered, so range iterations are supported.
+* Keys are []byte.
+* Values are []byte.
+* On-disk storage is a single file.
+* O(log N) performance for item retrieval.
+* Multiple key-value collections are supported in a single storage file.
+* Append-only, copy-on-write design for robustness to crashes/power-loss.
+* Read-only snapshots are supported so concurrent readers won't block writers.
+* In-memory-only mode, when you want the same API but without any persistence.
+* Single-threaded - users might use Go channels to serialize their own accesses.
+* You provide the os.File.
+* You provide the os.File.Sync(), if you want it.
+* You control when you Flush() to disk, for performance-vs-safety tradeoffs.
+* You can retrieve just keys only, to save I/O & memory resources when values are large.
+* You can supply your own KeyCompare function to order items however you want.
+* You can control item priority to access hotter items faster
+  by shuffling them closer to the tops of balanced binary
+  trees (warning: intricate/advanced tradeoffs here).
+* Small - the implementation is a single file < 1000 lines of code.
 
-By immutable, any updates/deletes to a treap will return a new treap
-which can share internal nodes with the previous treap.  All nodes in
-this implementation are read-only after their creation.  This allows
-concurrent readers to operate safely with concurrent writers as
-modifications only create new data structures and never modify
-existing data structures.  This is a simple approach to achieving MVCC
-or multi-version concurrency control.
+Tips
+====
 
-By heap, items in the treap follow the heap-priority property, where a
-parent node will have higher priority than its left and right children
-nodes.
-
-By binary search tree, items are store lexigraphically, ordered by a
-user-supplied Compare function.
-
-To get a probabilistic O(lg N) tree height, you should use a random
-priority number during the Upsert() operation.
+To get a probabilistic O(log N) balanced tree height, you should use a
+random priority number (e.g., rand.Int()) during the Upsert()
+operation.  See Examples.
 
 LICENSE
 =======
@@ -38,46 +49,47 @@ Example
 
     import (
         "math/rand"
-        "github.com/steveyen/gtreap"
+        "os"
+        "github.com/steveyen/gkvlite"
     )
     
-    func stringCompare(a, b interface{}) int {
-	    return bytes.Compare([]byte(a.(string)), []byte(b.(string)))
-    }
+	f, err := os.Create("/tmp/test.gkvlite")
+	s, err := NewStore(f)
+	c := s.SetCollection("cars", nil)
     
-    t := gtreap.NewTreap(stringCompare)
-    t = t.Upsert("hi", rand.Int())
-    t = t.Upsert("hola", rand.Int())
-    t = t.Upsert("bye", rand.Int())
-    t = t.Upsert("adios", rand.Int())
+    c.Upsert(&gkvlite.Item{
+        Key: []byte("tesla"),
+        Val: []byte("$$$"),
+        Priority: rand.Int(),
+    })
+    c.Upsert(&gkvlite.Item{
+        Key: []byte("mercedes"),
+        Val: []byte("$$"),
+        Priority: rand.Int(),
+    })
+    c.Upsert(&gkvlite.Item{
+        Key: []byte("bmw"),
+        Val: []byte("$"),
+        Priority: rand.Int(),
+    })
     
-    hi = t.Get("hi")
-    bye = t.Get("bye")
+    mercedesItem, err := c.Get("mercedes", true)
+    thisIsNil, err := c.Get("the-lunar-rover", true)
     
-    // Some example Delete()'s...
-    t = t.Delete("bye")
-    nilValueHere = t.Get("bye")
-    t2 = t.Delete("hi")
-    nilValueHere2 = t2.Get("hi")
-    
-    // Since we still hold onto treap t, we can still access "hi".
-    hiStillExistsInTreapT = t.Get("hi")
-    
-    t.VisitAscend("cya", func(i Item) bool {
+    c.VisitAscend("ford", func(i *Item) bool {
         // This visitor callback will be invoked with every item
-        // from "cya" onwards.  So: "hi", "hola".
+        // with key "ford" and onwards, in key-sorted order.
+        // So: "mercedes", "tesla".
         // If we want to stop visiting, return false;
         // otherwise a true return result means keep visiting items.
         return true
     })
+    
+    err = c.Delete("mercedes")
+    mercedesIsNil, err = c.Get("mercedes", true)
 
-Tips
-====
+Implementation
+==============
 
-The Upsert() method takes both an Item (an interface{}) and a heap
-priority.  Usually, that priority should be a random int
-(math/rand.Int()) or perhaps even a hash of the item.  However, if you
-want to shuffle more commonly accessed items nearer to the top of the
-treap for faster access, at the potential cost of not approaching a
-probabilistic O(lg N) tree height, then you might tweak the priority.
-
+The fundamental datastructure is an immutable treap.  When used with
+random priorities, treaps have probabilistic balanced tree behavior.
