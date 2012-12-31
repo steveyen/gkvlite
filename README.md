@@ -1,5 +1,5 @@
 gkvlite
-------_
+-------
 
 gkvlite is a simple, ordered, key-value persistence library for Go
 
