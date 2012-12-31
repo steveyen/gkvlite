@@ -324,6 +324,9 @@ func (t *Collection) Get(key []byte, withValue bool) (*Item, error) {
 }
 
 // Replace or insert an item of a given key.
+// A random item Priority (e.g., rand.Int()) will usually work well,
+// but advanced users may consider using non-random item priorities
+// at the risk of unbalancing the lookup trees.
 func (t *Collection) Upsert(item *Item) (err error) {
 	if r, err := t.store.union(t, &t.root,
 		&nodeLoc{node: &node{item: itemLoc{item: &Item{
@@ -347,11 +350,13 @@ func (t *Collection) Delete(key []byte) (err error) {
 }
 
 // Retrieves the item with the "smallest" key.
+// The returned item should be treated as immutable.
 func (t *Collection) Min(withValue bool) (*Item, error) {
 	return t.store.edge(t, withValue, func(n *node) *nodeLoc { return &n.left })
 }
 
 // Retrieves the item with the "largest" key.
+// The returned item should be treated as immutable.
 func (t *Collection) Max(withValue bool) (*Item, error) {
 	return t.store.edge(t, withValue, func(n *node) *nodeLoc { return &n.right })
 }
