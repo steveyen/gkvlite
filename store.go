@@ -652,8 +652,12 @@ func (o *Store) readRoots() error {
 						bytes.Equal(MAGIC_BEG, data[len(MAGIC_BEG):2*len(MAGIC_BEG)]) {
 						var version, length uint32
 						b := bytes.NewBuffer(data[2*len(MAGIC_BEG):])
-						binary.Read(b, binary.BigEndian, &version)
-						binary.Read(b, binary.BigEndian, &length)
+						if err = binary.Read(b, binary.BigEndian, &version); err != nil {
+							return err
+						}
+						if err = binary.Read(b, binary.BigEndian, &length); err != nil {
+							return err
+						}
 						if version != VERSION {
 							return fmt.Errorf("version mismatch: "+
 								"current version: %v != found version: %v",
@@ -665,8 +669,7 @@ func (o *Store) readRoots() error {
 								uint32(o.size-offset), length)
 						}
 						m := &Store{}
-						err := json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m)
-						if err != nil {
+						if err = json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m); err != nil {
 							return err
 						}
 						o.Coll = m.Coll
