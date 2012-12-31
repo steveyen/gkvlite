@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 )
 
@@ -347,6 +348,15 @@ func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
 	return nil, err
 }
 
+func (t *Collection) Get(key []byte) (val []byte, err error) {
+	if i, err := t.GetItem(key, true); err == nil {
+		if i != nil {
+			return i.Val, nil
+		}
+	}
+	return nil, err
+}
+
 // Replace or insert an item of a given key.
 // A random item Priority (e.g., rand.Int()) will usually work well,
 // but advanced users may consider using non-random item priorities
@@ -361,6 +371,11 @@ func (t *Collection) UpsertItem(item *Item) (err error) {
 		t.root = *r
 	}
 	return err
+}
+
+// Replace or insert an item of a given key.
+func (t *Collection) Upsert(key []byte, val []byte) error {
+	return t.UpsertItem(&Item{Key: key, Val: val, Priority: int32(rand.Int())})
 }
 
 // Deletes an item of a given key.

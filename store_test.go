@@ -111,6 +111,38 @@ func TestStoreMem(t *testing.T) {
 			}
 		}
 	}
+
+	xx := s.SetCollection("xx", nil)
+
+	for testIdx, test := range tests {
+		switch test.op {
+		case "get":
+			i, err := xx.Get([]byte(test.val))
+			if err != nil {
+				t.Errorf("test: %v, expected get nil error, got: %v",
+					testIdx, err)
+			}
+			if i == nil && test.exp == "NIL" {
+				continue
+			}
+			if string(i) != test.exp {
+				t.Errorf("test: %v, on Get, expected val: %v, got: %v",
+					testIdx, test.exp, test.val)
+			}
+		case "ups":
+			err := xx.Upsert([]byte(test.val), []byte(test.val))
+			if err != nil {
+				t.Errorf("test: %v, expected ups nil error, got: %v",
+					testIdx, err)
+			}
+		case "del":
+			err := xx.Delete([]byte(test.val))
+			if err != nil {
+				t.Errorf("test: %v, expected del nil error, got: %v",
+					testIdx, err)
+			}
+		}
+	}
 }
 
 func loadCollection(x *Collection, arr []string) {

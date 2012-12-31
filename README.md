@@ -39,13 +39,6 @@ gkvlite has the following features...
 * Small - the implementation is a single file < 1000 lines of code.
 * Tested - "go test" unit tests.
 
-Tips
-====
-
-To get a probabilistic O(log N) balanced tree height, you should use a
-random priority number (e.g., rand.Int()) during the UpsertItem()
-operation.  See Examples.
-
 LICENSE
 =======
 
@@ -65,24 +58,12 @@ Examples
 	c := s.SetCollection("cars", nil)
     
     // Insert or replace data items.
-    c.UpsertItem(&gkvlite.Item{
-        Key: []byte("tesla"),
-        Val: []byte("$$$"),
-        Priority: rand.Int(),
-    })
-    c.UpsertItem(&gkvlite.Item{
-        Key: []byte("mercedes"),
-        Val: []byte("$$"),
-        Priority: rand.Int(),
-    })
-    c.UpsertItem(&gkvlite.Item{
-        Key: []byte("bmw"),
-        Val: []byte("$"),
-        Priority: rand.Int(),
-    })
+    c.Upsert([]byte("tesla"), []byte("$$$"))
+    c.Upsert([]byte("mercedes"), []byte("$$"))
+    c.UpsertItem([]byte("bmw"), []byte("$"))
     
-    mercedesItem, err := c.GetItem("mercedes", true)
-    thisIsNil, err := c.GetItem("the-lunar-rover", true)
+    mercedesItem, err := c.Get("mercedes")
+    thisIsNil, err := c.Get("the-lunar-rover")
     
     c.VisitAscend("ford", func(i *Item) bool {
         // This visitor callback will be invoked with every item
@@ -98,8 +79,8 @@ Examples
     
     // The snapshot won't see modifications against the original Store.
     err = c.Delete("mercedes")
-    mercedesIsNil, err = c.GetItem("mercedes", true)
-    mercedesFromSnaphotIsNonNil, err = snap.GetItem("mercedes", true)
+    mercedesIsNil, err = c.Get("mercedes")
+    mercedesFromSnaphotIsNonNil, err = snap.Get("mercedes")
 
     // Persist all the changes to disk.
     err := s.Flush()
@@ -111,7 +92,7 @@ Examples
     s2, err := NewStore(f2)
     c2 := s.GetCollection("cars")
     
-    bmwIsNonNil := c2.GetItem("bmw", true)
+    bmwIsNonNil := c2.Get("bmw")
 
 Implementation / design
 =======================
