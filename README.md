@@ -46,6 +46,7 @@ gkvlite has the following features...
 * You can retrieve just keys only, to save I/O & memory resources,
   especially when values are large and you just need only keys for some requests.
 * You can supply your own KeyCompare function to order items however you want.
+  The default is bytes.Compare().
 * You can control item priority to access hotter items faster
   by shuffling them closer to the tops of balanced binary
   trees (warning: intricate/advanced tradeoffs here).
