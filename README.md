@@ -19,9 +19,6 @@ gkvlite has the following features...
 * On-disk storage for a "Store" is a single file.
 * Multiple key-value Collections are supported in a single storage file.
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
-* Non-persistable snapshots are supported, where you can still "scribble" on
-  in-memory-only snapshots with more (non-persistable) mutations. These
-  scribbles on snpashots won't affect (are isolated from) the original Store.
 * Atomicity - all changes across all Collections in a Store after a
   Flush() will be atomically seen or not seen with respect to a
   process-restart/crash.
@@ -33,6 +30,9 @@ gkvlite has the following features...
 * Range iteration performance is same as binary tree traversal performance.
 * In general, performance is similar to a probabilistic balanced
   binary tree performance.
+* Non-persistable snapshots are supported, where you can still "scribble" on
+  in-memory-only snapshots with more (non-persistable) mutations. These
+  scribbles on snapshots won't affect (are isolated from) the original Store.
 * Snapshot creation is a fast O(1) operation per Collection.
 * In-memory-only mode is supported, when you want the same API but
   without any persistence.
