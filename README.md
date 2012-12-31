@@ -57,10 +57,13 @@ Examples
 	s, err := NewStore(f)
 	c := s.SetCollection("cars", nil)
     
-    // Insert or replace data items.
+    // Insert data items.
     c.Upsert([]byte("tesla"), []byte("$$$"))
     c.Upsert([]byte("mercedes"), []byte("$$"))
     c.UpsertItem([]byte("bmw"), []byte("$"))
+
+    // Replace data items.
+    c.Upsert([]byte("tesla"), []byte("$$$$"))
     
     mercedesItem, err := c.Get("mercedes")
     thisIsNil, err := c.Get("the-lunar-rover")
