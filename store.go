@@ -29,13 +29,12 @@ const VERSION = uint32(0)
 var MAGIC_BEG []byte = []byte("0g1t2r")
 var MAGIC_END []byte = []byte("3e4a5p")
 
-func NewStore(file *os.File) (*Store, error) {
+func NewStore(file *os.File) (res *Store, err error) {
 	if file == nil { // Return a memory-only Store.
 		return &Store{Coll: make(map[string]*PTreap)}, nil
 	}
-	res := &Store{Coll: make(map[string]*PTreap), file: file}
-	err := res.readRoots()
-	if err == nil {
+	res = &Store{Coll: make(map[string]*PTreap), file: file}
+	if err := res.readRoots(); err == nil {
 		return res, nil
 	}
 	return nil, err
@@ -112,17 +111,50 @@ func (nloc *pnodeLoc) isEmpty() bool {
 func (nloc *pnodeLoc) write(o *Store) error {
 	if nloc != nil && nloc.loc == nil && nloc.node != nil {
 		offset := o.size
-		length := 4 + ploc_length + ploc_length + ploc_length
+		length := ploc_length + ploc_length + ploc_length
 		b := bytes.NewBuffer(make([]byte, length)[:0])
-		binary.Write(b, binary.BigEndian, uint32(length))
-		nloc.node.item.loc.write(b)
-		nloc.node.left.loc.write(b)
-		nloc.node.right.loc.write(b)
+		if err := nloc.node.item.loc.write(b); err != nil {
+			return err
+		}
+		if err := nloc.node.left.loc.write(b); err != nil {
+			return err
+		}
+		if err := nloc.node.right.loc.write(b); err != nil {
+			return err
+		}
 		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 			return err
 		}
 		o.size = offset + int64(length)
 		nloc.loc = &ploc{Offset: offset, Length: uint32(length)}
+	}
+	return nil
+}
+
+func (nloc *pnodeLoc) read(o *Store) (err error) {
+	if nloc != nil && nloc.node == nil && nloc.loc != nil {
+		b := make([]byte, nloc.loc.Length)
+		if _, err := o.file.ReadAt(b, nloc.loc.Offset); err != nil {
+			return err
+		}
+		buf := bytes.NewBuffer(b)
+		n := &pnode{}
+		p := &ploc{}
+		if p, err = p.read(buf); err != nil {
+			return err
+		}
+		n.item.loc = p
+		p = &ploc{}
+		if p, err = p.read(buf); err != nil {
+			return err
+		}
+		n.left.loc = p
+		p = &ploc{}
+		if p, err = p.read(buf); err != nil {
+			return err
+		}
+		n.right.loc = p
+		nloc.node = n
 	}
 	return nil
 }
@@ -165,19 +197,68 @@ func (i *pitemLoc) write(o *Store) error {
 	return nil
 }
 
+func (i *pitemLoc) read(o *Store, withValue bool) (err error) {
+	if i != nil && i.item == nil && i.loc != nil {
+		b := make([]byte, i.loc.Length)
+		if _, err := o.file.ReadAt(b, i.loc.Offset); err != nil {
+			return err
+		}
+		buf := bytes.NewBuffer(b)
+		item := &PItem{}
+		var length, keyLength, valLength uint32
+		if err = binary.Read(buf, binary.BigEndian, &length); err != nil {
+			return err
+		}
+		if err = binary.Read(buf, binary.BigEndian, &keyLength); err != nil {
+			return err
+		}
+		if err = binary.Read(buf, binary.BigEndian, &valLength); err != nil {
+			return err
+		}
+		if err = binary.Read(buf, binary.BigEndian, &item.Priority); err != nil {
+			return err
+		}
+		hdrLength := 4 + 4 + 4 + 4
+		if length != uint32(hdrLength)+keyLength+valLength {
+			return errors.New("mismatched pitemLoc lengths")
+		}
+		item.Key = b[hdrLength : hdrLength+int(keyLength)]
+		item.Val = b[hdrLength+int(keyLength) : hdrLength+int(keyLength+valLength)]
+		i.item = item
+	}
+	return nil
+}
+
 // Offset/location of persisted range of bytes.
 type ploc struct {
 	Offset int64  `json:"o"` // Usable for os.ReadAt/WriteAt() at file offset 0.
 	Length uint32 `json:"l"` // Number of bytes.
 }
 
-func (p *ploc) write(b *bytes.Buffer) {
+func (p *ploc) write(b *bytes.Buffer) (err error) {
 	if p != nil {
-		binary.Write(b, binary.BigEndian, p.Offset)
-		binary.Write(b, binary.BigEndian, p.Length)
-	} else {
-		ploc_empty.write(b)
+		if err := binary.Write(b, binary.BigEndian, p.Offset); err != nil {
+			return err
+		}
+		if err := binary.Write(b, binary.BigEndian, p.Length); err != nil {
+			return err
+		}
+		return nil
 	}
+	return ploc_empty.write(b)
+}
+
+func (p *ploc) read(b *bytes.Buffer) (res *ploc, err error) {
+	if err := binary.Read(b, binary.BigEndian, &p.Offset); err != nil {
+		return nil, err
+	}
+	if err := binary.Read(b, binary.BigEndian, &p.Length); err != nil {
+		return nil, err
+	}
+	if p.Offset == int64(0) && p.Length == uint32(0) {
+		return nil, nil
+	}
+	return p, nil
 }
 
 const ploc_length int = 8 + 4
@@ -254,8 +335,12 @@ func (t *PTreap) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.root.loc)
 }
 
-func (t *PTreap) UnmarshalJSON(d []byte) error {
-	return json.Unmarshal(d, &t.root.loc)
+func (t *PTreap) UnmarshalJSON(d []byte) (err error) {
+	p := ploc{}
+	if err := json.Unmarshal(d, &p); err == nil {
+		t.root.loc = &p
+	}
+	return err
 }
 
 func (o *Store) flushItems(nloc *pnodeLoc) (err error) {
@@ -286,14 +371,18 @@ func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
 
 func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
 	if nloc != nil && nloc.node == nil && nloc.loc != nil {
-		// TODO.
+		if err := nloc.read(o); err != nil {
+			return nil, err
+		}
 	}
 	return nloc, nil
 }
 
 func (o *Store) loadItemLoc(iloc *pitemLoc, withValue bool) (*pitemLoc, error) {
 	if iloc != nil && iloc.item == nil && iloc.loc != nil {
-		// TODO.
+		if err := iloc.read(o, withValue); err != nil {
+			return nil, err
+		}
 	}
 	return iloc, nil
 }
@@ -540,7 +629,7 @@ func (o *Store) readRoots() error {
 						bytes.Equal(MAGIC_END, endBuff[8+len(MAGIC_END):]) {
 						break
 					}
-					o.size = o.size - 1 // TODO: Skipping optimizations.
+					o.size = o.size - 1 // TODO: optimizations to skip backwards faster.
 				}
 				// Read and check the roots.
 				var offset int64
@@ -573,6 +662,7 @@ func (o *Store) readRoots() error {
 						}
 						o.Coll = m.Coll
 						for _, t := range o.Coll {
+							t.store = o
 							t.compare = bytes.Compare
 						}
 						return nil

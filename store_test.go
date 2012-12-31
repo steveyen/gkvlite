@@ -275,4 +275,18 @@ func TestStoreFile(t *testing.T) {
 	if len(s2.GetCollectionNames()) != 1 || s2.GetCollectionNames()[0] != "x" {
 		t.Errorf("expected 1 coll name x")
 	}
+	x2 := s2.GetCollection("x")
+	if x2 == nil {
+		t.Errorf("expected x2 to be there")
+	}
+	i, err := x2.Get([]byte("a"), true)
+	if err != nil {
+		t.Errorf("expected s2.Get(a) to not error, err: %v", err)
+	}
+	if i == nil {
+		t.Errorf("expected s2.Get(a) to return non-nil item")
+	}
+	if string(i.Key) != "a" || string(i.Val) != "a" {
+		t.Errorf("expected s2.Get(a) to return a")
+	}
 }
