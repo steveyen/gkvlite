@@ -163,11 +163,11 @@ func TestVisitStoreMem(t *testing.T) {
 	}
 
 	visitExpectCollection(t, x, "a", []string{})
-	min, err := x.Min(true)
+	min, err := x.MinItem(true)
 	if err != nil || min != nil {
 		t.Errorf("expected no min, got: %v, err: %v", min, err)
 	}
-	max, err := x.Max(true)
+	max, err := x.MaxItem(true)
 	if err != nil || max != nil {
 		t.Errorf("expected no max, got: %v, err: %v", max, err)
 	}
@@ -191,19 +191,19 @@ func TestVisitStoreMem(t *testing.T) {
 	}
 	visitX()
 
-	min0, err := x.Min(false)
+	min0, err := x.MinItem(false)
 	if err != nil || string(min0.Key) != "a" {
 		t.Errorf("expected min of a")
 	}
-	min1, err := x.Min(true)
+	min1, err := x.MinItem(true)
 	if err != nil || string(min1.Key) != "a" || string(min1.Val) != "a" {
 		t.Errorf("expected min of a")
 	}
-	max0, err := x.Max(false)
+	max0, err := x.MaxItem(false)
 	if err != nil || string(max0.Key) != "e" {
 		t.Errorf("expected max0 of e, got: %#v, err: %#v", max0, err)
 	}
-	max1, err := x.Max(true)
+	max1, err := x.MaxItem(true)
 	if err != nil || string(max1.Key) != "e" || string(max1.Val) != "e" {
 		t.Errorf("expected max1 of e, got: %#v, err: %#v", max1, err)
 	}
@@ -440,7 +440,7 @@ func TestStoreFile(t *testing.T) {
 
 	// ------------------------------------------------
 
-	// Exercise Min and Max.
+	// Exercise MinItem and MaxItem.
 	mmTests := []struct {
 		coll *Collection
 		min  string
@@ -454,7 +454,7 @@ func TestStoreFile(t *testing.T) {
 	}
 
 	for mmTestIdx, mmTest := range mmTests {
-		i, err = mmTest.coll.Min(true)
+		i, err = mmTest.coll.MinItem(true)
 		if err != nil {
 			t.Errorf("mmTestIdx: %v, expected no Min error, but got err: %v",
 				mmTestIdx, err)
@@ -472,21 +472,21 @@ func TestStoreFile(t *testing.T) {
 				mmTestIdx, mmTest.min, string(i.Val))
 		}
 
-		i, err = mmTest.coll.Max(true)
+		i, err = mmTest.coll.MaxItem(true)
 		if err != nil {
-			t.Errorf("mmTestIdx: %v, expected no Max error, but got err: %v",
+			t.Errorf("mmTestIdx: %v, expected no MaxItem error, but got err: %v",
 				mmTestIdx, err)
 		}
 		if i == nil {
-			t.Errorf("mmTestIdx: %v, expected Max item, but got nil",
+			t.Errorf("mmTestIdx: %v, expected MaxItem item, but got nil",
 				mmTestIdx)
 		}
 		if string(i.Key) != mmTest.max {
-			t.Errorf("mmTestIdx: %v, expected Max item key: %v, but got: %v",
+			t.Errorf("mmTestIdx: %v, expected MaxItem item key: %v, but got: %v",
 				mmTestIdx, mmTest.max, string(i.Key))
 		}
 		if string(i.Val) != mmTest.max {
-			t.Errorf("mmTestIdx: %v, expected Max item key: %v, but got: %v",
+			t.Errorf("mmTestIdx: %v, expected MaxItem item key: %v, but got: %v",
 				mmTestIdx, mmTest.max, string(i.Val))
 		}
 	}

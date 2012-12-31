@@ -375,13 +375,13 @@ func (t *Collection) Delete(key []byte) (err error) {
 
 // Retrieves the item with the "smallest" key.
 // The returned item should be treated as immutable.
-func (t *Collection) Min(withValue bool) (*Item, error) {
+func (t *Collection) MinItem(withValue bool) (*Item, error) {
 	return t.store.edge(t, withValue, func(n *node) *nodeLoc { return &n.left })
 }
 
 // Retrieves the item with the "largest" key.
 // The returned item should be treated as immutable.
-func (t *Collection) Max(withValue bool) (*Item, error) {
+func (t *Collection) MaxItem(withValue bool) (*Item, error) {
 	return t.store.edge(t, withValue, func(n *node) *nodeLoc { return &n.right })
 }
 
