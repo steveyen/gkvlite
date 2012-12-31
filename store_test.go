@@ -1,4 +1,4 @@
-package gtreap
+package gkvlite
 
 import (
 	"bytes"

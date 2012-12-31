@@ -1,4 +1,4 @@
-package gtreap
+package gkvlite
 
 // TODO: saving gtreap.Store data files into a gtreap.Store data file.
 // TODO: use atomic.CAS and unsafe.Pointers for safe snapshot'ability.
