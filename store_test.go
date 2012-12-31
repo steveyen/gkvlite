@@ -94,7 +94,7 @@ func TestStoreMem(t *testing.T) {
 					testIdx, test.exp, i.Key)
 			}
 		case "ups":
-			err := x.UpsertItem(&Item{
+			err := x.SetItem(&Item{
 				Key:      []byte(test.val),
 				Val:      []byte(test.val),
 				Priority: int32(test.pri),
@@ -130,7 +130,7 @@ func TestStoreMem(t *testing.T) {
 					testIdx, test.exp, test.val)
 			}
 		case "ups":
-			err := xx.Upsert([]byte(test.val), []byte(test.val))
+			err := xx.Set([]byte(test.val), []byte(test.val))
 			if err != nil {
 				t.Errorf("test: %v, expected ups nil error, got: %v",
 					testIdx, err)
@@ -147,7 +147,7 @@ func TestStoreMem(t *testing.T) {
 
 func loadCollection(x *Collection, arr []string) {
 	for i, s := range arr {
-		x.UpsertItem(&Item{
+		x.SetItem(&Item{
 			Key:      []byte(s),
 			Val:      []byte(s),
 			Priority: int32(i),

@@ -57,14 +57,15 @@ Examples
 	s, err := NewStore(f)
 	c := s.SetCollection("cars", nil)
     
-    // Insert data items.
-    c.Upsert([]byte("tesla"), []byte("$$$"))
-    c.Upsert([]byte("mercedes"), []byte("$$"))
-    c.UpsertItem([]byte("bmw"), []byte("$"))
-
-    // Replace data items.
-    c.Upsert([]byte("tesla"), []byte("$$$$"))
+    // Insert values.
+    c.Set([]byte("tesla"), []byte("$$$"))
+    c.Set([]byte("mercedes"), []byte("$$"))
+    c.Set([]byte("bmw"), []byte("$"))
     
+    // Replace values.
+    c.Set([]byte("tesla"), []byte("$$$$"))
+    
+    // Retrieve values.
     mercedesItem, err := c.Get("mercedes")
     thisIsNil, err := c.Get("the-lunar-rover")
     
@@ -84,7 +85,7 @@ Examples
     err = c.Delete("mercedes")
     mercedesIsNil, err = c.Get("mercedes")
     mercedesFromSnaphotIsNonNil, err = snap.Get("mercedes")
-
+    
     // Persist all the changes to disk.
     err := s.Flush()
     

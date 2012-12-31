@@ -77,7 +77,7 @@ func (s *Store) RemoveCollection(name string) {
 
 // Writes (appends) any unpersisted data to file.  As a
 // greater-window-of-data-loss versus higher-performance tradeoff,
-// consider having many mutations (UpsertItem()'s & Delete()'s) and then
+// consider having many mutations (Set()'s & Delete()'s) and then
 // have a less occasional Flush() instead of Flush()'ing after every
 // mutation.  Users may also wish to file.Sync() after a Flush() for
 // extra data-loss protection.
@@ -363,7 +363,7 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 // A random item Priority (e.g., rand.Int()) will usually work well,
 // but advanced users may consider using non-random item priorities
 // at the risk of unbalancing the lookup trees.
-func (t *Collection) UpsertItem(item *Item) (err error) {
+func (t *Collection) SetItem(item *Item) (err error) {
 	if r, err := t.store.union(t, &t.root,
 		&nodeLoc{node: &node{item: itemLoc{item: &Item{
 			Key:      item.Key,
@@ -376,8 +376,8 @@ func (t *Collection) UpsertItem(item *Item) (err error) {
 }
 
 // Replace or insert an item of a given key.
-func (t *Collection) Upsert(key []byte, val []byte) error {
-	return t.UpsertItem(&Item{Key: key, Val: val, Priority: int32(rand.Int())})
+func (t *Collection) Set(key []byte, val []byte) error {
+	return t.SetItem(&Item{Key: key, Val: val, Priority: int32(rand.Int())})
 }
 
 // Deletes an item of a given key.
