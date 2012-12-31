@@ -17,7 +17,6 @@ gkvlite has the following features...
 * Keys are []byte.
 * Values are []byte.
 * On-disk storage for a "Store" is a single file.
-
 * Multiple key-value Collections are supported in a single storage
   file.  That is, one Store can have zero or more Collections.  And, a
   Collection can have zero or more Items (key-value).
