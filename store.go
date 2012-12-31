@@ -348,6 +348,8 @@ func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
 	return nil, err
 }
 
+// Retrieve a value by its key.  Returns nil if the item is not in the
+// collection.  The returned value should be treated as immutable.
 func (t *Collection) Get(key []byte) (val []byte, err error) {
 	if i, err := t.GetItem(key, true); err == nil {
 		if i != nil {
