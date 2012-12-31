@@ -17,7 +17,7 @@ gkvlite has the following features...
 * Keys are []byte.
 * Values are []byte.
 * On-disk storage for a "Store" is a single file.
-* O(log N) performance for item retrieval.
+* O(log N) performance for item retrieval, insert, update, delete.
 * O(log N) performance to find the smallest or largest items (by key).
 * Multiple key-value Collections are supported in a single storage file.
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
