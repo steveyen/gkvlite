@@ -66,7 +66,7 @@ Examples
     )
     
 	f, err := os.Create("/tmp/test.gkvlite")
-	s, err := NewStore(f)
+	s, err := gkvlite.NewStore(f)
 	c := s.SetCollection("cars", nil)
     
     // You can also retrieve the collection, where c == cc.
@@ -108,7 +108,7 @@ Examples
     
     // Now, other file readers can see the data, too.
     f2, err := os.Open("/tmp/test.gkvlite")
-    s2, err := NewStore(f2)
+    s2, err := gkvlite.NewStore(f2)
     c2 := s.GetCollection("cars")
     
     bmwPrice := c2.Get("bmw")
