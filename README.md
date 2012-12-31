@@ -24,7 +24,7 @@ gkvlite has the following features...
   process-restart/crash.
 * Consistency - simple key-value level consistency is supported.
 * Isolation - mutations won't affect snapshots.
-* Durability - you can control fsync'ing.
+* Durability - you control when you want to Flush() to disk.
 * O(log N) performance for item retrieval, insert, update, delete.
 * O(log N) performance to find the smallest or largest items (by key).
 * Range iteration performance is same as binary tree traversal performance.
