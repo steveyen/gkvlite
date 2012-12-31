@@ -114,7 +114,8 @@ Examples
     mercedesIsNil, err = c.Get([]byte("mercedes"))
     mercedesPriceFromSnaphot, err = snap.Get([]bytes("mercedes"))
     
-    // Persist all the changes to disk.
+    // Persist all the changes to disk.  This will not affect the
+    // snapshot's "view", though, due to snapshot isolation.
     err := s.Flush()
     
     f.Sync() // Some applications may also want to fsync the underlying file.
