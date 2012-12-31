@@ -115,9 +115,9 @@ func (s *Store) Snapshot() *Store {
 	}
 	for name, coll := range s.Coll {
 		res.Coll[name] = &Collection{
-			store: res,
+			store:   res,
 			compare: coll.compare,
-			root: coll.root,
+			root:    coll.root,
 		}
 	}
 	return res

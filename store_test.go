@@ -587,4 +587,5 @@ func TestStoreFile(t *testing.T) {
 
 	loadCollection(x3snap, []string{"e", "d", "a", "c", "b", "c", "a"})
 	visitExpectCollection(t, x3snap1, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
 }
