@@ -20,8 +20,7 @@ gkvlite has the following features...
 * Multiple key-value Collections are supported in a single storage file.
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
 * Atomicity - all changes across all Collections in a Store after a
-  Flush() will be atomically seen or not seen with respect to a
-  process-restart/crash.
+  Flush() will be atomically seen with respect to a process-restart/crash.
 * Consistency - simple key-value level consistency is supported.
 * Isolation - mutations won't affect snapshots.
 * Durability - you control when you want to Flush() to disk.
