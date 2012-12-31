@@ -94,7 +94,7 @@ func TestStoreMem(t *testing.T) {
 					testIdx, test.exp, i.Key)
 			}
 		case "ups":
-			err := x.Upsert(&PItem{
+			err := x.Upsert(&Item{
 				Key:      []byte(test.val),
 				Val:      []byte(test.val),
 				Priority: int32(test.pri),
@@ -115,7 +115,7 @@ func TestStoreMem(t *testing.T) {
 
 func loadCollection(x *Collection, arr []string) {
 	for i, s := range arr {
-		x.Upsert(&PItem{
+		x.Upsert(&Item{
 			Key:      []byte(s),
 			Val:      []byte(s),
 			Priority: int32(i),
@@ -125,7 +125,7 @@ func loadCollection(x *Collection, arr []string) {
 
 func visitExpectCollection(t *testing.T, x *Collection, start string, arr []string) {
 	n := 0
-	err := x.VisitAscend([]byte(start), true, func(i *PItem) bool {
+	err := x.VisitAscend([]byte(start), true, func(i *Item) bool {
 		if string(i.Key) != arr[n] {
 			t.Errorf("expected visit item: %v, saw: %v", arr[n], i)
 		}

@@ -102,7 +102,7 @@ func (s *Store) Flush() (err error) {
 // -1 if a < b, and +1 if a > b.
 type KeyCompare func(a, b []byte) int
 
-// A persisted collection of ordered key-values (PItem's).
+// A persisted collection of ordered key-values (Item's).
 type Collection struct {
 	store   *Store
 	compare KeyCompare
@@ -179,15 +179,15 @@ func (nloc *pnodeLoc) read(o *Store) (err error) {
 var empty = &pnodeLoc{}
 
 // A persisted item.
-type PItem struct {
+type Item struct {
 	Key, Val []byte // Val may be nil if not fetched into memory yet.
 	Priority int32  // Use rand.Int() for probabilistic balancing.
 }
 
 // A persisted item and its persistence location.
 type pitemLoc struct {
-	loc  *ploc  // Can be nil if item is dirty (not yet persisted).
-	item *PItem // Can be nil if item is not fetched into memory yet.
+	loc  *ploc // Can be nil if item is dirty (not yet persisted).
+	item *Item // Can be nil if item is not fetched into memory yet.
 }
 
 func (i *pitemLoc) write(o *Store) error {
@@ -221,7 +221,7 @@ func (i *pitemLoc) read(o *Store, withValue bool) (err error) {
 			return err
 		}
 		buf := bytes.NewBuffer(b)
-		item := &PItem{}
+		item := &Item{}
 		var length, keyLength, valLength uint32
 		if err = binary.Read(buf, binary.BigEndian, &length); err != nil {
 			return err
@@ -289,10 +289,10 @@ const ploc_length int = 8 + 4
 var ploc_empty *ploc = &ploc{}
 
 // Retrieve an item by its key.  Use withValue of false if you don't
-// need the item's value (PItem.Val may be nil), which might be able
+// need the item's value (Item.Val may be nil), which might be able
 // to save on I/O and memory resources, especially for large values.
-// The returned PItem should be treated as immutable.
-func (t *Collection) Get(key []byte, withValue bool) (*PItem, error) {
+// The returned Item should be treated as immutable.
+func (t *Collection) Get(key []byte, withValue bool) (*Item, error) {
 	n, err := t.store.loadNodeLoc(&t.root)
 	for {
 		if err != nil || n.isEmpty() {
@@ -324,9 +324,9 @@ func (t *Collection) Get(key []byte, withValue bool) (*PItem, error) {
 }
 
 // Replace or insert an item of a given key.
-func (t *Collection) Upsert(item *PItem) (err error) {
+func (t *Collection) Upsert(item *Item) (err error) {
 	if r, err := t.store.union(t, &t.root,
-		&pnodeLoc{node: &pnode{item: pitemLoc{item: &PItem{
+		&pnodeLoc{node: &pnode{item: pitemLoc{item: &Item{
 			Key:      item.Key,
 			Val:      item.Val,
 			Priority: item.Priority,
@@ -347,19 +347,19 @@ func (t *Collection) Delete(key []byte) (err error) {
 }
 
 // Retreives the item with the "smallest" key.
-func (t *Collection) Min(withValue bool) (*PItem, error) {
+func (t *Collection) Min(withValue bool) (*Item, error) {
 	return t.store.edge(t, withValue, func(n *pnode) *pnodeLoc { return &n.left })
 }
 
 // Retreives the item with the "largest" key.
-func (t *Collection) Max(withValue bool) (*PItem, error) {
+func (t *Collection) Max(withValue bool) (*Item, error) {
 	return t.store.edge(t, withValue, func(n *pnode) *pnodeLoc { return &n.right })
 }
 
-type PItemVisitor func(i *PItem) bool
+type ItemVisitor func(i *Item) bool
 
 // Visit items greater-than-or-equal to the target key.
-func (t *Collection) VisitAscend(target []byte, withValue bool, visitor PItemVisitor) error {
+func (t *Collection) VisitAscend(target []byte, withValue bool, visitor ItemVisitor) error {
 	_, err := t.store.visitAscendNode(t, &t.root, target, withValue, visitor)
 	return err
 }
@@ -564,7 +564,7 @@ func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) 
 }
 
 func (o *Store) edge(t *Collection, withValue bool, cfn func(*pnode) *pnodeLoc) (
-	*PItem, error) {
+	*Item, error) {
 	n, err := o.loadNodeLoc(&t.root)
 	if err != nil || n.isEmpty() {
 		return nil, err
@@ -591,7 +591,7 @@ func (o *Store) edge(t *Collection, withValue bool, cfn func(*pnode) *pnodeLoc) 
 }
 
 func (o *Store) visitAscendNode(t *Collection, n *pnodeLoc, target []byte,
-	withValue bool, visitor PItemVisitor) (bool, error) {
+	withValue bool, visitor ItemVisitor) (bool, error) {
 	nNode, err := o.loadNodeLoc(n)
 	if err != nil {
 		return false, err
