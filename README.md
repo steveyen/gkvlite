@@ -122,19 +122,21 @@ behavior with the usual O(log N) performance bounds expected of
 balanced binary trees.
 
 The persistence design is append-only, using ideas from Apache CouchDB
-/ Couchstore, providing a resilience to process or machine crashes.
-On re-opening a file, the implementation scans the file backwards
-looking for the last good root record and logically "truncates" the
-file.  New mutations proceed from that last good root.  This follows
-the "the log is the database" approach of CouchDB / Couchstore /
-Couchbase.
+and Couchstore / Couchbase, providing a simple approach to resilience
+and fast restarts in the face of process or machine crashes.  On
+re-opening a file, the implementation scans the file backwards looking
+for the last good root record and logically "truncates" the file at
+that point.  New mutations are appended from that last good root
+location.  This follows the "the log is the database" approach of
+CouchDB / Couchstore / Couchbase.
 
 TRADEOFF: the append-only persistence design means file sizes will
-grow until there's a compaction.
+grow until there's a compaction.  Every mutation (when Flush()'ed)
+means the data file will grow.
 
 The immutable, copy-on-write treap plus the append-only persistence
 design allows for easy MVCC snapshotting.
 
-TRADEOFF: the immutable, copy-on-write design means more garbage may
-be created than other designs, meaning more work for the garbage
-collector (GC).
+TRADEOFF: the immutable, copy-on-write design means more memory
+garbage may be created than other designs, meaning more work for the
+garbage collector (GC).
