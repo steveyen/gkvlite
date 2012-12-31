@@ -29,6 +29,7 @@ const VERSION = uint32(0)
 var MAGIC_BEG []byte = []byte("0g1t2r")
 var MAGIC_END []byte = []byte("3e4a5p")
 
+// Use nil for file for in-memory-only (non-persistent) usage.
 func NewStore(file *os.File) (res *Store, err error) {
 	if file == nil { // Return a memory-only Store.
 		return &Store{Coll: make(map[string]*PTreap)}, nil
@@ -41,6 +42,9 @@ func NewStore(file *os.File) (res *Store, err error) {
 }
 
 func (s *Store) SetCollection(name string, compare KeyCompare) *PTreap {
+	if compare == nil {
+		compare = bytes.Compare
+	}
 	if s.Coll[name] == nil {
 		s.Coll[name] = &PTreap{store: s, compare: compare}
 	}
@@ -64,8 +68,8 @@ func (s *Store) RemoveCollection(name string) {
 	delete(s.Coll, name)
 }
 
-// Writes any unpersisted data to file.  Users might also file.Sync()
-// afterwards for extra data-loss protection.
+// Writes any unpersisted data to file.  Users may also wish to
+// file.Sync() afterwards for extra data-loss protection.
 func (s *Store) Flush() (err error) {
 	if s.file == nil {
 		return errors.New("no file / in-memory only, so cannot Flush()")
