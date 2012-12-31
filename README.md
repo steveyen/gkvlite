@@ -21,13 +21,21 @@ gkvlite has the following features...
 * O(log N) performance to find the smallest or largest items (by key).
 * Multiple key-value collections are supported in a single storage file.
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
-* Read-only snapshots are supported, where you can still "scribble" on
-  your read-only snapshots with unpersistable mutations.
+* Non-persistable snapshots are supported, where you can still "scribble" on
+  in-memory-only snapshots with unpersistable mutations.
+* Atomicity - all changes across all Collections in a Store after a
+  Flush() will be atomically seen or not seen with respect to a
+  process-restart/crash.
+* Consistency - simple key-value level consistency is supported.
+* Isolation - mutations won't affect snapshots.
+* Durability - you can control fsync'ing.
+* Snapshot()'ing is a fast O(1) operation per Collection.
 * In-memory-only mode, when you want the same API but without any persistence.
 * Single-threaded.  Users are encouraged to use Go channels or their own
   locking to serialize access to a Store.
-* You provide the os.File.
-* You provide the os.File.Sync(), if you want it.
+* You provide the os.File - this library just uses the os.File you provide.
+* You provide the os.File.Sync() - if you want to fsync your file,
+  call Sync() yourself after you do a Flush().
 * You control when you want to Flush() changes to disk, so your application
   can address its performance-vs-safety tradeoffs appropriately.
 * You can retrieve just keys only, to save I/O & memory resources,
@@ -36,6 +44,8 @@ gkvlite has the following features...
 * You can control item priority to access hotter items faster
   by shuffling them closer to the tops of balanced binary
   trees (warning: intricate/advanced tradeoffs here).
+* Errors from file operations are propagated all the way back to your
+  code, so your application can respond appropriately.
 * Small - the implementation is a single file < 1000 lines of code.
 * Tested - "go test" unit tests.
 
