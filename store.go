@@ -103,18 +103,22 @@ func (s *Store) Flush() (err error) {
 
 // Returns a read-only snapshot, including whatever mutations that
 // have not be Flush()'ed to disk yet.  The read-only snapshot has its
-// Flush() to disk disabled.  Caller should supply a new os.File
-// that's opened (O_RDONLY) to the same file as the original store's
-// os.File.
-func (s *Store) Snapshot(file *os.File) *Store {
+// Flush() to disk disabled.  Caller should ensure that the returned
+// snapshot store and the original store are used in "single-threaded"
+// manner.  The snapshot feature works for memory-only stores, too.
+func (s *Store) Snapshot() *Store {
 	res := &Store{
 		Coll:     make(map[string]*Collection),
-		file:     file,
+		file:     s.file,
 		size:     s.size,
 		readOnly: true,
 	}
 	for name, coll := range s.Coll {
-		res.Coll[name] = coll
+		res.Coll[name] = &Collection{
+			store: res,
+			compare: coll.compare,
+			root: coll.root,
+		}
 	}
 	return res
 }

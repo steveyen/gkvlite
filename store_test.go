@@ -546,8 +546,20 @@ func TestStoreFile(t *testing.T) {
 
 	// ------------------------------------------------
 
-	f3snap, err := os.Open(fname)
-	s3snap := s3.Snapshot(f3snap)
+	ssnap := s.Snapshot()
+	if ssnap == nil {
+		t.Errorf("expected snapshot to work")
+	}
+	xsnap := ssnap.GetCollection("x")
+	if xsnap == nil {
+		t.Errorf("expected snapshot to have x")
+	}
+	visitExpectCollection(t, xsnap, "a", []string{})
+	if ssnap.Flush() == nil {
+		t.Errorf("expected snapshot Flush() error")
+	}
+
+	s3snap := s3.Snapshot()
 	if s3snap == nil {
 		t.Errorf("expected snapshot to work")
 	}
@@ -560,17 +572,19 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected snapshot Flush() error")
 	}
 
-	fsnap, err := os.Open(fname)
-	ssnap := s.Snapshot(fsnap)
-	if ssnap == nil {
+	s3snap1 := s3.Snapshot()
+	if s3snap1 == nil {
 		t.Errorf("expected snapshot to work")
 	}
-	xsnap := ssnap.GetCollection("x")
-	if xsnap == nil {
+	x3snap1 := s3snap1.GetCollection("x")
+	if x3snap1 == nil {
 		t.Errorf("expected snapshot to have x")
 	}
-	visitExpectCollection(t, xsnap, "a", []string{})
-	if ssnap.Flush() == nil {
+	visitExpectCollection(t, x3snap1, "a", []string{"a", "b", "c"})
+	if s3snap1.Flush() == nil {
 		t.Errorf("expected snapshot Flush() error")
 	}
+
+	loadCollection(x3snap, []string{"e", "d", "a", "c", "b", "c", "a"})
+	visitExpectCollection(t, x3snap1, "a", []string{"a", "b", "c"})
 }
