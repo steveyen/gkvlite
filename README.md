@@ -19,18 +19,20 @@ gkvlite has the following features...
 * On-disk storage for a "Store" is a single file.
 * O(log N) performance for item retrieval.
 * O(log N) performance to find the smallest or largest items (by key).
-* Multiple key-value collections are supported in a single storage file.
+* Multiple key-value Collections are supported in a single storage file.
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
 * Non-persistable snapshots are supported, where you can still "scribble" on
-  in-memory-only snapshots with unpersistable mutations.
+  in-memory-only snapshots with more (non-persistable) mutations. These
+  scribbles won't affect the original Store.
 * Atomicity - all changes across all Collections in a Store after a
   Flush() will be atomically seen or not seen with respect to a
   process-restart/crash.
 * Consistency - simple key-value level consistency is supported.
 * Isolation - mutations won't affect snapshots.
 * Durability - you can control fsync'ing.
-* Snapshot()'ing is a fast O(1) operation per Collection.
-* In-memory-only mode, when you want the same API but without any persistence.
+* Snapshot creation is a fast O(1) operation per Collection.
+* In-memory-only mode is supported, when you want the same API but
+  without any persistence.
 * Single-threaded.  Users are encouraged to use Go channels or their own
   locking to serialize access to a Store.
 * You provide the os.File - this library just uses the os.File you provide.
