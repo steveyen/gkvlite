@@ -23,7 +23,7 @@ gkvlite has the following features...
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
 * Non-persistable snapshots are supported, where you can still "scribble" on
   in-memory-only snapshots with more (non-persistable) mutations. These
-  scribbles won't affect the original Store.
+  scribbles on snpashots won't affect (are isolated from) the original Store.
 * Atomicity - all changes across all Collections in a Store after a
   Flush() will be atomically seen or not seen with respect to a
   process-restart/crash.
