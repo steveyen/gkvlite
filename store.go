@@ -1,8 +1,5 @@
 package gkvlite
 
-// TODO: saving gtreap.Store data files into a gtreap.Store data file.
-// TODO: use atomic.CAS and unsafe.Pointers for safe snapshot'ability.
-// TODO: allow read-only snapshots without needing new os.File's.
 // TODO: compaction.
 
 import (
