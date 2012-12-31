@@ -4,7 +4,7 @@ package gkvlite
 // TODO: use atomic.CAS and unsafe.Pointers for safe snapshot'ability.
 // TODO: allow read-only snapshots without needing new os.File's.
 // TODO: compaction.
-//
+
 import (
 	"bytes"
 	"encoding/binary"
@@ -18,7 +18,6 @@ import (
 // The persistence is append-only based on immutable, copy-on-write
 // treaps for robustness.  This implementation is single-threaded, so
 // users should serialize their accesses.
-//
 type Store struct {
 	Coll map[string]*Collection `json:"c"` // Exposed only for json'ification.
 	file *os.File
