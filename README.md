@@ -21,7 +21,8 @@ gkvlite has the following features...
 * O(log N) performance to find the smallest or largest items (by key).
 * Multiple key-value collections are supported in a single storage file.
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
-* Read-only snapshots are supported so concurrent readers won't block writers.
+* Read-only snapshots are supported, where you can still "scribble" on
+  your read-only snapshots with unpersistable mutations.
 * In-memory-only mode, when you want the same API but without any persistence.
 * Single-threaded - users might use Go channels to serialize their own accesses.
 * You provide the os.File.
