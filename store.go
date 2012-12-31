@@ -380,19 +380,15 @@ func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
 }
 
 func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
-	if nloc != nil && nloc.node == nil && !nloc.loc.isEmpty() {
-		if err := nloc.read(o); err != nil {
-			return nil, err
-		}
+	if err := nloc.read(o); err != nil {
+		return nil, err
 	}
 	return nloc, nil
 }
 
 func (o *Store) loadItemLoc(iloc *pitemLoc, withValue bool) (*pitemLoc, error) {
-	if iloc != nil && (iloc.item == nil || (iloc.item.Val == nil && withValue)) && !iloc.loc.isEmpty() {
-		if err := iloc.read(o, withValue); err != nil {
-			return nil, err
-		}
+	if err := iloc.read(o, withValue); err != nil {
+		return nil, err
 	}
 	return iloc, nil
 }
