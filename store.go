@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 )
 
@@ -15,9 +16,10 @@ import (
 //
 // TODO: use atomic.CAS and unsafe.Pointers for safe snapshot'ability.
 // TODO: allow read-only snapshots.
+// TODO: saving gtreap.Store data files into a gtreap.Store data file.
 //
 type Store struct {
-	coll map[string]*PTreap
+	Coll map[string]*PTreap `json:"c"` // Exposed only for json'ification.
 	file *os.File
 	size int64
 }
@@ -29,33 +31,38 @@ var MAGIC_END []byte = []byte("3e4a5p")
 
 func NewStore(file *os.File) (*Store, error) {
 	if file == nil { // Return a memory-only Store.
-		return &Store{coll: make(map[string]*PTreap)}, nil
+		return &Store{Coll: make(map[string]*PTreap)}, nil
 	}
-	return &Store{coll: make(map[string]*PTreap), file: file}, nil
+	res := &Store{Coll: make(map[string]*PTreap), file: file}
+	err := res.readRoots()
+	if err == nil {
+		return res, nil
+	}
+	return nil, err
 }
 
 func (s *Store) SetCollection(name string, compare KeyCompare) *PTreap {
-	if s.coll[name] == nil {
-		s.coll[name] = &PTreap{store: s, compare: compare}
+	if s.Coll[name] == nil {
+		s.Coll[name] = &PTreap{store: s, compare: compare}
 	}
-	s.coll[name].compare = compare
-	return s.coll[name]
+	s.Coll[name].compare = compare
+	return s.Coll[name]
 }
 
 func (s *Store) GetCollection(name string) *PTreap {
-	return s.coll[name]
+	return s.Coll[name]
 }
 
 func (s *Store) GetCollectionNames() []string {
-	res := make([]string, len(s.coll))[:0]
-	for name, _ := range s.coll {
+	res := make([]string, len(s.Coll))[:0]
+	for name, _ := range s.Coll {
 		res = append(res, name)
 	}
 	return res
 }
 
 func (s *Store) RemoveCollection(name string) {
-	delete(s.coll, name)
+	delete(s.Coll, name)
 }
 
 // Writes any unpersisted data to file.  Users might also file.Sync()
@@ -64,7 +71,7 @@ func (s *Store) Flush() (err error) {
 	if s.file == nil {
 		return errors.New("no file / in-memory only, so cannot Flush()")
 	}
-	for _, t := range s.coll {
+	for _, t := range s.Coll {
 		if err = t.store.flushItems(&t.root); err != nil {
 			return err
 		}
@@ -72,23 +79,7 @@ func (s *Store) Flush() (err error) {
 			return err
 		}
 	}
-	if collJSON, err := json.Marshal(s.coll); err == nil {
-		offset := s.size
-		length := 2*len(MAGIC_BEG) + 4 + 4 + len(collJSON) + 8 + 2*len(MAGIC_END)
-		b := bytes.NewBuffer(make([]byte, length)[:0])
-		b.Write(MAGIC_BEG)
-		b.Write(MAGIC_BEG)
-		binary.Write(b, binary.BigEndian, uint32(VERSION))
-		binary.Write(b, binary.BigEndian, uint32(length))
-		b.Write(collJSON)
-		binary.Write(b, binary.BigEndian, int64(offset))
-		b.Write(MAGIC_END)
-		b.Write(MAGIC_END)
-		if _, err := s.file.WriteAt(b.Bytes()[:length], offset); err == nil {
-			s.size = s.size + int64(length)
-		}
-	}
-	return err
+	return s.writeRoots()
 }
 
 // User-supplied key comparison func should return 0 if a == b,
@@ -130,7 +121,7 @@ func (nloc *pnodeLoc) write(o *Store) error {
 		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 			return err
 		}
-		o.size = o.size + int64(length)
+		o.size = offset + int64(length)
 		nloc.loc = &ploc{Offset: offset, Length: uint32(length)}
 	}
 	return nil
@@ -165,7 +156,7 @@ func (i *pitemLoc) write(o *Store) error {
 			if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 				return err
 			}
-			o.size = o.size + int64(length)
+			o.size = offset + int64(length)
 			i.loc = &ploc{Offset: offset, Length: uint32(length)}
 		} else {
 			return errors.New("flushItems saw node with no itemLoc and no item")
@@ -176,8 +167,8 @@ func (i *pitemLoc) write(o *Store) error {
 
 // Offset/location of persisted range of bytes.
 type ploc struct {
-	Offset int64  // Usable for os.Seek/ReadAt/WriteAt() at file offset 0.
-	Length uint32 // Number of bytes.
+	Offset int64  `json:"o"` // Usable for os.ReadAt/WriteAt() at file offset 0.
+	Length uint32 `json:"l"` // Number of bytes.
 }
 
 func (p *ploc) write(b *bytes.Buffer) {
@@ -263,6 +254,10 @@ func (t *PTreap) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.root.loc)
 }
 
+func (t *PTreap) UnmarshalJSON(d []byte) error {
+	return json.Unmarshal(d, &t.root.loc)
+}
+
 func (o *Store) flushItems(nloc *pnodeLoc) (err error) {
 	if nloc == nil || nloc.loc != nil || nloc.node == nil {
 		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
@@ -315,10 +310,13 @@ func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc,
 			if thisItem, err := o.loadItemLoc(&thisNode.node.item, false); err == nil {
 				if thatItem, err := o.loadItemLoc(&thatNode.node.item, false); err == nil {
 					if thisItem.item.Priority > thatItem.item.Priority {
-						if left, middle, right, err := o.split(t, that, thisItem.item.Key); err == nil {
+						left, middle, right, err := o.split(t, that, thisItem.item.Key)
+						if err == nil {
 							if middle.isEmpty() {
-								if newLeft, err := o.union(t, &thisNode.node.left, left); err == nil {
-									if newRight, err := o.union(t, &thisNode.node.right, right); err == nil {
+								newLeft, err := o.union(t, &thisNode.node.left, left)
+								if err == nil {
+									newRight, err := o.union(t, &thisNode.node.right, right)
+									if err == nil {
 										return &pnodeLoc{node: &pnode{
 											item:  *thisItem,
 											left:  *newLeft,
@@ -327,8 +325,10 @@ func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc,
 									}
 								}
 							} else {
-								if newLeft, err := o.union(t, &thisNode.node.left, left); err == nil {
-									if newRight, err := o.union(t, &thisNode.node.right, right); err == nil {
+								newLeft, err := o.union(t, &thisNode.node.left, left)
+								if err == nil {
+									newRight, err := o.union(t, &thisNode.node.right, right)
+									if err == nil {
 										return &pnodeLoc{node: &pnode{
 											item:  middle.node.item,
 											left:  *newLeft,
@@ -340,9 +340,12 @@ func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc,
 						}
 					} else {
 						// We don't use middle because the "that" node has precendence.
-						if left, _, right, err := o.split(t, this, thatItem.item.Key); err == nil {
-							if newLeft, err := o.union(t, left, &thatNode.node.left); err == nil {
-								if newRight, err := o.union(t, right, &thatNode.node.right); err == nil {
+						left, _, right, err := o.split(t, this, thatItem.item.Key)
+						if err == nil {
+							newLeft, err := o.union(t, left, &thatNode.node.left)
+							if err == nil {
+								newRight, err := o.union(t, right, &thatNode.node.right)
+								if err == nil {
 									return &pnodeLoc{node: &pnode{
 										item:  *thatItem,
 										left:  *newLeft,
@@ -495,4 +498,89 @@ func (o *Store) visitAscendNode(t *PTreap, n *pnodeLoc, target []byte,
 		}
 	}
 	return o.visitAscendNode(t, &nNode.node.right, target, withValue, visitor)
+}
+
+func (o *Store) writeRoots() (err error) {
+	if sJSON, err := json.Marshal(o); err == nil {
+		offset := o.size
+		length := 2*len(MAGIC_BEG) + 4 + 4 + len(sJSON) + 8 + 2*len(MAGIC_END)
+		b := bytes.NewBuffer(make([]byte, length)[:0])
+		b.Write(MAGIC_BEG)
+		b.Write(MAGIC_BEG)
+		binary.Write(b, binary.BigEndian, uint32(VERSION))
+		binary.Write(b, binary.BigEndian, uint32(length))
+		b.Write(sJSON)
+		binary.Write(b, binary.BigEndian, int64(offset))
+		b.Write(MAGIC_END)
+		b.Write(MAGIC_END)
+		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err == nil {
+			o.size = offset + int64(length)
+		}
+	}
+	return err
+}
+
+func (o *Store) readRoots() error {
+	finfo, err := o.file.Stat()
+	if err == nil {
+		o.size = finfo.Size()
+		if o.size > 0 {
+			endBuff := make([]byte, 8+2*len(MAGIC_END))
+			minSize := int64(2*len(MAGIC_BEG) + 4 + 4 + len(endBuff))
+			for {
+				for { // Scan for MAGIC_END.
+					if o.size <= minSize {
+						return errors.New("couldn't find roots; file corrupted or wrong?")
+					}
+					if _, err := o.file.ReadAt(endBuff,
+						o.size-int64(len(endBuff))); err != nil {
+						return err
+					}
+					if bytes.Equal(MAGIC_END, endBuff[8:8+len(MAGIC_END)]) &&
+						bytes.Equal(MAGIC_END, endBuff[8+len(MAGIC_END):]) {
+						break
+					}
+					o.size = o.size - 1 // TODO: Skipping optimizations.
+				}
+				// Read and check the roots.
+				var offset int64
+				binary.Read(bytes.NewBuffer(endBuff), binary.BigEndian, &offset)
+				if offset >= 0 && offset < o.size-int64(minSize) {
+					data := make([]byte, o.size-offset-int64(len(endBuff)))
+					if _, err := o.file.ReadAt(data, offset); err != nil {
+						return err
+					}
+					if bytes.Equal(MAGIC_BEG, data[:len(MAGIC_BEG)]) &&
+						bytes.Equal(MAGIC_BEG, data[len(MAGIC_BEG):2*len(MAGIC_BEG)]) {
+						var version, length uint32
+						b := bytes.NewBuffer(data[2*len(MAGIC_BEG):])
+						binary.Read(b, binary.BigEndian, &version)
+						binary.Read(b, binary.BigEndian, &length)
+						if version != VERSION {
+							return fmt.Errorf("version mismatch: "+
+								"current version: %v != found version: %v",
+								VERSION, version)
+						}
+						if length != uint32(o.size-offset) {
+							return fmt.Errorf("length mismatch: "+
+								"wanted length: %v != found length: %v",
+								uint32(o.size-offset), length)
+						}
+						m := &Store{}
+						err := json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m)
+						if err != nil {
+							return err
+						}
+						o.Coll = m.Coll
+						for _, t := range o.Coll {
+							t.compare = bytes.Compare
+						}
+						return nil
+					}
+				}
+				o.size = o.size - 1 // Roots were wrong, so keep scanning.
+			}
+		}
+	}
+	return err
 }

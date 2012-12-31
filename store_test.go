@@ -218,13 +218,12 @@ func TestStoreFile(t *testing.T) {
 	os.Remove(fname)
 	f, err := os.Create(fname)
 	if err != nil || f == nil {
-		t.Error("could not create file tmp.test")
+		t.Error("could not create file: %v", fname)
 	}
-	defer f.Close()
 
 	s, err := NewStore(f)
 	if err != nil || s == nil {
-		t.Error("expected NewStore(f) to work, err: %v", err)
+		t.Errorf("expected NewStore(f) to work, err: %v", err)
 	}
 	if len(s.GetCollectionNames()) != 0 {
 		t.Errorf("expected no coll names on empty store")
@@ -260,5 +259,20 @@ func TestStoreFile(t *testing.T) {
 	loadPTreap(x, []string{"a"})
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected single key Flush() to have no error, err: %v", err)
+	}
+	f.Sync()
+
+	// ------------------------------------------------
+
+	f2, err := os.Open(fname) // Test reading the file.
+	if err != nil || f2 == nil {
+		t.Errorf("could not reopen file: %v", fname)
+	}
+	s2, err := NewStore(f2)
+	if err != nil || s2 == nil {
+		t.Errorf("expected NewStore(f) to work, err: %v", err)
+	}
+	if len(s2.GetCollectionNames()) != 1 || s2.GetCollectionNames()[0] != "x" {
+		t.Errorf("expected 1 coll name x")
 	}
 }
