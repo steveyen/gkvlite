@@ -34,10 +34,11 @@ func NewStore(file *os.File) (*Store, error) {
 	return &Store{coll: make(map[string]*PTreap), file: file}, nil
 }
 
-func (s *Store) AddCollection(name string, compare KeyCompare) *PTreap {
+func (s *Store) SetCollection(name string, compare KeyCompare) *PTreap {
 	if s.coll[name] == nil {
 		s.coll[name] = &PTreap{store: s, compare: compare}
 	}
+	s.coll[name].compare = compare
 	return s.coll[name]
 }
 

@@ -11,10 +11,10 @@ func TestStoreMem(t *testing.T) {
 	if err != nil || s == nil {
 		t.Errorf("expected memory-only NewStore to work")
 	}
-	s.AddCollection("x", bytes.Compare)
+	s.SetCollection("x", bytes.Compare)
 	x := s.GetCollection("x")
 	if x == nil {
-		t.Errorf("expected AddColl/GetColl to work")
+		t.Errorf("expected SetColl/GetColl to work")
 	}
 	x2 := s.GetCollection("x")
 	if x2 != x {
@@ -148,7 +148,7 @@ func TestVisitStoreMem(t *testing.T) {
 	if len(s.GetCollectionNames()) != 0 {
 		t.Errorf("expected no coll names on empty store")
 	}
-	x := s.AddCollection("x", bytes.Compare)
+	x := s.SetCollection("x", bytes.Compare)
 	if s.Flush() == nil {
 		t.Errorf("expected in-memory store Flush() error")
 	}
@@ -229,9 +229,9 @@ func TestStoreFile(t *testing.T) {
 	if len(s.GetCollectionNames()) != 0 {
 		t.Errorf("expected no coll names on empty store")
 	}
-	x := s.AddCollection("x", bytes.Compare)
+	x := s.SetCollection("x", bytes.Compare)
 	if x == nil {
-		t.Errorf("expected AddCollection() to work")
+		t.Errorf("expected SetCollection() to work")
 	}
 
 	if err := s.Flush(); err != nil {
