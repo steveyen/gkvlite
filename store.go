@@ -1,5 +1,10 @@
 package gtreap
 
+// TODO: saving gtreap.Store data files into a gtreap.Store data file.
+// TODO: use atomic.CAS and unsafe.Pointers for safe snapshot'ability.
+// TODO: allow read-only snapshots without needing new os.File's.
+// TODO: compaction.
+//
 import (
 	"bytes"
 	"encoding/binary"
@@ -11,13 +16,8 @@ import (
 
 // A persistent store holding collections of ordered keys & values.
 // The persistence is append-only based on immutable, copy-on-write
-// treaps.  This implementation is single-threaded, so users should
-// serialize their accesses.
-//
-// TODO: saving gtreap.Store data files into a gtreap.Store data file.
-// TODO: use atomic.CAS and unsafe.Pointers for safe snapshot'ability.
-// TODO: allow read-only snapshots without needing new os.File's.
-// TODO: compaction.
+// treaps for robustness.  This implementation is single-threaded, so
+// users should serialize their accesses.
 //
 type Store struct {
 	Coll map[string]*Collection `json:"c"` // Exposed only for json'ification.
@@ -42,6 +42,10 @@ func NewStore(file *os.File) (res *Store, err error) {
 	return nil, err
 }
 
+// SetCollection() is used to create a named Collection, or to modify
+// the KeyCompare function on an existing, named Collection.  The new
+// Collection and any operations on it won't be reflected into
+// persistence until you do a Flush().
 func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 	if compare == nil {
 		compare = bytes.Compare
@@ -53,6 +57,7 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 	return s.Coll[name]
 }
 
+// Retrieves a named Collection.
 func (s *Store) GetCollection(name string) *Collection {
 	return s.Coll[name]
 }
@@ -65,12 +70,19 @@ func (s *Store) GetCollectionNames() []string {
 	return res
 }
 
+// The Collection removal won't be reflected into persistence until
+// you do a Flush().  Invoking RemoveCollection(x) and then
+// SetCollection(x) is a fast way to empty a Collection.
 func (s *Store) RemoveCollection(name string) {
 	delete(s.Coll, name)
 }
 
-// Writes any unpersisted data to file.  Users may also wish to
-// file.Sync() afterwards for extra data-loss protection.
+// Writes (appends) any unpersisted data to file.  As a
+// greater-window-of-data-loss versus higher-performance tradeoff,
+// consider having many mutations (Upsert()'s & Delete()'s) and then
+// have a less occasional Flush() instead of Flush()'ing after every
+// mutation.  Users may also wish to file.Sync() after a Flush() for
+// extra data-loss protection.
 func (s *Store) Flush() (err error) {
 	if s.file == nil {
 		return errors.New("no file / in-memory only, so cannot Flush()")
@@ -90,7 +102,7 @@ func (s *Store) Flush() (err error) {
 // -1 if a < b, and +1 if a > b.
 type KeyCompare func(a, b []byte) int
 
-// A persisted treap.
+// A persisted collection of ordered key-values (PItem's).
 type Collection struct {
 	store   *Store
 	compare KeyCompare
@@ -276,6 +288,10 @@ const ploc_length int = 8 + 4
 
 var ploc_empty *ploc = &ploc{}
 
+// Retrieve an item by its key.  Use withValue of false if you don't
+// need the item's value (PItem.Val may be nil), which might be able
+// to save on I/O and memory resources, especially for large values.
+// The returned PItem should be treated as immutable.
 func (t *Collection) Get(key []byte, withValue bool) (*PItem, error) {
 	n, err := t.store.loadNodeLoc(&t.root)
 	for {
@@ -320,6 +336,7 @@ func (t *Collection) Upsert(item *PItem) (err error) {
 	return err
 }
 
+// Deletes an item of a given key.
 func (t *Collection) Delete(key []byte) (err error) {
 	if left, _, right, err := t.store.split(t, &t.root, key); err == nil {
 		if r, err := t.store.join(left, right); err == nil {
@@ -329,17 +346,19 @@ func (t *Collection) Delete(key []byte) (err error) {
 	return err
 }
 
+// Retreives the item with the "smallest" key.
 func (t *Collection) Min(withValue bool) (*PItem, error) {
 	return t.store.edge(t, withValue, func(n *pnode) *pnodeLoc { return &n.left })
 }
 
+// Retreives the item with the "largest" key.
 func (t *Collection) Max(withValue bool) (*PItem, error) {
 	return t.store.edge(t, withValue, func(n *pnode) *pnodeLoc { return &n.right })
 }
 
 type PItemVisitor func(i *PItem) bool
 
-// Visit items greater-than-or-equal to the target.
+// Visit items greater-than-or-equal to the target key.
 func (t *Collection) VisitAscend(target []byte, withValue bool, visitor PItemVisitor) error {
 	_, err := t.store.visitAscendNode(t, &t.root, target, withValue, visitor)
 	return err
