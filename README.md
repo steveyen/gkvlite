@@ -17,8 +17,6 @@ gkvlite has the following features...
 * Keys are []byte.
 * Values are []byte.
 * On-disk storage for a "Store" is a single file.
-* O(log N) performance for item retrieval, insert, update, delete.
-* O(log N) performance to find the smallest or largest items (by key).
 * Multiple key-value Collections are supported in a single storage file.
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
 * Non-persistable snapshots are supported, where you can still "scribble" on
@@ -30,6 +28,11 @@ gkvlite has the following features...
 * Consistency - simple key-value level consistency is supported.
 * Isolation - mutations won't affect snapshots.
 * Durability - you can control fsync'ing.
+* O(log N) performance for item retrieval, insert, update, delete.
+* O(log N) performance to find the smallest or largest items (by key).
+* Range iteration performance is same as binary tree traversal performance.
+* In general, performance is similar to a probabilistic balanced
+  binary tree performance.
 * Snapshot creation is a fast O(1) operation per Collection.
 * In-memory-only mode is supported, when you want the same API but
   without any persistence.
