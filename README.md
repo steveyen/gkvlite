@@ -92,7 +92,7 @@ Examples
     // Persist all the changes to disk.
     err := s.Flush()
     
-    f.Sync() // Some applications may also want to fsync().
+    f.Sync() // Some applications may also want to fsync the underlying file.
     
     // Now, other file readers can see the data, too.
     f2, err := os.Open("/tmp/test.gkvlite")
