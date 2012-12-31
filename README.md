@@ -7,8 +7,9 @@ Overview
 ========
 
 gkvlite is a library that provides a simple key-value persistence
-implementation, inspired by SQLite and CouchDB/Couchstore.  gkvlite
-has the following features...
+implementation, inspired by SQLite and CouchDB/Couchstore.
+
+gkvlite has the following features...
 
 * 100% implemented in the Go Language (golang).
 * Open source license - MIT.
