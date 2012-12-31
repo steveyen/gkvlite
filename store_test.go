@@ -289,4 +289,89 @@ func TestStoreFile(t *testing.T) {
 	if string(i.Key) != "a" || string(i.Val) != "a" {
 		t.Errorf("expected s2.Get(a) to return a")
 	}
+	i2, err := x2.Get([]byte("not-there"), true)
+	if i2 != nil || err != nil {
+		t.Errorf("expected miss to miss nicely.")
+	}
+
+	// ------------------------------------------------
+
+	loadPTreap(x, []string{"c", "b"})
+
+	// x2 has its own snapshot, so should not see the new items.
+	i, err = x2.Get([]byte("b"), true)
+	if i != nil || err != nil {
+		t.Errorf("expected b miss to miss nicely.")
+	}
+	i, err = x2.Get([]byte("c"), true)
+	if i != nil || err != nil {
+		t.Errorf("expected c miss to miss nicely.")
+	}
+
+	// Even after Flush().
+	s.Flush()
+	if err := s.Flush(); err != nil {
+		t.Errorf("expected Flush() to have no error, err: %v", err)
+	}
+	f.Sync()
+
+	i, err = x2.Get([]byte("b"), true)
+	if i != nil || err != nil {
+		t.Errorf("expected b miss to still miss nicely.")
+	}
+	i, err = x2.Get([]byte("c"), true)
+	if i != nil || err != nil {
+		t.Errorf("expected c miss to still miss nicely.")
+	}
+
+	i, err = x.Get([]byte("a"), true)
+	if i == nil || err != nil {
+		t.Errorf("expected a to be in x.")
+	}
+	i, err = x.Get([]byte("b"), true)
+	if i == nil || err != nil {
+		t.Errorf("expected b to be in x.")
+	}
+	i, err = x.Get([]byte("c"), true)
+	if i == nil || err != nil {
+		t.Errorf("expected c to be in x.")
+	}
+
+	visitExpectPTreap(t, x, "a", []string{"a", "b", "c"})
+	visitExpectPTreap(t, x2, "a", []string{"a"})
+
+	// ------------------------------------------------
+
+	f3, err := os.Open(fname) // Another file reader.
+	if err != nil || f3 == nil {
+		t.Errorf("could not reopen file: %v", fname)
+	}
+	s3, err := NewStore(f3)
+	if err != nil || s3 == nil {
+		t.Errorf("expected NewStore(f) to work, err: %v", err)
+	}
+	if len(s3.GetCollectionNames()) != 1 || s3.GetCollectionNames()[0] != "x" {
+		t.Errorf("expected 1 coll name x")
+	}
+	x3 := s3.GetCollection("x")
+	if x3 == nil {
+		t.Errorf("expected x2 to be there")
+	}
+
+	visitExpectPTreap(t, x, "a", []string{"a", "b", "c"})
+	visitExpectPTreap(t, x2, "a", []string{"a"})
+	visitExpectPTreap(t, x3, "a", []string{"a", "b", "c"})
+
+	i, err = x3.Get([]byte("a"), true)
+	if i == nil || err != nil {
+		t.Errorf("expected a to be in x3.")
+	}
+	i, err = x3.Get([]byte("b"), true)
+	if i == nil || err != nil {
+		t.Errorf("expected b to be in x3.")
+	}
+	i, err = x3.Get([]byte("c"), true)
+	if i == nil || err != nil {
+		t.Errorf("expected c to be in x3.")
+	}
 }
