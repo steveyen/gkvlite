@@ -2,6 +2,7 @@ package gtreap
 
 import (
 	"bytes"
+	"os"
 	"testing"
 )
 
@@ -209,5 +210,37 @@ func TestVisitStoreMem(t *testing.T) {
 
 	if s.Flush() == nil {
 		t.Errorf("expected in-memory store Flush() error")
+	}
+}
+
+func TestStoreFile(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, err := os.Create(fname)
+	defer f.Close()
+	defer os.Remove(fname)
+
+	if err != nil || f == nil {
+		t.Error("could not create file tmp.test")
+	}
+	s, err := NewStore(f)
+	if err != nil || s == nil {
+		t.Error("expected NewStore(f) to work, err: %v", err)
+	}
+	if len(s.GetCollectionNames()) != 0 {
+		t.Errorf("expected no coll names on empty store")
+	}
+	x := s.AddCollection("x", bytes.Compare)
+	if s.Flush() != nil {
+		t.Errorf("expected empty Flush() to have no error")
+	}
+	if len(s.GetCollectionNames()) != 1 || s.GetCollectionNames()[0] != "x" {
+		t.Errorf("expected 1 coll name x")
+	}
+	if s.GetCollection("x") != x {
+		t.Errorf("expected coll x to be the same")
+	}
+	if s.GetCollection("y") != nil {
+		t.Errorf("expected coll y to be nil")
 	}
 }

@@ -25,7 +25,7 @@ func NewStore(file *os.File) (*Store, error) {
 	if file == nil { // Return a memory-only Store.
 		return &Store{coll: make(map[string]*PTreap)}, nil
 	}
-	return nil, errors.New("not implemented yet")
+	return &Store{coll: make(map[string]*PTreap), file: file}, nil
 }
 
 func (s *Store) AddCollection(name string, compare KeyCompare) *PTreap {
