@@ -19,7 +19,7 @@ import (
 // TODO: allow read-only snapshots.
 //
 type Store struct {
-	Coll map[string]*PTreap `json:"c"` // Exposed only for json'ification.
+	Coll map[string]*Collection `json:"c"` // Exposed only for json'ification.
 	file *os.File
 	size int64
 }
@@ -32,27 +32,27 @@ var MAGIC_END []byte = []byte("3e4a5p")
 // Use nil for file for in-memory-only (non-persistent) usage.
 func NewStore(file *os.File) (res *Store, err error) {
 	if file == nil { // Return a memory-only Store.
-		return &Store{Coll: make(map[string]*PTreap)}, nil
+		return &Store{Coll: make(map[string]*Collection)}, nil
 	}
-	res = &Store{Coll: make(map[string]*PTreap), file: file}
+	res = &Store{Coll: make(map[string]*Collection), file: file}
 	if err := res.readRoots(); err == nil {
 		return res, nil
 	}
 	return nil, err
 }
 
-func (s *Store) SetCollection(name string, compare KeyCompare) *PTreap {
+func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 	if compare == nil {
 		compare = bytes.Compare
 	}
 	if s.Coll[name] == nil {
-		s.Coll[name] = &PTreap{store: s, compare: compare}
+		s.Coll[name] = &Collection{store: s, compare: compare}
 	}
 	s.Coll[name].compare = compare
 	return s.Coll[name]
 }
 
-func (s *Store) GetCollection(name string) *PTreap {
+func (s *Store) GetCollection(name string) *Collection {
 	return s.Coll[name]
 }
 
@@ -90,7 +90,7 @@ func (s *Store) Flush() (err error) {
 type KeyCompare func(a, b []byte) int
 
 // A persisted treap.
-type PTreap struct {
+type Collection struct {
 	store   *Store
 	compare KeyCompare
 	root    pnodeLoc
@@ -275,7 +275,7 @@ const ploc_length int = 8 + 4
 
 var ploc_empty *ploc = &ploc{}
 
-func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
+func (t *Collection) Get(key []byte, withValue bool) (*PItem, error) {
 	n, err := t.store.loadNodeLoc(&t.root)
 	for {
 		if err != nil || n.isEmpty() {
@@ -305,7 +305,7 @@ func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
 }
 
 // Replace or insert an item of a given key.
-func (t *PTreap) Upsert(item *PItem) (err error) {
+func (t *Collection) Upsert(item *PItem) (err error) {
 	if r, err := t.store.union(t, &t.root,
 		&pnodeLoc{node: &pnode{item: pitemLoc{item: &PItem{
 			Key:      item.Key,
@@ -317,7 +317,7 @@ func (t *PTreap) Upsert(item *PItem) (err error) {
 	return err
 }
 
-func (t *PTreap) Delete(key []byte) (err error) {
+func (t *Collection) Delete(key []byte) (err error) {
 	if left, _, right, err := t.store.split(t, &t.root, key); err == nil {
 		if r, err := t.store.join(left, right); err == nil {
 			t.root = *r
@@ -326,30 +326,30 @@ func (t *PTreap) Delete(key []byte) (err error) {
 	return err
 }
 
-func (t *PTreap) Min(withValue bool) (*PItem, error) {
+func (t *Collection) Min(withValue bool) (*PItem, error) {
 	return t.store.edge(t, withValue, func(n *pnode) *pnodeLoc { return &n.left })
 }
 
-func (t *PTreap) Max(withValue bool) (*PItem, error) {
+func (t *Collection) Max(withValue bool) (*PItem, error) {
 	return t.store.edge(t, withValue, func(n *pnode) *pnodeLoc { return &n.right })
 }
 
 type PItemVisitor func(i *PItem) bool
 
 // Visit items greater-than-or-equal to the target.
-func (t *PTreap) VisitAscend(target []byte, withValue bool, visitor PItemVisitor) error {
+func (t *Collection) VisitAscend(target []byte, withValue bool, visitor PItemVisitor) error {
 	_, err := t.store.visitAscendNode(t, &t.root, target, withValue, visitor)
 	return err
 }
 
-func (t *PTreap) MarshalJSON() ([]byte, error) {
+func (t *Collection) MarshalJSON() ([]byte, error) {
 	if t.root.loc.isEmpty() {
 		return json.Marshal(ploc_empty)
 	}
 	return json.Marshal(t.root.loc)
 }
 
-func (t *PTreap) UnmarshalJSON(d []byte) (err error) {
+func (t *Collection) UnmarshalJSON(d []byte) (err error) {
 	p := ploc{}
 	if err := json.Unmarshal(d, &p); err == nil {
 		t.root.loc = &p
@@ -397,7 +397,7 @@ func (o *Store) loadItemLoc(iloc *pitemLoc, withValue bool) (*pitemLoc, error) {
 	return iloc, nil
 }
 
-func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) {
+func (o *Store) union(t *Collection, this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) {
 	if thisNode, err := o.loadNodeLoc(this); err == nil {
 		if thatNode, err := o.loadNodeLoc(that); err == nil {
 			if thisNode.isEmpty() {
@@ -466,7 +466,7 @@ func (o *Store) union(t *PTreap, this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc,
 // right treap has keys > s, and middle is either...
 // * empty/nil - meaning key s was not in the original treap.
 // * non-empty - returning the original pnodeLoc/item that had key s.
-func (o *Store) split(t *PTreap, n *pnodeLoc, s []byte) (
+func (o *Store) split(t *Collection, n *pnodeLoc, s []byte) (
 	*pnodeLoc, *pnodeLoc, *pnodeLoc, error) {
 	nNode, err := o.loadNodeLoc(n)
 	if err != nil || nNode.isEmpty() {
@@ -541,7 +541,7 @@ func (o *Store) join(this *pnodeLoc, that *pnodeLoc) (res *pnodeLoc, err error) 
 	return empty, err
 }
 
-func (o *Store) edge(t *PTreap, withValue bool, cfn func(*pnode) *pnodeLoc) (
+func (o *Store) edge(t *Collection, withValue bool, cfn func(*pnode) *pnodeLoc) (
 	*PItem, error) {
 	n, err := o.loadNodeLoc(&t.root)
 	if err != nil || n.isEmpty() {
@@ -568,7 +568,7 @@ func (o *Store) edge(t *PTreap, withValue bool, cfn func(*pnode) *pnodeLoc) (
 	return nil, nil
 }
 
-func (o *Store) visitAscendNode(t *PTreap, n *pnodeLoc, target []byte,
+func (o *Store) visitAscendNode(t *Collection, n *pnodeLoc, target []byte,
 	withValue bool, visitor PItemVisitor) (bool, error) {
 	nNode, err := o.loadNodeLoc(n)
 	if err != nil {

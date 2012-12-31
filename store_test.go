@@ -113,7 +113,7 @@ func TestStoreMem(t *testing.T) {
 	}
 }
 
-func loadPTreap(x *PTreap, arr []string) {
+func loadCollection(x *Collection, arr []string) {
 	for i, s := range arr {
 		x.Upsert(&PItem{
 			Key:      []byte(s),
@@ -123,7 +123,7 @@ func loadPTreap(x *PTreap, arr []string) {
 	}
 }
 
-func visitExpectPTreap(t *testing.T, x *PTreap, start string, arr []string) {
+func visitExpectCollection(t *testing.T, x *Collection, start string, arr []string) {
 	n := 0
 	err := x.VisitAscend([]byte(start), true, func(i *PItem) bool {
 		if string(i.Key) != arr[n] {
@@ -162,7 +162,7 @@ func TestVisitStoreMem(t *testing.T) {
 		t.Errorf("expected coll y to be nil")
 	}
 
-	visitExpectPTreap(t, x, "a", []string{})
+	visitExpectCollection(t, x, "a", []string{})
 	min, err := x.Min(true)
 	if err != nil || min != nil {
 		t.Errorf("expected no min, got: %v, err: %v", min, err)
@@ -172,22 +172,22 @@ func TestVisitStoreMem(t *testing.T) {
 		t.Errorf("expected no max, got: %v, err: %v", max, err)
 	}
 
-	loadPTreap(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
 	if s.Flush() == nil {
 		t.Errorf("expected in-memory store Flush() error")
 	}
 
 	visitX := func() {
-		visitExpectPTreap(t, x, "a", []string{"a", "b", "c", "d", "e"})
-		visitExpectPTreap(t, x, "a1", []string{"b", "c", "d", "e"})
-		visitExpectPTreap(t, x, "b", []string{"b", "c", "d", "e"})
-		visitExpectPTreap(t, x, "b1", []string{"c", "d", "e"})
-		visitExpectPTreap(t, x, "c", []string{"c", "d", "e"})
-		visitExpectPTreap(t, x, "c1", []string{"d", "e"})
-		visitExpectPTreap(t, x, "d", []string{"d", "e"})
-		visitExpectPTreap(t, x, "d1", []string{"e"})
-		visitExpectPTreap(t, x, "e", []string{"e"})
-		visitExpectPTreap(t, x, "f", []string{})
+		visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"})
+		visitExpectCollection(t, x, "a1", []string{"b", "c", "d", "e"})
+		visitExpectCollection(t, x, "b", []string{"b", "c", "d", "e"})
+		visitExpectCollection(t, x, "b1", []string{"c", "d", "e"})
+		visitExpectCollection(t, x, "c", []string{"c", "d", "e"})
+		visitExpectCollection(t, x, "c1", []string{"d", "e"})
+		visitExpectCollection(t, x, "d", []string{"d", "e"})
+		visitExpectCollection(t, x, "d1", []string{"e"})
+		visitExpectCollection(t, x, "e", []string{"e"})
+		visitExpectCollection(t, x, "f", []string{})
 	}
 	visitX()
 
@@ -256,7 +256,7 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected coll y to be nil")
 	}
 
-	loadPTreap(x, []string{"a"})
+	loadCollection(x, []string{"a"})
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected single key Flush() to have no error, err: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestStoreFile(t *testing.T) {
 
 	// ------------------------------------------------
 
-	loadPTreap(x, []string{"c", "b"})
+	loadCollection(x, []string{"c", "b"})
 
 	// x2 has its own snapshot, so should not see the new items.
 	i, err = x2.Get([]byte("b"), true)
@@ -339,8 +339,8 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected c to be in x.")
 	}
 
-	visitExpectPTreap(t, x, "a", []string{"a", "b", "c"})
-	visitExpectPTreap(t, x2, "a", []string{"a"})
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x2, "a", []string{"a"})
 
 	// ------------------------------------------------
 
@@ -360,9 +360,9 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected x2 to be there")
 	}
 
-	visitExpectPTreap(t, x, "a", []string{"a", "b", "c"})
-	visitExpectPTreap(t, x2, "a", []string{"a"})
-	visitExpectPTreap(t, x3, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x2, "a", []string{"a"})
+	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
 
 	i, err = x3.Get([]byte("a"), true)
 	if i == nil || err != nil {
@@ -392,10 +392,10 @@ func TestStoreFile(t *testing.T) {
 	s4, err := NewStore(f4)
 	x4 := s4.GetCollection("x")
 
-	visitExpectPTreap(t, x, "a", []string{"a", "c"})
-	visitExpectPTreap(t, x2, "a", []string{"a"})
-	visitExpectPTreap(t, x3, "a", []string{"a", "b", "c"})
-	visitExpectPTreap(t, x4, "a", []string{"a", "c"})
+	visitExpectCollection(t, x, "a", []string{"a", "c"})
+	visitExpectCollection(t, x2, "a", []string{"a"})
+	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x4, "a", []string{"a", "c"})
 
 	i, err = x4.Get([]byte("a"), true)
 	if i == nil || err != nil {
@@ -416,7 +416,7 @@ func TestStoreFile(t *testing.T) {
 	if err = x.Delete([]byte("c")); err != nil {
 		t.Errorf("expected Delete to have no error, err: %v", err)
 	}
-	loadPTreap(x, []string{"d", "c", "b", "b", "c"})
+	loadCollection(x, []string{"d", "c", "b", "b", "c"})
 	if err = x.Delete([]byte("b")); err != nil {
 		t.Errorf("expected Delete to have no error, err: %v", err)
 	}
@@ -432,17 +432,17 @@ func TestStoreFile(t *testing.T) {
 	s5, err := NewStore(f5)
 	x5 := s5.GetCollection("x")
 
-	visitExpectPTreap(t, x, "a", []string{"a", "d"})
-	visitExpectPTreap(t, x2, "a", []string{"a"})
-	visitExpectPTreap(t, x3, "a", []string{"a", "b", "c"})
-	visitExpectPTreap(t, x4, "a", []string{"a", "c"})
-	visitExpectPTreap(t, x5, "a", []string{"a", "d"})
+	visitExpectCollection(t, x, "a", []string{"a", "d"})
+	visitExpectCollection(t, x2, "a", []string{"a"})
+	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x4, "a", []string{"a", "c"})
+	visitExpectCollection(t, x5, "a", []string{"a", "d"})
 
 	// ------------------------------------------------
 
 	// Exercise Min and Max.
 	mmTests := []struct {
-		coll *PTreap
+		coll *Collection
 		min  string
 		max  string
 	}{
@@ -537,10 +537,10 @@ func TestStoreFile(t *testing.T) {
 	s6, err := NewStore(f6)
 	x6 := s6.GetCollection("x")
 
-	visitExpectPTreap(t, x, "a", []string{})
-	visitExpectPTreap(t, x2, "a", []string{"a"})
-	visitExpectPTreap(t, x3, "a", []string{"a", "b", "c"})
-	visitExpectPTreap(t, x4, "a", []string{"a", "c"})
-	visitExpectPTreap(t, x5, "a", []string{"a", "d"})
-	visitExpectPTreap(t, x6, "a", []string{})
+	visitExpectCollection(t, x, "a", []string{})
+	visitExpectCollection(t, x2, "a", []string{"a"})
+	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x4, "a", []string{"a", "c"})
+	visitExpectCollection(t, x5, "a", []string{"a", "d"})
+	visitExpectCollection(t, x6, "a", []string{})
 }
