@@ -57,6 +57,9 @@ Examples
 	s, err := NewStore(f)
 	c := s.SetCollection("cars", nil)
     
+    // You can also retrieve the collection, where c == cc.
+    cc := s.GetCollection("cars")
+    
     // Insert values.
     c.Set([]byte("tesla"), []byte("$$$"))
     c.Set([]byte("mercedes"), []byte("$$"))
