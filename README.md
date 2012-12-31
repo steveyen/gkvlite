@@ -17,6 +17,7 @@ has the following features...
 * Values are []byte.
 * On-disk storage is a single file.
 * O(log N) performance for item retrieval.
+* O(log N) performance to find the smallest or largest items (by key).
 * Multiple key-value collections are supported in a single storage file.
 * Append-only, copy-on-write design for robustness to crashes/power-loss.
 * Read-only snapshots are supported so concurrent readers won't block writers.

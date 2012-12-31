@@ -346,12 +346,12 @@ func (t *Collection) Delete(key []byte) (err error) {
 	return err
 }
 
-// Retreives the item with the "smallest" key.
+// Retrieves the item with the "smallest" key.
 func (t *Collection) Min(withValue bool) (*Item, error) {
 	return t.store.edge(t, withValue, func(n *node) *nodeLoc { return &n.left })
 }
 
-// Retreives the item with the "largest" key.
+// Retrieves the item with the "largest" key.
 func (t *Collection) Max(withValue bool) (*Item, error) {
 	return t.store.edge(t, withValue, func(n *node) *nodeLoc { return &n.right })
 }
