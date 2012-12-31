@@ -17,42 +17,48 @@ gkvlite has the following features...
 * Keys are []byte.
 * Values are []byte.
 * On-disk storage for a "Store" is a single file.
-* Multiple key-value Collections are supported in a single storage file.
-  That is, one Store can have zero or more Collections.
-  And, a Collection can have zero or more Items (key-value),
-  where a Collection is like a balanced binary tree.
-* Append-only, copy-on-write design for robustness to crashes/power-loss.
-* Atomicity - all changes from all Collections during a Store.Flush()
-  will be persisted atomically.  All changes are will be either seen
-  or all rolled back.
+
+* Multiple key-value Collections are supported in a single storage
+  file.  That is, one Store can have zero or more Collections.  And, a
+  Collection can have zero or more Items (key-value).
+* Append-only, copy-on-write design for robustness to
+  crashes/power-loss.
+* Atomicity - all unpersisted changes from all Collections during a
+  Store.Flush() will be persisted atomically.  All changes will either
+  be committed or be rolled back.
 * Consistency - simple key-value level consistency is supported.
 * Isolation - mutations won't affect snapshots.
 * Durability - you control when you want to Flush() to disk.
 * O(log N) performance for item retrieval, insert, update, delete.
 * O(log N) performance to find the smallest or largest items (by key).
-* Range iteration performance is same as binary tree traversal performance.
+* Range iteration performance is same as binary tree traversal
+  performance.
 * In general, performance is similar to a probabilistic balanced
   binary tree performance.
-* Non-persistable snapshots are supported, where you can still "scribble" on
-  in-memory-only snapshots with more (non-persistable) mutations. These
-  scribbles on snapshots won't affect (are isolated from) the original Store.
+* Non-persistable snapshots are supported, where you can still
+  "scribble" on your snapshots with more (non-persistable)
+  mutations. These scribbles on snapshots won't affect (are isolated
+  from) the original Store.
 * Snapshot creation is a fast O(1) operation per Collection.
-* In-memory-only mode is supported, when you want the same API but
+* In-memory-only mode is supported, when you can use the same API but
   without any persistence.
-* Single-threaded.  Users are encouraged to use Go channels or their own
-  locking to serialize access to a Store.
-* You provide the os.File - this library just uses the os.File you provide.
+* Single-threaded.  Users are encouraged to use Go channels or their
+  own locking to serialize access to a Store.
+* You provide the os.File - this library just uses the os.File you
+  provide.
 * You provide the os.File.Sync() - if you want to fsync your file,
-  call Sync() yourself after you do a Flush().
-* You control when you want to Flush() changes to disk, so your application
-  can address its performance-vs-safety tradeoffs appropriately.
+  call file.Sync() after you do a Flush().
+* You control when you want to Flush() changes to disk, so your
+  application can address its performance-vs-safety tradeoffs
+  appropriately.
 * You can retrieve just keys only, to save I/O & memory resources,
-  especially when values are large and you just need only keys for some requests.
-* You can supply your own KeyCompare function to order items however you want.
-  The default is bytes.Compare().
-* You can control item priority to access hotter items faster
-  by shuffling them closer to the tops of balanced binary
-  trees (warning: intricate/advanced tradeoffs here).
+  especially when you have many large values and you just need to
+  retrieve only keys from disk for some requests.
+* You can supply your own KeyCompare function to order items however
+  you want.  The default is bytes.Compare().
+* You can control item priority to access hotter items faster by
+  shuffling them closer to the tops of balanced binary trees (warning:
+  intricate/advanced tradeoffs here).
 * Errors from file operations are propagated all the way back to your
   code, so your application can respond appropriately.
 * Small - the implementation is a single file < 1000 lines of code.
