@@ -309,7 +309,6 @@ func TestStoreFile(t *testing.T) {
 	}
 
 	// Even after Flush().
-	s.Flush()
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected Flush() to have no error, err: %v", err)
 	}
@@ -373,5 +372,38 @@ func TestStoreFile(t *testing.T) {
 	i, err = x3.Get([]byte("c"), true)
 	if i == nil || err != nil {
 		t.Errorf("expected c to be in x3.")
+	}
+
+	// ------------------------------------------------
+
+	// Exercising deletion.
+	if err = x.Delete([]byte("b")); err != nil {
+		t.Errorf("expected Delete to have no error, err: %v", err)
+	}
+	if err := s.Flush(); err != nil {
+		t.Errorf("expected Flush() to have no error, err: %v", err)
+	}
+	f.Sync()
+
+	f4, err := os.Open(fname) // Another file reader.
+	s4, err := NewStore(f4)
+	x4 := s4.GetCollection("x")
+
+	visitExpectPTreap(t, x, "a", []string{"a", "c"})
+	visitExpectPTreap(t, x2, "a", []string{"a"})
+	visitExpectPTreap(t, x3, "a", []string{"a", "b", "c"})
+	visitExpectPTreap(t, x4, "a", []string{"a", "c"})
+
+	i, err = x4.Get([]byte("a"), true)
+	if i == nil || err != nil {
+		t.Errorf("expected a to be in x4.")
+	}
+	i, err = x4.Get([]byte("b"), true)
+	if i != nil || err != nil {
+		t.Errorf("expected b to not be in x4.")
+	}
+	i, err = x4.Get([]byte("c"), true)
+	if i == nil || err != nil {
+		t.Errorf("expected c to be in x4.")
 	}
 }
