@@ -198,7 +198,7 @@ func (i *pitemLoc) write(o *Store) error {
 }
 
 func (i *pitemLoc) read(o *Store, withValue bool) (err error) {
-	if i != nil && i.item == nil && !i.loc.isEmpty() {
+	if i != nil && (i.item == nil || (i.item.Val == nil && withValue)) && !i.loc.isEmpty() {
 		b := make([]byte, i.loc.Length)
 		if _, err := o.file.ReadAt(b, i.loc.Offset); err != nil {
 			return err
@@ -223,7 +223,9 @@ func (i *pitemLoc) read(o *Store, withValue bool) (err error) {
 			return errors.New("mismatched pitemLoc lengths")
 		}
 		item.Key = b[hdrLength : hdrLength+int(keyLength)]
-		item.Val = b[hdrLength+int(keyLength) : hdrLength+int(keyLength+valLength)]
+		if withValue {
+			item.Val = b[hdrLength+int(keyLength) : hdrLength+int(keyLength+valLength)]
+		}
 		i.item = item
 	}
 	return nil
@@ -288,8 +290,9 @@ func (t *PTreap) Get(key []byte, withValue bool) (*PItem, error) {
 		} else if c > 0 {
 			n, err = t.store.loadNodeLoc(&n.node.right)
 		} else {
-			if withValue {
-				t.store.loadItemLoc(i, true)
+			i, err := t.store.loadItemLoc(i, withValue)
+			if err != nil {
+				return nil, err
 			}
 			return i.item, nil
 		}
@@ -386,7 +389,7 @@ func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
 }
 
 func (o *Store) loadItemLoc(iloc *pitemLoc, withValue bool) (*pitemLoc, error) {
-	if iloc != nil && iloc.item == nil && !iloc.loc.isEmpty() {
+	if iloc != nil && (iloc.item == nil || (iloc.item.Val == nil && withValue)) && !iloc.loc.isEmpty() {
 		if err := iloc.read(o, withValue); err != nil {
 			return nil, err
 		}

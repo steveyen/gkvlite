@@ -286,8 +286,11 @@ func TestStoreFile(t *testing.T) {
 	if i == nil {
 		t.Errorf("expected s2.Get(a) to return non-nil item")
 	}
-	if string(i.Key) != "a" || string(i.Val) != "a" {
-		t.Errorf("expected s2.Get(a) to return a")
+	if string(i.Key) != "a" {
+		t.Errorf("expected s2.Get(a) to return key a, got: %v", i.Key)
+	}
+	if string(i.Val) != "a" {
+		t.Errorf("expected s2.Get(a) to return val a, got: %v", i.Val)
 	}
 	i2, err := x2.Get([]byte("not-there"), true)
 	if i2 != nil || err != nil {
@@ -464,6 +467,10 @@ func TestStoreFile(t *testing.T) {
 			t.Errorf("mmTestIdx: %v, expected Min item key: %v, but got: %v",
 				mmTestIdx, mmTest.min, string(i.Key))
 		}
+		if string(i.Val) != mmTest.min {
+			t.Errorf("mmTestIdx: %v, expected Min item val: %v, but got: %v",
+				mmTestIdx, mmTest.min, string(i.Val))
+		}
 
 		i, err = mmTest.coll.Max(true)
 		if err != nil {
@@ -478,8 +485,39 @@ func TestStoreFile(t *testing.T) {
 			t.Errorf("mmTestIdx: %v, expected Max item key: %v, but got: %v",
 				mmTestIdx, mmTest.max, string(i.Key))
 		}
+		if string(i.Val) != mmTest.max {
+			t.Errorf("mmTestIdx: %v, expected Max item key: %v, but got: %v",
+				mmTestIdx, mmTest.max, string(i.Val))
+		}
+	}
 
-		// TODO: test Min/Max item val was retrieved.
+	// ------------------------------------------------
+
+	// Try some withValue false.
+	f5a, err := os.Open(fname) // Another file reader.
+	s5a, err := NewStore(f5a)
+	x5a := s5a.GetCollection("x")
+
+	i, err = x5a.Get([]byte("a"), false)
+	if i == nil {
+		t.Error("was expecting a item")
+	}
+	if string(i.Key) != "a" {
+		t.Error("was expecting a item has Key a")
+	}
+	if i.Val != nil {
+		t.Error("was expecting a item with nil Val when withValue false")
+	}
+
+	i, err = x5a.Get([]byte("a"), true)
+	if i == nil {
+		t.Error("was expecting a item")
+	}
+	if string(i.Key) != "a" {
+		t.Error("was expecting a item has Key a")
+	}
+	if string(i.Val) != "a" {
+		t.Error("was expecting a item has Val a")
 	}
 
 	// ------------------------------------------------
