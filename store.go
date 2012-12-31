@@ -286,7 +286,7 @@ func (t *Collection) Get(key []byte, withValue bool) (*PItem, error) {
 			return nil, err
 		}
 		if i == nil || i.item == nil || i.item.Key == nil {
-			return nil, errors.New("no item after loadMetaItemLoc() in get()")
+			return nil, errors.New("no item after loadItemLoc() in Get()")
 		}
 		c := t.compare(key, i.item.Key)
 		if c < 0 {
@@ -294,9 +294,11 @@ func (t *Collection) Get(key []byte, withValue bool) (*PItem, error) {
 		} else if c > 0 {
 			n, err = t.store.loadNodeLoc(&n.node.right)
 		} else {
-			i, err := t.store.loadItemLoc(i, withValue)
-			if err != nil {
-				return nil, err
+			if withValue {
+				i, err = t.store.loadItemLoc(i, withValue)
+				if err != nil {
+					return nil, err
+				}
 			}
 			return i.item, nil
 		}
