@@ -69,7 +69,7 @@ Examples
     c.Set([]byte("tesla"), []byte("$$$$"))
     
     // Retrieve values.
-    mercedesItem, err := c.Get("mercedes")
+    mercedesPrice, err := c.Get("mercedes")
     thisIsNil, err := c.Get("the-lunar-rover")
     
     c.VisitItemsAscend("ford", func(i *Item) bool {
@@ -87,7 +87,7 @@ Examples
     // The snapshot won't see modifications against the original Store.
     err = c.Delete("mercedes")
     mercedesIsNil, err = c.Get("mercedes")
-    mercedesFromSnaphotIsNonNil, err = snap.Get("mercedes")
+    mercedesPriceFromSnaphot, err = snap.Get("mercedes")
     
     // Persist all the changes to disk.
     err := s.Flush()
@@ -99,7 +99,7 @@ Examples
     s2, err := NewStore(f2)
     c2 := s.GetCollection("cars")
     
-    bmwIsNonNil := c2.Get("bmw")
+    bmwPrice := c2.Get("bmw")
 
 Implementation / design
 =======================
