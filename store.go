@@ -410,6 +410,7 @@ func (t *Collection) VisitItemsAscend(target []byte, withValue bool, visitor Ite
 	return err
 }
 
+// Returns JSON representation of root node file location.
 func (t *Collection) MarshalJSON() ([]byte, error) {
 	if t.root.loc.isEmpty() {
 		return json.Marshal(ploc_empty)
@@ -417,6 +418,7 @@ func (t *Collection) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.root.loc)
 }
 
+// Unmarshals JSON representation of root node file location.
 func (t *Collection) UnmarshalJSON(d []byte) (err error) {
 	p := ploc{}
 	if err := json.Unmarshal(d, &p); err == nil {
