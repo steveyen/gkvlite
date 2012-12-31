@@ -168,7 +168,7 @@ var empty = &pnodeLoc{}
 // A persisted item.
 type PItem struct {
 	Key, Val []byte // Val may be nil if not fetched into memory yet.
-	Priority int32
+	Priority int32  // Use rand.Int() for probabilistic balancing.
 }
 
 // A persisted item and its persistence location.
