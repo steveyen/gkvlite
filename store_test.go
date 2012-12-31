@@ -133,7 +133,7 @@ func visitExpectPTreap(t *testing.T, x *PTreap, start string, arr []string) {
 		return true
 	})
 	if err != nil {
-		t.Errorf("expected no mem visit error")
+		t.Errorf("expected no visit error, got: %v", err)
 	}
 	if n != len(arr) {
 		t.Errorf("expected # visit callbacks: %v, saw: %v", len(arr), n)
@@ -478,5 +478,31 @@ func TestStoreFile(t *testing.T) {
 			t.Errorf("mmTestIdx: %v, expected Max item key: %v, but got: %v",
 				mmTestIdx, mmTest.max, string(i.Key))
 		}
+
+		// TODO: test Min/Max item val was retrieved.
 	}
+
+	// ------------------------------------------------
+
+	// Exercising delete everything.
+	for _, k := range []string{"a", "b", "c", "d"} {
+		if err = x.Delete([]byte(k)); err != nil {
+			t.Errorf("expected Delete to have no error, err: %v", err)
+		}
+	}
+	if err := s.Flush(); err != nil {
+		t.Errorf("expected Flush() to have no error, err: %v", err)
+	}
+	f.Sync()
+
+	f6, err := os.Open(fname) // Another file reader.
+	s6, err := NewStore(f6)
+	x6 := s6.GetCollection("x")
+
+	visitExpectPTreap(t, x, "a", []string{})
+	visitExpectPTreap(t, x2, "a", []string{"a"})
+	visitExpectPTreap(t, x3, "a", []string{"a", "b", "c"})
+	visitExpectPTreap(t, x4, "a", []string{"a", "c"})
+	visitExpectPTreap(t, x5, "a", []string{"a", "d"})
+	visitExpectPTreap(t, x6, "a", []string{})
 }

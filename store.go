@@ -105,11 +105,11 @@ type pnodeLoc struct {
 }
 
 func (nloc *pnodeLoc) isEmpty() bool {
-	return nloc == nil || (nloc.loc == nil && nloc.node == nil)
+	return nloc == nil || (nloc.loc.isEmpty() && nloc.node == nil)
 }
 
 func (nloc *pnodeLoc) write(o *Store) error {
-	if nloc != nil && nloc.loc == nil && nloc.node != nil {
+	if nloc != nil && nloc.loc.isEmpty() && nloc.node != nil {
 		offset := o.size
 		length := ploc_length + ploc_length + ploc_length
 		b := bytes.NewBuffer(make([]byte, length)[:0])
@@ -132,7 +132,7 @@ func (nloc *pnodeLoc) write(o *Store) error {
 }
 
 func (nloc *pnodeLoc) read(o *Store) (err error) {
-	if nloc != nil && nloc.node == nil && nloc.loc != nil {
+	if nloc != nil && nloc.node == nil && !nloc.loc.isEmpty() {
 		b := make([]byte, nloc.loc.Length)
 		if _, err := o.file.ReadAt(b, nloc.loc.Offset); err != nil {
 			return err
@@ -174,7 +174,7 @@ type pitemLoc struct {
 }
 
 func (i *pitemLoc) write(o *Store) error {
-	if i.loc == nil {
+	if i.loc.isEmpty() {
 		if i.item != nil {
 			offset := o.size
 			length := 4 + 4 + 4 + 4 + len(i.item.Key) + len(i.item.Val)
@@ -198,7 +198,7 @@ func (i *pitemLoc) write(o *Store) error {
 }
 
 func (i *pitemLoc) read(o *Store, withValue bool) (err error) {
-	if i != nil && i.item == nil && i.loc != nil {
+	if i != nil && i.item == nil && !i.loc.isEmpty() {
 		b := make([]byte, i.loc.Length)
 		if _, err := o.file.ReadAt(b, i.loc.Offset); err != nil {
 			return err
@@ -255,10 +255,14 @@ func (p *ploc) read(b *bytes.Buffer) (res *ploc, err error) {
 	if err := binary.Read(b, binary.BigEndian, &p.Length); err != nil {
 		return nil, err
 	}
-	if p.Offset == int64(0) && p.Length == uint32(0) {
+	if p.isEmpty() {
 		return nil, nil
 	}
 	return p, nil
+}
+
+func (p *ploc) isEmpty() bool {
+	return p == nil || (p.Offset == int64(0) && p.Length == uint32(0))
 }
 
 const ploc_length int = 8 + 4
@@ -332,6 +336,9 @@ func (t *PTreap) VisitAscend(target []byte, withValue bool, visitor PItemVisitor
 }
 
 func (t *PTreap) MarshalJSON() ([]byte, error) {
+	if t.root.loc.isEmpty() {
+		return json.Marshal(ploc_empty)
+	}
 	return json.Marshal(t.root.loc)
 }
 
@@ -344,7 +351,7 @@ func (t *PTreap) UnmarshalJSON(d []byte) (err error) {
 }
 
 func (o *Store) flushItems(nloc *pnodeLoc) (err error) {
-	if nloc == nil || nloc.loc != nil || nloc.node == nil {
+	if nloc == nil || !nloc.loc.isEmpty() || nloc.node == nil {
 		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
 	}
 	if err = o.flushItems(&nloc.node.left); err != nil {
@@ -357,7 +364,7 @@ func (o *Store) flushItems(nloc *pnodeLoc) (err error) {
 }
 
 func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
-	if nloc == nil || nloc.loc != nil || nloc.node == nil {
+	if nloc == nil || !nloc.loc.isEmpty() || nloc.node == nil {
 		return nil // Flush only non-empty, unpersisted nodes.
 	}
 	if err = o.flushNodes(&nloc.node.left); err != nil {
@@ -370,7 +377,7 @@ func (o *Store) flushNodes(nloc *pnodeLoc) (err error) {
 }
 
 func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
-	if nloc != nil && nloc.node == nil && nloc.loc != nil {
+	if nloc != nil && nloc.node == nil && !nloc.loc.isEmpty() {
 		if err := nloc.read(o); err != nil {
 			return nil, err
 		}
@@ -379,7 +386,7 @@ func (o *Store) loadNodeLoc(nloc *pnodeLoc) (*pnodeLoc, error) {
 }
 
 func (o *Store) loadItemLoc(iloc *pitemLoc, withValue bool) (*pitemLoc, error) {
-	if iloc != nil && iloc.item == nil && iloc.loc != nil {
+	if iloc != nil && iloc.item == nil && !iloc.loc.isEmpty() {
 		if err := iloc.read(o, withValue); err != nil {
 			return nil, err
 		}
