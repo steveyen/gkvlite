@@ -324,12 +324,12 @@ func (t *Collection) Get(key []byte, withValue bool) (*Item, error) {
 		if err != nil || n.isEmpty() {
 			break
 		}
-		i, err := t.store.loadItemLoc(&n.node.item, false)
-		if err != nil {
+		i := &n.node.item
+		if err := i.read(t.store, false); err != nil {
 			return nil, err
 		}
 		if i == nil || i.item == nil || i.item.Key == nil {
-			return nil, errors.New("no item after loadItemLoc() in Get()")
+			return nil, errors.New("no item after item.read() in Get()")
 		}
 		c := t.compare(key, i.item.Key)
 		if c < 0 {
@@ -340,8 +340,7 @@ func (t *Collection) Get(key []byte, withValue bool) (*Item, error) {
 			err = n.read(t.store)
 		} else {
 			if withValue {
-				i, err = t.store.loadItemLoc(i, withValue)
-				if err != nil {
+				if err := i.read(t.store, withValue); err != nil {
 					return nil, err
 				}
 			}
@@ -438,13 +437,6 @@ func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
 	return nloc.write(o) // Write nodes in children-first order.
 }
 
-func (o *Store) loadItemLoc(iloc *itemLoc, withValue bool) (*itemLoc, error) {
-	if err := iloc.read(o, withValue); err != nil {
-		return nil, err
-	}
-	return iloc, nil
-}
-
 func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 	if err := this.read(o); err == nil {
 		if err := that.read(o); err == nil {
@@ -454,8 +446,10 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 			if that.isEmpty() {
 				return this, nil
 			}
-			if thisItem, err := o.loadItemLoc(&this.node.item, false); err == nil {
-				if thatItem, err := o.loadItemLoc(&that.node.item, false); err == nil {
+			thisItem := &this.node.item
+			if err := thisItem.read(o, false); err == nil {
+				thatItem := &that.node.item
+				if err := thatItem.read(o, false); err == nil {
 					if thisItem.item.Priority > thatItem.item.Priority {
 						left, middle, right, err := o.split(t, that, thisItem.item.Key)
 						if err == nil {
@@ -519,8 +513,8 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	if err := n.read(o); err != nil || n.isEmpty() {
 		return empty, empty, empty, err
 	}
-	nItem, err := o.loadItemLoc(&n.node.item, false)
-	if err != nil {
+	nItem := &n.node.item
+	if err := nItem.read(o, false); err != nil {
 		return empty, empty, empty, err
 	}
 
@@ -562,8 +556,10 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 			if that.isEmpty() {
 				return this, nil
 			}
-			if thisItem, err := o.loadItemLoc(&this.node.item, false); err == nil {
-				if thatItem, err := o.loadItemLoc(&that.node.item, false); err == nil {
+			thisItem := &this.node.item
+			if err := thisItem.read(o, false); err == nil {
+				thatItem := &that.node.item
+				if err := thatItem.read(o, false); err == nil {
 					if thisItem.item.Priority > thatItem.item.Priority {
 						if newRight, err := o.join(&this.node.right, that); err == nil {
 							return &nodeLoc{node: &node{
@@ -600,13 +596,9 @@ func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
 			return nil, err
 		}
 		if child.isEmpty() {
-			if i, err := o.loadItemLoc(&n.node.item, false); err == nil {
-				if withValue {
-					i, err = o.loadItemLoc(i, true)
-				}
-				if err == nil {
-					return i.item, nil
-				}
+			i := &n.node.item
+			if err = i.read(o, withValue); err == nil {
+				return i.item, nil
 			}
 			return nil, err
 		}
@@ -623,8 +615,8 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 	if n.isEmpty() {
 		return true, nil
 	}
-	nItem, err := o.loadItemLoc(&n.node.item, false)
-	if err != nil {
+	nItem := &n.node.item
+	if err := nItem.read(o, false); err != nil {
 		return false, err
 	}
 	if t.compare(target, nItem.item.Key) <= 0 {
@@ -632,11 +624,8 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 		if err != nil || !keepGoing {
 			return false, err
 		}
-		if withValue {
-			nItem, err = o.loadItemLoc(nItem, true)
-			if err != nil {
-				return false, err
-			}
+		if err := nItem.read(o, withValue); err != nil {
+			return false, err
 		}
 		if !visitor(nItem.item) {
 			return false, nil
