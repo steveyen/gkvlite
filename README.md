@@ -16,7 +16,7 @@ gkvlite has the following features...
 * Keys are ordered, so range iterations are supported.
 * Keys are []byte.
 * Values are []byte.
-* On-disk storage is a single file.
+* On-disk storage for a "Store" is a single file.
 * O(log N) performance for item retrieval.
 * O(log N) performance to find the smallest or largest items (by key).
 * Multiple key-value collections are supported in a single storage file.
@@ -24,18 +24,20 @@ gkvlite has the following features...
 * Read-only snapshots are supported, where you can still "scribble" on
   your read-only snapshots with unpersistable mutations.
 * In-memory-only mode, when you want the same API but without any persistence.
-* Single-threaded - users might use Go channels to serialize their own accesses.
+* Single-threaded.  Users are encouraged to use Go channels or their own
+  locking to serialize access to a Store.
 * You provide the os.File.
 * You provide the os.File.Sync(), if you want it.
 * You control when you want to Flush() changes to disk, so your application
   can address its performance-vs-safety tradeoffs appropriately.
 * You can retrieve just keys only, to save I/O & memory resources,
-  especially when values are large and you just want keys only for some requests.
+  especially when values are large and you just need only keys for some requests.
 * You can supply your own KeyCompare function to order items however you want.
 * You can control item priority to access hotter items faster
   by shuffling them closer to the tops of balanced binary
   trees (warning: intricate/advanced tradeoffs here).
 * Small - the implementation is a single file < 1000 lines of code.
+* Tested - "go test" unit tests.
 
 Tips
 ====
@@ -62,6 +64,7 @@ Examples
 	s, err := NewStore(f)
 	c := s.SetCollection("cars", nil)
     
+    // Insert or replace data items.
     c.Upsert(&gkvlite.Item{
         Key: []byte("tesla"),
         Val: []byte("$$$"),
@@ -90,8 +93,25 @@ Examples
         return true
     })
     
+    // Let's get a read-only snapshot.
+    snap := s.Snapshot()
+    
+    // The snapshot won't see modifications against the original Store.
     err = c.Delete("mercedes")
     mercedesIsNil, err = c.Get("mercedes", true)
+    mercedesFromSnaphotIsNonNil, err = snap.Get("mercedes", true)
+
+    // Persist all the changes to disk.
+    err := s.Flush()
+    
+    f.Sync() // Some applications may also want to fsync().
+    
+    // Now, other file readers can see the data, too.
+    f2, err := os.Open("/tmp/test.gkvlite")
+    s2, err := NewStore(f2)
+    c2 := s.GetCollection("cars")
+    
+    bmwIsNonNil := c2.Get("bmw", true)
 
 Implementation / design
 =======================
