@@ -543,4 +543,34 @@ func TestStoreFile(t *testing.T) {
 	visitExpectCollection(t, x4, "a", []string{"a", "c"})
 	visitExpectCollection(t, x5, "a", []string{"a", "d"})
 	visitExpectCollection(t, x6, "a", []string{})
+
+	// ------------------------------------------------
+
+	f3snap, err := os.Open(fname)
+	s3snap := s3.Snapshot(f3snap)
+	if s3snap == nil {
+		t.Errorf("expected snapshot to work")
+	}
+	x3snap := s3snap.GetCollection("x")
+	if x3snap == nil {
+		t.Errorf("expected snapshot to have x")
+	}
+	visitExpectCollection(t, x3snap, "a", []string{"a", "b", "c"})
+	if s3snap.Flush() == nil {
+		t.Errorf("expected snapshot Flush() error")
+	}
+
+	fsnap, err := os.Open(fname)
+	ssnap := s.Snapshot(fsnap)
+	if ssnap == nil {
+		t.Errorf("expected snapshot to work")
+	}
+	xsnap := ssnap.GetCollection("x")
+	if xsnap == nil {
+		t.Errorf("expected snapshot to have x")
+	}
+	visitExpectCollection(t, xsnap, "a", []string{})
+	if ssnap.Flush() == nil {
+		t.Errorf("expected snapshot Flush() error")
+	}
 }

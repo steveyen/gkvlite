@@ -19,9 +19,10 @@ import (
 // treaps for robustness.  This implementation is single-threaded, so
 // users should serialize their accesses.
 type Store struct {
-	Coll map[string]*Collection `json:"c"` // Exposed only for json'ification.
-	file *os.File
-	size int64
+	Coll     map[string]*Collection `json:"c"` // Exposed only for json'ification.
+	file     *os.File
+	size     int64
+	readOnly bool
 }
 
 const VERSION = uint32(0)
@@ -83,6 +84,9 @@ func (s *Store) RemoveCollection(name string) {
 // mutation.  Users may also wish to file.Sync() after a Flush() for
 // extra data-loss protection.
 func (s *Store) Flush() (err error) {
+	if s.readOnly {
+		return errors.New("readonly, so cannot Flush()")
+	}
 	if s.file == nil {
 		return errors.New("no file / in-memory only, so cannot Flush()")
 	}
@@ -95,6 +99,24 @@ func (s *Store) Flush() (err error) {
 		}
 	}
 	return s.writeRoots()
+}
+
+// Returns a read-only snapshot, including whatever mutations that
+// have not be Flush()'ed to disk yet.  The read-only snapshot has its
+// Flush() to disk disabled.  Caller should supply a new os.File
+// that's opened (O_RDONLY) to the same file as the original store's
+// os.File.
+func (s *Store) Snapshot(file *os.File) *Store {
+	res := &Store{
+		Coll:     make(map[string]*Collection),
+		file:     file,
+		size:     s.size,
+		readOnly: true,
+	}
+	for name, coll := range s.Coll {
+		res.Coll[name] = coll
+	}
+	return res
 }
 
 // User-supplied key comparison func should return 0 if a == b,

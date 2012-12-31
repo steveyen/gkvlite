@@ -106,5 +106,8 @@ file.  New mutations proceed from that last good root.  This follows
 the "the log is the database" approach of CouchDB / Couchstore /
 Couchbase.
 
+TRADEOFF: the append-only persistence design means file sizes will
+grow until there's a compaction.
+
 The immutable, copy-on-write treap plus the append-only persistence
 design allows for easy MVCC snapshotting.
