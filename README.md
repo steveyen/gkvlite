@@ -26,8 +26,10 @@ gkvlite has the following features...
 * Single-threaded - users might use Go channels to serialize their own accesses.
 * You provide the os.File.
 * You provide the os.File.Sync(), if you want it.
-* You control when you Flush() to disk, for performance-vs-safety tradeoffs.
-* You can retrieve just keys only, to save I/O & memory resources when values are large.
+* You control when you want to Flush() changes to disk, so your application
+  can address its performance-vs-safety tradeoffs appropriately.
+* You can retrieve just keys only, to save I/O & memory resources,
+  especially when values are large and you just want keys only for some requests.
 * You can supply your own KeyCompare function to order items however you want.
 * You can control item priority to access hotter items faster
   by shuffling them closer to the tops of balanced binary
@@ -111,3 +113,7 @@ grow until there's a compaction.
 
 The immutable, copy-on-write treap plus the append-only persistence
 design allows for easy MVCC snapshotting.
+
+TRADEOFF: the immutable, copy-on-write design means more garbage may
+be created than other designs, meaning more work for the garbage
+collector (GC).
