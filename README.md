@@ -45,8 +45,8 @@ LICENSE
 
 MIT
 
-Example
-=======
+Examples
+========
 
     import (
         "math/rand"
@@ -89,8 +89,21 @@ Example
     err = c.Delete("mercedes")
     mercedesIsNil, err = c.Get("mercedes", true)
 
-Implementation
-==============
+Implementation / design
+=======================
 
 The fundamental datastructure is an immutable treap.  When used with
-random priorities, treaps have probabilistic balanced tree behavior.
+random item priorities, treaps have probabilistic balanced tree
+behavior with the usual O(log N) performance bounds expected of
+balanced binary trees.
+
+The persistence design is append-only, using ideas from Apache CouchDB
+/ Couchstore, providing a resilience to process or machine crashes.
+On re-opening a file, the implementation scans the file backwards
+looking for the last good root record and logically "truncates" the
+file.  New mutations proceed from that last good root.  This follows
+the "the log is the database" approach of CouchDB / Couchstore /
+Couchbase.
+
+The immutable, copy-on-write treap plus the append-only persistence
+design allows for easy MVCC snapshotting.
