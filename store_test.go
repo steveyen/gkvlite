@@ -157,7 +157,7 @@ func loadCollection(x *Collection, arr []string) {
 
 func visitExpectCollection(t *testing.T, x *Collection, start string, arr []string) {
 	n := 0
-	err := x.VisitAscend([]byte(start), true, func(i *Item) bool {
+	err := x.VisitItemsAscend([]byte(start), true, func(i *Item) bool {
 		if string(i.Key) != arr[n] {
 			t.Errorf("expected visit item: %v, saw: %v", arr[n], i)
 		}

@@ -405,7 +405,7 @@ func (t *Collection) MaxItem(withValue bool) (*Item, error) {
 type ItemVisitor func(i *Item) bool
 
 // Visit items greater-than-or-equal to the target key.
-func (t *Collection) VisitAscend(target []byte, withValue bool, visitor ItemVisitor) error {
+func (t *Collection) VisitItemsAscend(target []byte, withValue bool, visitor ItemVisitor) error {
 	_, err := t.store.visitAscendNode(t, &t.root, target, withValue, visitor)
 	return err
 }

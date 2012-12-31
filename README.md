@@ -72,7 +72,7 @@ Examples
     mercedesItem, err := c.Get("mercedes")
     thisIsNil, err := c.Get("the-lunar-rover")
     
-    c.VisitAscend("ford", func(i *Item) bool {
+    c.VisitItemsAscend("ford", func(i *Item) bool {
         // This visitor callback will be invoked with every item
         // with key "ford" and onwards, in key-sorted order.
         // So: "mercedes", "tesla".
