@@ -127,6 +127,16 @@ Examples
     
     bmwPrice := c2.Get([]byte("bmw"))
 
+Tips
+====
+
+Because all collections are persisted atomically when you flush a
+store to disk, you can implement consistent secondary indexes by
+maintaining additional collections per store.  For example, a "users"
+collection can hold user JSON documents, keyed by their user-ID's.
+Another "userEmails" collection can be a secondary index, keyed by
+"<email-address>:<user-ID>", with empty values (e.g., []byte{}).
+
 Implementation / design
 =======================
 
