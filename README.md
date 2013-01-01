@@ -77,9 +77,9 @@ Examples
         "github.com/steveyen/gkvlite"
     )
     
-	f, err := os.Create("/tmp/test.gkvlite")
-	s, err := gkvlite.NewStore(f)
-	c := s.SetCollection("cars", nil)
+    f, err := os.Create("/tmp/test.gkvlite")
+    s, err := gkvlite.NewStore(f)
+    c := s.SetCollection("cars", nil)
     
     // You can also retrieve the collection, where c == cc.
     cc := s.GetCollection("cars")
@@ -94,7 +94,9 @@ Examples
     
     // Retrieve values.
     mercedesPrice, err := c.Get([]byte("mercedes"))
-    thisIsNil, err := c.Get([]byte("the-lunar-rover"))
+    
+    // One of the most priceless cars is not in the collection.
+    thisIsNil, err := c.Get([]byte("the-apollo-15-moon-buggy"))
     
     c.VisitItemsAscend([]byte("ford"), func(i *gkvlite.Item) bool {
         // This visitor callback will be invoked with every item
@@ -102,7 +104,7 @@ Examples
         // So: "mercedes", "tesla" are visited, in that ascending order,
         // but not "bmw".
         // If we want to stop visiting, return false;
-        // otherwise a true return result means keep visiting items.
+        // otherwise return true to keep visiting.
         return true
     })
     
@@ -110,13 +112,13 @@ Examples
     snap := s.Snapshot()
     
     // The snapshot won't see modifications against the original Store.
-    err = c.Delete([]byte("mercedes"))
-    mercedesIsNil, err = c.Get([]byte("mercedes"))
-    mercedesPriceFromSnaphot, err = snap.Get([]bytes("mercedes"))
+    c.Delete([]byte("mercedes"))
+    mercedesIsNil, err := c.Get([]byte("mercedes"))
+    mercedesPriceFromSnaphot, err := snap.Get([]bytes("mercedes"))
     
     // Persist all the changes to disk.  This will not affect the
     // snapshot's "view", though, due to snapshot isolation.
-    err := s.Flush()
+    s.Flush()
     
     f.Sync() // Some applications may also want to fsync the underlying file.
     
@@ -133,33 +135,38 @@ Tips
 Because all collections are persisted atomically when you flush a
 store to disk, you can implement consistent secondary indexes by
 maintaining additional collections per store.  For example, a "users"
-collection can hold user JSON documents, keyed by their user-ID's.
+collection can hold a JSON document per user, keyed by user-ID.
 Another "userEmails" collection can be a secondary index, keyed by
 "<email-address>:<user-ID>", with empty values (e.g., []byte{}).
 
 Implementation / design
 =======================
 
-The fundamental datastructure is an immutable treap.  When used with
+The fundamental data structure is an immutable treap.  When used with
 random item priorities, treaps have probabilistic balanced tree
 behavior with the usual O(log N) performance bounds expected of
 balanced binary trees.
 
 The persistence design is append-only, using ideas from Apache CouchDB
-and Couchstore / Couchbase, providing a simple approach to resilience
-and fast restarts in the face of process or machine crashes.  On
+and Couchstore / Couchbase, providing a simple approach to reaching
+ACID properties in the face of process or machine crashes.  On
 re-opening a file, the implementation scans the file backwards looking
 for the last good root record and logically "truncates" the file at
 that point.  New mutations are appended from that last good root
-location.  This follows the "the log is the database" approach of
-CouchDB / Couchstore / Couchbase.
+location.  This follows the MVCC (multi-version concurrency control)
+and "the log is the database" approach of CouchDB / Couchstore /
+Couchbase.
 
 TRADEOFF: the append-only persistence design means file sizes will
 grow until there's a compaction.  Every mutation (when Flush()'ed)
-means the data file will grow.
+means the data file will grow.  To get a compacted file, use CopyTo()
+with a high "flushEvery" number.
+
+TRADEOFF: the current simple design means you can't store the bytes of
+a gkvlite database file as a value inside of another gkvlite database.
 
 The immutable, copy-on-write treap plus the append-only persistence
-design allows for easy MVCC snapshotting.
+design allows for fast and efficient MVCC snapshots.
 
 TRADEOFF: the immutable, copy-on-write design means more memory
 garbage may be created than other designs, meaning more work for the
