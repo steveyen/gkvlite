@@ -136,7 +136,7 @@ func (s *Store) CopyTo(dstFile *os.File, flushEvery int) (res *Store, err error)
 						return false
 					}
 					numItems++
-					if flushEvery > 0 && numItems % flushEvery == 0 {
+					if flushEvery > 0 && numItems%flushEvery == 0 {
 						if errCopyItem = dstStore.Flush(); errCopyItem != nil {
 							return false
 						}
@@ -507,23 +507,17 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 					if thisItem.item.Priority > thatItem.item.Priority {
 						left, middle, right, err := o.split(t, that, thisItem.item.Key)
 						if err == nil {
-							if middle.isEmpty() {
-								newLeft, err := o.union(t, &this.node.left, left)
+							newLeft, err := o.union(t, &this.node.left, left)
+							if err == nil {
+								newRight, err := o.union(t, &this.node.right, right)
 								if err == nil {
-									newRight, err := o.union(t, &this.node.right, right)
-									if err == nil {
+									if middle.isEmpty() {
 										return &nodeLoc{node: &node{
 											item:  *thisItem,
 											left:  *newLeft,
 											right: *newRight,
 										}}, nil
-									}
-								}
-							} else {
-								newLeft, err := o.union(t, &this.node.left, left)
-								if err == nil {
-									newRight, err := o.union(t, &this.node.right, right)
-									if err == nil {
+									} else {
 										return &nodeLoc{node: &node{
 											item:  middle.node.item,
 											left:  *newLeft,
