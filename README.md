@@ -40,7 +40,7 @@ gkvlite has the following features...
   from) the original Store.  And, mutations on the original Store
   won't be seen by snapshots.
 * Snapshot creation is a fast O(1) operation per Collection.
-* In-memory-only mode is supported, when you can use the same API but
+* In-memory-only mode is supported, where you can use the same API but
   without any persistence.
 * Single-threaded.  Users are encouraged to use Go channels or their
   own locking to serialize access to a Store.
