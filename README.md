@@ -14,8 +14,8 @@ gkvlite has the following features...
 * 100% implemented in the Go Language (golang).
 * Open source license - MIT.
 * Keys are ordered, so range iterations are supported.
-* Keys are []byte.
-* Values are []byte.
+* A key is a []byte.
+* A value is a []byte.
 * On-disk storage for a "Store" is a single file.
 * Multiple key-value Collections are supported in a single storage
   file.  That is, one Store can have zero or more Collections.  And, a
@@ -32,12 +32,13 @@ gkvlite has the following features...
 * O(log N) performance to find the smallest or largest items (by key).
 * Range iteration performance is same as binary tree traversal
   performance.
-* In general, performance is similar to a probabilistic balanced
+* In general, performance is similar to probabilistic balanced
   binary tree performance.
 * Non-persistable snapshots are supported, where you can still
   "scribble" on your snapshots with more (non-persistable)
   mutations. These scribbles on snapshots won't affect (are isolated
-  from) the original Store.
+  from) the original Store.  And, mutations on the original Store
+  won't be seen by snapshots.
 * Snapshot creation is a fast O(1) operation per Collection.
 * In-memory-only mode is supported, when you can use the same API but
   without any persistence.
