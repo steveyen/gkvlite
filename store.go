@@ -122,8 +122,8 @@ func (s *Store) Snapshot() *Store {
 // Copy all active collections and their items to a different file.
 // If flushEvery > 0, then during the item copying, Flush() will be
 // invoked at every flushEvery'th item and at the end of the item
-// copying.  The copy will not include any old item or change data so
-// the copy should be more compact if flushEvery is relatively large.
+// copying.  The copy will not include any old items or nodes so the
+// copy should be more compact if flushEvery is relatively large.
 func (s *Store) CopyTo(dstFile *os.File, flushEvery int) (res *Store, err error) {
 	if dstStore, err := NewStore(dstFile); err == nil {
 		for name, srcColl := range s.Coll {
@@ -171,17 +171,19 @@ type Collection struct {
 	root    nodeLoc
 }
 
-// A persisted node.
+// A persistable node.
 type node struct {
 	item        itemLoc
 	left, right nodeLoc
 }
 
-// A persisted node and its persistence location.
+// A persistable node and its persistence location.
 type nodeLoc struct {
 	loc  *ploc // Can be nil if node is dirty (not yet persisted).
 	node *node // Can be nil if node is not fetched into memory yet.
 }
+
+var empty = &nodeLoc{} // Sentinel.
 
 func (nloc *nodeLoc) isEmpty() bool {
 	return nloc == nil || (nloc.loc.isEmpty() && nloc.node == nil)
@@ -238,21 +240,20 @@ func (nloc *nodeLoc) read(o *Store) (err error) {
 	return nil
 }
 
-var empty = &nodeLoc{}
-
-// A persisted item.
+// A persistable item.
 type Item struct {
 	Key, Val []byte // Val may be nil if not fetched into memory yet.
 	Priority int32  // Use rand.Int() for probabilistic balancing.
 }
 
-// A persisted item and its persistence location.
+// A persistable item and its persistence location.
 type itemLoc struct {
 	loc  *ploc // Can be nil if item is dirty (not yet persisted).
 	item *Item // Can be nil if item is not fetched into memory yet.
 }
 
 func (i *itemLoc) write(o *Store) error {
+	// TODO: allow saving a db file as a value in another db file.
 	if i.loc.isEmpty() {
 		if i.item != nil {
 			offset := o.size
@@ -263,7 +264,7 @@ func (i *itemLoc) write(o *Store) error {
 			binary.Write(b, binary.BigEndian, uint32(len(i.item.Val)))
 			binary.Write(b, binary.BigEndian, int32(i.item.Priority))
 			b.Write(i.item.Key)
-			b.Write(i.item.Val)
+			b.Write(i.item.Val) // TODO: handle large values more efficiently.
 			if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 				return err
 			}
@@ -310,10 +311,18 @@ func (i *itemLoc) read(o *Store, withValue bool) (err error) {
 	return nil
 }
 
-// Offset/location of persisted range of bytes.
+// Offset/location of a persisted range of bytes.
 type ploc struct {
 	Offset int64  `json:"o"` // Usable for os.ReadAt/WriteAt() at file offset 0.
 	Length uint32 `json:"l"` // Number of bytes.
+}
+
+const ploc_length int = 8 + 4
+
+var ploc_empty *ploc = &ploc{} // Sentinel.
+
+func (p *ploc) isEmpty() bool {
+	return p == nil || (p.Offset == int64(0) && p.Length == uint32(0))
 }
 
 func (p *ploc) write(b *bytes.Buffer) (err error) {
@@ -341,14 +350,6 @@ func (p *ploc) read(b *bytes.Buffer) (res *ploc, err error) {
 	}
 	return p, nil
 }
-
-func (p *ploc) isEmpty() bool {
-	return p == nil || (p.Offset == int64(0) && p.Length == uint32(0))
-}
-
-const ploc_length int = 8 + 4
-
-var ploc_empty *ploc = &ploc{}
 
 // Retrieve an item by its key.  Use withValue of false if you don't
 // need the item's value (Item.Val may be nil), which might be able
@@ -399,7 +400,7 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 // Replace or insert an item of a given key.
 // A random item Priority (e.g., rand.Int()) will usually work well,
 // but advanced users may consider using non-random item priorities
-// at the risk of unbalancing the lookup trees.
+// at the risk of unbalancing the lookup tree.
 func (t *Collection) SetItem(item *Item) (err error) {
 	if r, err := t.store.union(t, &t.root,
 		&nodeLoc{node: &node{item: itemLoc{item: &Item{
