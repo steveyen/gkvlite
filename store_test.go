@@ -637,7 +637,7 @@ func TestStoreFile(t *testing.T) {
 		{s3snap, 4, []string{"a", "b", "c", "d", "e"}},
 		{s3snap1, 1, []string{"a", "b", "c"}},
 		{s3snap1, 0, []string{"a", "b", "c"}},
-		{s3, 100000, []string{"a", "b", "c"}},
+		{s3, 1000, []string{"a", "b", "c"}},
 	}
 
 	for ccTestIdx, ccTest := range ccTests {
@@ -656,6 +656,16 @@ func TestStoreFile(t *testing.T) {
 			t.Error("%v: expected successful CopyTo of x coll", ccTestIdx)
 		}
 		visitExpectCollection(t, cx, "a", ccTest.expect)
+		if ccTest.fevery > 100 {
+			// Expect file to be more compact when there's less flushing.
+			finfoSrc, _ := ccTest.src.file.Stat()
+			finfoCpy, _ := cc.file.Stat()
+			if finfoSrc.Size() < finfoCpy.Size() {
+				t.Error("%v: expected copy to be smaller / compacted"+
+					"src size: %v, cpy size: %v", ccTestIdx,
+					finfoSrc.Size(), finfoCpy.Size())
+			}
+		}
 		ccFile.Close()
 		os.Remove(ccName)
 	}
