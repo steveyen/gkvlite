@@ -2,6 +2,7 @@ package gkvlite
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"testing"
 )
@@ -620,4 +621,42 @@ func TestStoreFile(t *testing.T) {
 	loadCollection(x3snap, []string{"e", "d", "a", "c", "b", "c", "a"})
 	visitExpectCollection(t, x3snap1, "a", []string{"a", "b", "c"})
 	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
+
+	// ------------------------------------------------
+
+	// Exercise CopyTo.
+	ccTests := []struct {
+		src    *Store
+		fevery int
+		expect []string
+	}{
+		{s6, 1, []string{}},
+		{s5, 0, []string{"a", "d"}},
+		{s5, 2, []string{"a", "d"}},
+		{s5, 4, []string{"a", "d"}},
+		{s3snap, 4, []string{"a", "b", "c", "d", "e"}},
+		{s3snap1, 1, []string{"a", "b", "c"}},
+		{s3snap1, 0, []string{"a", "b", "c"}},
+		{s3, 100000, []string{"a", "b", "c"}},
+	}
+
+	for ccTestIdx, ccTest := range ccTests {
+		ccName := fmt.Sprintf("tmpCompactCopy-%v.test", ccTestIdx)
+		os.Remove(ccName)
+		ccFile, err := os.Create(ccName)
+		if err != nil || f == nil {
+			t.Error("%v: could not create file: %v", ccTestIdx, fname)
+		}
+		cc, err := ccTest.src.CopyTo(ccFile, ccTest.fevery)
+		if err != nil {
+			t.Error("%v: expected successful CopyTo, got: %v", ccTestIdx, err)
+		}
+		cx := cc.GetCollection("x")
+		if cx == nil {
+			t.Error("%v: expected successful CopyTo of x coll", ccTestIdx)
+		}
+		visitExpectCollection(t, cx, "a", ccTest.expect)
+		ccFile.Close()
+		os.Remove(ccName)
+	}
 }

@@ -1,7 +1,5 @@
 package gkvlite
 
-// TODO: compaction.
-
 import (
 	"bytes"
 	"encoding/binary"
@@ -119,6 +117,47 @@ func (s *Store) Snapshot() *Store {
 		}
 	}
 	return res
+}
+
+// Copy all active collections and their items to a different file.
+// If flushEvery > 0, then during the item copying, Flush() will be
+// invoked at every flushEvery'th item and at the end of the item
+// copying.  The copy will not include any old item or change data so
+// the copy should be more compact if flushEvery is relatively large.
+func (s *Store) CopyTo(dstFile *os.File, flushEvery int) (res *Store, err error) {
+	if dstStore, err := NewStore(dstFile); err == nil {
+		for name, srcColl := range s.Coll {
+			dstColl := dstStore.SetCollection(name, srcColl.compare)
+			if minItem, err := srcColl.MinItem(true); err == nil && minItem != nil {
+				numItems := 0
+				var errCopyItem error = nil
+				if err = srcColl.VisitItemsAscend(minItem.Key, true, func(i *Item) bool {
+					if errCopyItem = dstColl.SetItem(i); errCopyItem != nil {
+						return false
+					}
+					numItems++
+					if flushEvery > 0 && numItems % flushEvery == 0 {
+						if errCopyItem = dstStore.Flush(); errCopyItem != nil {
+							return false
+						}
+					}
+					return true
+				}); err != nil {
+					return nil, err
+				}
+				if errCopyItem != nil {
+					return nil, errCopyItem
+				}
+			}
+		}
+		if flushEvery > 0 {
+			if err = dstStore.Flush(); err != nil {
+				return nil, err
+			}
+		}
+		return dstStore, nil
+	}
+	return nil, err
 }
 
 // User-supplied key comparison func should return 0 if a == b,
