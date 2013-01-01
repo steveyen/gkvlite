@@ -137,7 +137,7 @@ store to disk, you can implement consistent secondary indexes by
 maintaining additional collections per store.  For example, a "users"
 collection can hold a JSON document per user, keyed by user-ID.
 Another "userEmails" collection can be a secondary index, keyed by
-"<email-address>:<user-ID>", with empty values (e.g., []byte{}).
+"email-address:user-ID", with empty values (e.g., []byte{}).
 
 Implementation / design
 =======================
