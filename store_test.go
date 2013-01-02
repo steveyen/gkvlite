@@ -698,3 +698,95 @@ func TestStoreFile(t *testing.T) {
 		os.Remove(ccName)
 	}
 }
+
+func TestStoreMultipleCollections(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, err := os.Create(fname)
+	if err != nil || f == nil {
+		t.Error("could not create file: %v", fname)
+	}
+
+	s, err := NewStore(f)
+	if err != nil {
+		t.Errorf("expected NewStore to work")
+	}
+	if len(s.GetCollectionNames()) != 0 {
+		t.Errorf("expected no coll names on empty store")
+	}
+	x := s.SetCollection("x", nil)
+	y := s.SetCollection("y", nil)
+	z := s.SetCollection("z", nil)
+
+	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+	loadCollection(y, []string{"1", "2", "3", "4", "5"})
+	loadCollection(z, []string{"D", "C", "B", "A"})
+
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"})
+	visitExpectCollection(t, y, "1", []string{"1", "2", "3", "4", "5"})
+	visitExpectCollection(t, z, "A", []string{"A", "B", "C", "D"})
+
+	err = s.Flush()
+	if err != nil {
+		t.Errorf("expected flush to work")
+	}
+	f.Close()
+
+	f1, err := os.OpenFile(fname, os.O_RDWR, 0666)
+	s1, err := NewStore(f1)
+	if err != nil {
+		t.Errorf("expected NewStore to work")
+	}
+	if len(s1.GetCollectionNames()) != 3 {
+		t.Errorf("expected 3 colls")
+	}
+
+	x1 := s1.GetCollection("x")
+	y1 := s1.GetCollection("y")
+	z1 := s1.GetCollection("z")
+
+	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"})
+	visitExpectCollection(t, y1, "1", []string{"1", "2", "3", "4", "5"})
+	visitExpectCollection(t, z1, "A", []string{"A", "B", "C", "D"})
+
+	s1.RemoveCollection("x")
+
+	// Reset the y collection.
+	s1.RemoveCollection("y")
+	s1.SetCollection("y", nil)
+
+	err = s1.Flush()
+	if err != nil {
+		t.Errorf("expected flush to work")
+	}
+	f1.Sync()
+	f1.Close()
+
+	f2, err := os.Open(fname)
+	s2, err := NewStore(f2)
+	if err != nil {
+		t.Errorf("expected NewStore to work")
+	}
+	if len(s2.GetCollectionNames()) != 2 {
+		t.Errorf("expected 2 colls, got %v", s2.GetCollectionNames())
+	}
+
+	x2 := s2.GetCollection("x")
+	y2 := s2.GetCollection("y")
+	z2 := s2.GetCollection("z")
+
+	if x2 != nil {
+		t.Errorf("expected x coll to be gone")
+	}
+
+	visitExpectCollection(t, y2, "1", []string{})
+	visitExpectCollection(t, z2, "A", []string{"A", "B", "C", "D"})
+
+	if err = z2.Set([]byte("hi"), []byte("world")); err != nil {
+		t.Errorf("expected set to work, got %v", err)
+	}
+
+	if err = s2.Flush(); err == nil {
+		t.Errorf("expected Flush() to fail on a readonly file")
+	}
+}
