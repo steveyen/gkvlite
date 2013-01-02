@@ -98,13 +98,12 @@ func (s *Store) Flush() (err error) {
 }
 
 // Returns a non-persistable snapshot, including any mutations that
-// have not be Flush()'ed to disk yet.  The snapshot has its Flush()
-// to disk disabled because the original store "owns" the os.File.
+// have not been Flush()'ed to disk yet.  The snapshot has its Flush()
+// disabled because the original store "owns" writes to the os.File.
 // Caller should ensure that the returned snapshot store and the
 // original store are used in "single-threaded" manner as they share
-// internal data structures.  The snapshot feature works for
-// memory-only stores, too.  On isolation: if you make more updates to
-// a snapshot store, those updates will not be seen by the original
+// internal memory structures.  On isolation: if you make updates to a
+// snapshot store, those updates will not be seen by the original
 // store; and vice-versa for mutations on the original store.  To
 // persist the snapshot (and any updates on it) to a new file, use
 // snapshot.CopyTo().
