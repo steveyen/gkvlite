@@ -122,6 +122,7 @@ Examples
     // One of the most priceless cars is not in the collection.
     thisIsNil, err := c.Get([]byte("the-apollo-15-moon-buggy"))
     
+    // Iterate through items.
     c.VisitItemsAscend([]byte("ford"), func(i *gkvlite.Item) bool {
         // This visitor callback will be invoked with every item
         // with key "ford" and onwards, in key-sorted order.
@@ -132,16 +133,16 @@ Examples
         return true
     })
     
-    // Let's get a read-only snapshot.
+    // Let's get a snapshot.
     snap := s.Snapshot()
+    snapCars := snap.GetCollection("cars")
     
     // The snapshot won't see modifications against the original Store.
     c.Delete([]byte("mercedes"))
     mercedesIsNil, err := c.Get([]byte("mercedes"))
-    mercedesPriceFromSnaphot, err := snap.Get([]bytes("mercedes"))
+    mercedesPriceFromSnapshot, err := snapCars.Get([]bytes("mercedes"))
     
-    // Persist all the changes to disk.  This will not affect the
-    // snapshot's "view", though, due to snapshot isolation.
+    // Persist all the changes to disk.
     s.Flush()
     
     f.Sync() // Some applications may also want to fsync the underlying file.
@@ -149,7 +150,7 @@ Examples
     // Now, other file readers can see the data, too.
     f2, err := os.Open("/tmp/test.gkvlite")
     s2, err := gkvlite.NewStore(f2)
-    c2 := s.GetCollection([]byte("cars"))
+    c2 := s.GetCollection("cars")
     
     bmwPrice := c2.Get([]byte("bmw"))
 
