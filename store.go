@@ -32,7 +32,7 @@ func NewStore(file *os.File) (res *Store, err error) {
 		return &Store{Coll: make(map[string]*Collection)}, nil
 	}
 	res = &Store{Coll: make(map[string]*Collection), file: file}
-	if err := res.readRoots(); err == nil {
+	if err = res.readRoots(); err == nil {
 		return res, nil
 	}
 	return nil, err
@@ -601,8 +601,8 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 
 // All the keys from this should be < keys from that.
 func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
-	if err := this.read(o); err == nil {
-		if err := that.read(o); err == nil {
+	if err = this.read(o); err == nil {
+		if err = that.read(o); err == nil {
 			if this.isEmpty() {
 				return that, nil
 			}
@@ -610,9 +610,9 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 				return this, nil
 			}
 			thisItem := &this.node.item
-			if err := thisItem.read(o, false); err == nil {
+			if err = thisItem.read(o, false); err == nil {
 				thatItem := &that.node.item
-				if err := thatItem.read(o, false); err == nil {
+				if err = thatItem.read(o, false); err == nil {
 					if thisItem.item.Priority > thatItem.item.Priority {
 						if newRight, err := o.join(&this.node.right, that); err == nil {
 							return &nodeLoc{node: &node{
@@ -645,7 +645,7 @@ func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
 	}
 	for {
 		child := cfn(n.node)
-		if err := child.read(o); err != nil {
+		if err = child.read(o); err != nil {
 			return nil, err
 		}
 		if child.isEmpty() {
@@ -708,9 +708,8 @@ func (o *Store) writeRoots() (err error) {
 	return err
 }
 
-func (o *Store) readRoots() error {
-	finfo, err := o.file.Stat()
-	if err == nil {
+func (o *Store) readRoots() (err error) {
+	if finfo, err := o.file.Stat(); err == nil {
 		o.size = finfo.Size()
 		if o.size > 0 {
 			endBuff := make([]byte, 8+2*len(MAGIC_END))
