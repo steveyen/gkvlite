@@ -665,6 +665,34 @@ func TestStoreFile(t *testing.T) {
 					"src size: %v, cpy size: %v", ccTestIdx,
 					finfoSrc.Size(), finfoCpy.Size())
 			}
+		} else {
+			err = cc.Flush()
+			if err != nil {
+				t.Error("%v: expect Flush() to work on snapshot, got: %v", ccTestIdx, err)
+			}
+		}
+		ccFile.Close()
+
+		// Reopen the snapshot and see that it's right.
+		ccFile, err = os.Open(ccName)
+		cc, err = NewStore(ccFile)
+		if err != nil {
+			t.Error("%v: expected successful NewStore against snapshot file, got: %v", ccTestIdx, err)
+		}
+		cx = cc.GetCollection("x")
+		if cx == nil {
+			t.Error("%v: expected successful CopyTo of x coll", ccTestIdx)
+		}
+		visitExpectCollection(t, cx, "a", ccTest.expect)
+		if ccTest.fevery > 100 {
+			// Expect file to be more compact when there's less flushing.
+			finfoSrc, _ := ccTest.src.file.Stat()
+			finfoCpy, _ := cc.file.Stat()
+			if finfoSrc.Size() < finfoCpy.Size() {
+				t.Error("%v: expected copy to be smaller / compacted"+
+					"src size: %v, cpy size: %v", ccTestIdx,
+					finfoSrc.Size(), finfoCpy.Size())
+			}
 		}
 		ccFile.Close()
 		os.Remove(ccName)
