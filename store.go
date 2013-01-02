@@ -700,9 +700,10 @@ func (o *Store) writeRoots() (err error) {
 		binary.Write(b, binary.BigEndian, int64(offset))
 		b.Write(MAGIC_END)
 		b.Write(MAGIC_END)
-		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err == nil {
-			o.size = offset + int64(length)
+		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
+			return err
 		}
+		o.size = offset + int64(length)
 	}
 	return err
 }
