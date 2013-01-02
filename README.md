@@ -14,46 +14,70 @@ gkvlite has the following features...
 * 100% implemented in the Go Language (golang).
 * Open source license - MIT.
 * Keys are ordered, so range iterations are supported.
+* On-disk storage for a "Store" is a single file.
+* ACID properties are supported via a simple, append-only,
+  copy-on-write storage design.
+
+Key concepts
+============
+
+* Multiple key-value Collections are supported in a single storage
+  file (a Store).
+* That is, one Store can have zero or more Collections.
+* And, a Collection can have zero or more Items (key-value).
 * A key is a []byte.
 * A value is a []byte.
-* On-disk storage for a "Store" is a single file.
-* Multiple key-value Collections are supported in a single storage
-  file.  That is, one Store can have zero or more Collections.  And, a
-  Collection can have zero or more Items (key-value).
-* Append-only, copy-on-write design for robustness to
-  crashes/power-loss.
+
+ACID properties
+===============
+
 * Atomicity - all unpersisted changes from all Collections during a
   Store.Flush() will be persisted atomically.  All changes will either
   be committed or be rolled back.
 * Consistency - simple key-value level consistency is supported.
 * Isolation - mutations won't affect snapshots.
-* Durability - you control when you want to Flush() to disk.
+* Durability - you control when you want to Flush() to disk, so your
+  application can address its performance-vs-safety tradeoffs
+  appropriately.
+
+Performance
+===========
+
 * O(log N) performance for item retrieval, insert, update, delete.
 * O(log N) performance to find the smallest or largest items (by key).
 * Range iteration performance is same as binary tree traversal
   performance.
 * In general, performance is similar to probabilistic balanced
   binary tree performance.
+* You can retrieve just keys only, to save I/O & memory resources,
+  especially when you have many large values and you just need to
+  retrieve only keys from disk for some requests.
+
+Concurrency
+===========
+
+gkvlite is single-threaded.  Users are encouraged to use Go channels
+or their own locking to serialize access to a Store.
+
+Snapshots
+=========
+
 * Non-persistable snapshots are supported, where you can still
   "scribble" on your snapshots with more (non-persistable)
-  mutations. These scribbles on snapshots won't affect (are isolated
-  from) the original Store.  And, mutations on the original Store
-  won't be seen by snapshots.
+  updates. These scribbles on snapshots won't affect (are isolated
+  from) the original Store.
+* And, mutations on the original Store won't be seen by snapshots.
 * Snapshot creation is a fast O(1) operation per Collection.
+
+Other features
+==============
+
 * In-memory-only mode is supported, where you can use the same API but
   without any persistence.
-* Single-threaded.  Users are encouraged to use Go channels or their
-  own locking to serialize access to a Store.
 * You provide the os.File - this library just uses the os.File you
   provide.
 * You provide the os.File.Sync() - if you want to fsync your file,
   call file.Sync() after you do a Flush().
-* You control when you want to Flush() changes to disk, so your
-  application can address its performance-vs-safety tradeoffs
-  appropriately.
-* You can retrieve just keys only, to save I/O & memory resources,
-  especially when you have many large values and you just need to
-  retrieve only keys from disk for some requests.
 * You can supply your own KeyCompare function to order items however
   you want.  The default is bytes.Compare().
 * You can control item priority to access hotter items faster by
@@ -135,17 +159,17 @@ Tips
 Because all collections are persisted atomically when you flush a
 store to disk, you can implement consistent secondary indexes by
 maintaining additional collections per store.  For example, a "users"
-collection can hold a JSON document per user, keyed by user-ID.
-Another "userEmails" collection can be a secondary index, keyed by
-"email-address:user-ID", with empty values (e.g., []byte{}).
+collection can hold a JSON document per user, keyed by userId.
+Another "userEmails" collection can be used like a secondary index,
+keyed by "emailAddress:userId", with empty values (e.g., []byte{}).
 
 Implementation / design
 =======================
 
-The fundamental data structure is an immutable treap.  When used with
-random item priorities, treaps have probabilistic balanced tree
-behavior with the usual O(log N) performance bounds expected of
-balanced binary trees.
+The fundamental data structure is an immutable treap (tree + heap).
+When used with random heap item priorities, treaps have probabilistic
+balanced tree behavior with the usual O(log N) performance bounds
+expected of balanced binary trees.
 
 The persistence design is append-only, using ideas from Apache CouchDB
 and Couchstore / Couchbase, providing a simple approach to reaching
@@ -158,9 +182,8 @@ and "the log is the database" approach of CouchDB / Couchstore /
 Couchbase.
 
 TRADEOFF: the append-only persistence design means file sizes will
-grow until there's a compaction.  Every mutation (when Flush()'ed)
-means the data file will grow.  To get a compacted file, use CopyTo()
-with a high "flushEvery" number.
+grow until there's a compaction.  To get a compacted file, use
+CopyTo() with a high "flushEvery" argument.
 
 TRADEOFF: the current simple design means you can't store the bytes of
 a gkvlite database file as a value inside of another gkvlite database.
