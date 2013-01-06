@@ -144,6 +144,25 @@ func TestStoreMem(t *testing.T) {
 			}
 		}
 	}
+
+	if xx.SetItem(&Item{}) == nil {
+		t.Error("expected error on empty item")
+	}
+	if xx.SetItem(&Item{Key: []byte("hello")}) == nil {
+		t.Error("expected error on nil item Val")
+	}
+	if xx.SetItem(&Item{Val: []byte("hello")}) == nil {
+		t.Error("expected error on nil item Key")
+	}
+	if xx.SetItem(&Item{Key: []byte{}, Val: []byte{}}) == nil {
+		t.Error("expected error on zero-length item Key")
+	}
+	if xx.SetItem(&Item{Key: make([]byte, 2*16+1), Val: []byte{}}) == nil {
+		t.Error("expected error on too long item Key")
+	}
+	if xx.SetItem(&Item{Key: []byte("hi"), Val: make([]byte, 2*32+1)}) == nil {
+		t.Error("expected error on too long item Key")
+	}
 }
 
 func loadCollection(x *Collection, arr []string) {

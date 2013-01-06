@@ -25,8 +25,8 @@ Key concepts
   file (a Store).
 * That is, one Store can have zero or more Collections.
 * And, a Collection can have zero or more Items (key-value).
-* A key is a []byte.
-* A value is a []byte.
+* A key is a []byte, max length 64KB.
+* A value is a []byte, max length 4GB.
 
 ACID properties
 ===============

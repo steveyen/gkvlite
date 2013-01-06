@@ -21,7 +21,7 @@ type Store struct {
 	readOnly bool
 }
 
-const VERSION = uint32(0)
+const VERSION = uint32(1)
 
 var MAGIC_BEG []byte = []byte("0g1t2r")
 var MAGIC_END []byte = []byte("3e4a5p")
@@ -262,10 +262,10 @@ func (i *itemLoc) write(o *Store) error {
 	if i.loc.isEmpty() {
 		if i.item != nil {
 			offset := o.size
-			length := 4 + 4 + 4 + 4 + len(i.item.Key) + len(i.item.Val)
+			length := 4 + 2 + 4 + 4 + len(i.item.Key) + len(i.item.Val)
 			b := bytes.NewBuffer(make([]byte, length)[:0])
 			binary.Write(b, binary.BigEndian, uint32(length))
-			binary.Write(b, binary.BigEndian, uint32(len(i.item.Key)))
+			binary.Write(b, binary.BigEndian, uint16(len(i.item.Key)))
 			binary.Write(b, binary.BigEndian, uint32(len(i.item.Val)))
 			binary.Write(b, binary.BigEndian, int32(i.item.Priority))
 			b.Write(i.item.Key)
@@ -290,7 +290,8 @@ func (i *itemLoc) read(o *Store, withValue bool) (err error) {
 		}
 		buf := bytes.NewBuffer(b)
 		item := &Item{}
-		var length, keyLength, valLength uint32
+		var keyLength uint16
+		var length, valLength uint32
 		if err = binary.Read(buf, binary.BigEndian, &length); err != nil {
 			return err
 		}
@@ -303,13 +304,13 @@ func (i *itemLoc) read(o *Store, withValue bool) (err error) {
 		if err = binary.Read(buf, binary.BigEndian, &item.Priority); err != nil {
 			return err
 		}
-		hdrLength := 4 + 4 + 4 + 4
-		if length != uint32(hdrLength)+keyLength+valLength {
+		hdrLength := 4 + 2 + 4 + 4
+		if length != uint32(hdrLength)+uint32(keyLength)+valLength {
 			return errors.New("mismatched itemLoc lengths")
 		}
 		item.Key = b[hdrLength : hdrLength+int(keyLength)]
 		if withValue {
-			item.Val = b[hdrLength+int(keyLength) : hdrLength+int(keyLength+valLength)]
+			item.Val = b[hdrLength+int(keyLength) : hdrLength+int(keyLength)+int(valLength)]
 		}
 		i.item = item
 	}
@@ -407,6 +408,10 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 // but advanced users may consider using non-random item priorities
 // at the risk of unbalancing the lookup tree.
 func (t *Collection) SetItem(item *Item) (err error) {
+	if item.Key == nil || len(item.Key) > 2^16 || len(item.Key) == 0 ||
+		item.Val == nil || len(item.Val) > 2^32 {
+		return errors.New("Item.Key/Val missing or too long")
+	}
 	if r, err := t.store.union(t, &t.root,
 		&nodeLoc{node: &node{item: itemLoc{item: &Item{
 			Key:      item.Key,
