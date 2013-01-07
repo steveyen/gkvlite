@@ -10,13 +10,21 @@ import (
 	"os"
 )
 
+// The StoreFile interface is implemented by os.File, where this
+// extra level of indirection is inspired by SQLite's VFS layer.
+type StoreFile interface {
+	WriteAt(b []byte, offset int64) (numWritten int, err error)
+	ReadAt(b []byte, offset int64) (numRead int, err error)
+	Stat() (os.FileInfo, error)
+}
+
 // A persistable store holding collections of ordered keys & values.
 // The persistence is append-only based on immutable, copy-on-write
 // treaps for robustness.  This implementation is single-threaded, so
 // users should serialize their accesses.
 type Store struct {
 	Coll     map[string]*Collection `json:"c"` // Exposed only for json'ification.
-	file     *os.File
+	file     StoreFile
 	size     int64
 	readOnly bool
 }
@@ -27,7 +35,7 @@ var MAGIC_BEG []byte = []byte("0g1t2r")
 var MAGIC_END []byte = []byte("3e4a5p")
 
 // Use nil for file for in-memory-only (non-persistent) usage.
-func NewStore(file *os.File) (res *Store, err error) {
+func NewStore(file StoreFile) (res *Store, err error) {
 	if file == nil { // Return a memory-only Store.
 		return &Store{Coll: make(map[string]*Collection)}, nil
 	}
@@ -129,7 +137,7 @@ func (s *Store) Snapshot() (snapshot *Store) {
 // invoked at every flushEvery'th item and at the end of the item
 // copying.  The copy will not include any old items or nodes so the
 // copy should be more compact if flushEvery is relatively large.
-func (s *Store) CopyTo(dstFile *os.File, flushEvery int) (res *Store, err error) {
+func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error) {
 	if dstStore, err := NewStore(dstFile); err == nil {
 		for name, srcColl := range s.Coll {
 			dstColl := dstStore.SetCollection(name, srcColl.compare)
