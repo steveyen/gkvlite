@@ -80,7 +80,8 @@ Other features
   call file.Sync() after you do a Flush().
 * Similar to SQLite's VFS feature, you can supply your own StoreFile
   interface implementation instead of an actual os.File, for your own
-  advanced testing or file interposing needs.
+  advanced testing or I/O interposing needs (e.g., compression,
+  checksums, I/O statistics, etc).
 * You can supply your own KeyCompare function to order items however
   you want.  The default is bytes.Compare().
 * You can control item priority to access hotter items faster by
