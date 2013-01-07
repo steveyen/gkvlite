@@ -195,3 +195,21 @@ design allows for fast and efficient MVCC snapshots.
 TRADEOFF: the immutable, copy-on-write design means more memory
 garbage may be created than other designs, meaning more work for the
 garbage collector (GC).
+
+TODO / ideas
+============
+
+* Performance: consider splitting item storage from node storage, so
+  we're not mixing metadata and data in same page cache pages.  Need
+  to measure how much win this could be in cases like compaction.
+  Tradeoff as this could mean no more single file simplicity.
+
+* Allow snapshots to be concurrent, accessible by separate goroutines.
+
+* Allow mutability for less garbage, perhaps switching to immutable
+  only when there are in-use snapshots.  This probably won't be a win
+  if there are always active snapshots.
+
+* Keep stats on misses, disk fetches & writes, tree depth, etc.
+
+* See more TODO's throughout codebase / grep.
