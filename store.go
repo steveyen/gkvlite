@@ -174,7 +174,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 }
 
 // User-supplied key comparison func should return 0 if a == b,
-// -1 if a < b, and +1 if a > b.
+// -1 if a < b, and +1 if a > b.  For example: bytes.Compare()
 type KeyCompare func(a, b []byte) int
 
 // A persistable collection of ordered key-values (Item's).
