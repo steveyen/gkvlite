@@ -208,7 +208,7 @@ TODO / ideas
 ============
 
 * TODO: Performance: consider splitting item storage from node
-  storage, so we're not mixing metadata and data in same qcache pages.
+  storage, so we're not mixing metadata and data in same cache pages.
   Need to measure how much win this could be in cases like compaction.
   Tradeoff as this could mean no more single file simplicity.
 
