@@ -29,7 +29,7 @@ type Store struct {
 	readOnly bool
 }
 
-const VERSION = uint32(1)
+const VERSION = uint32(2)
 
 var MAGIC_BEG []byte = []byte("0g1t2r")
 var MAGIC_END []byte = []byte("3e4a5p")
@@ -703,7 +703,7 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 func (o *Store) writeRoots() (err error) {
 	if sJSON, err := json.Marshal(o); err == nil {
 		offset := o.size
-		length := 2*len(MAGIC_BEG) + 4 + 4 + len(sJSON) + 8 + 2*len(MAGIC_END)
+		length := 2*len(MAGIC_BEG) + 4 + 4 + len(sJSON) + 8 + 4 + 2*len(MAGIC_END)
 		b := bytes.NewBuffer(make([]byte, length)[:0])
 		b.Write(MAGIC_BEG)
 		b.Write(MAGIC_BEG)
@@ -711,6 +711,7 @@ func (o *Store) writeRoots() (err error) {
 		binary.Write(b, binary.BigEndian, uint32(length))
 		b.Write(sJSON)
 		binary.Write(b, binary.BigEndian, int64(offset))
+		binary.Write(b, binary.BigEndian, uint32(length))
 		b.Write(MAGIC_END)
 		b.Write(MAGIC_END)
 		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
@@ -725,42 +726,48 @@ func (o *Store) readRoots() (err error) {
 	if finfo, err := o.file.Stat(); err == nil {
 		o.size = finfo.Size()
 		if o.size > 0 {
-			endBuff := make([]byte, 8+2*len(MAGIC_END))
-			minSize := int64(2*len(MAGIC_BEG) + 4 + 4 + len(endBuff))
+			endBArr := make([]byte, 8+4+2*len(MAGIC_END))
+			minSize := int64(2*len(MAGIC_BEG) + 4 + 4 + len(endBArr))
 			for {
 				for { // Scan backwards for MAGIC_END.
 					if o.size <= minSize {
 						return errors.New("couldn't find roots; file corrupted or wrong?")
 					}
-					if _, err := o.file.ReadAt(endBuff,
-						o.size-int64(len(endBuff))); err != nil {
+					if _, err := o.file.ReadAt(endBArr,
+						o.size-int64(len(endBArr))); err != nil {
 						return err
 					}
-					if bytes.Equal(MAGIC_END, endBuff[8:8+len(MAGIC_END)]) &&
-						bytes.Equal(MAGIC_END, endBuff[8+len(MAGIC_END):]) {
+					if bytes.Equal(MAGIC_END, endBArr[8+4:8+4+len(MAGIC_END)]) &&
+						bytes.Equal(MAGIC_END, endBArr[8+4+len(MAGIC_END):]) {
 						break
 					}
 					o.size = o.size - 1 // TODO: optimizations to scan backwards faster.
 				}
 				// Read and check the roots.
 				var offset int64
-				err = binary.Read(bytes.NewBuffer(endBuff), binary.BigEndian, &offset)
+				var length uint32
+				endBuf := bytes.NewBuffer(endBArr)
+				err = binary.Read(endBuf, binary.BigEndian, &offset)
 				if err != nil {
 					return err
 				}
-				if offset >= 0 && offset < o.size-int64(minSize) {
-					data := make([]byte, o.size-offset-int64(len(endBuff)))
+				if err = binary.Read(endBuf, binary.BigEndian, &length); err != nil {
+					return err
+				}
+				if offset >= 0 && offset < o.size-int64(minSize) &&
+					length == uint32(o.size-offset) {
+					data := make([]byte, o.size-offset-int64(len(endBArr)))
 					if _, err := o.file.ReadAt(data, offset); err != nil {
 						return err
 					}
 					if bytes.Equal(MAGIC_BEG, data[:len(MAGIC_BEG)]) &&
 						bytes.Equal(MAGIC_BEG, data[len(MAGIC_BEG):2*len(MAGIC_BEG)]) {
-						var version, length uint32
+						var version, length0 uint32
 						b := bytes.NewBuffer(data[2*len(MAGIC_BEG):])
 						if err = binary.Read(b, binary.BigEndian, &version); err != nil {
 							return err
 						}
-						if err = binary.Read(b, binary.BigEndian, &length); err != nil {
+						if err = binary.Read(b, binary.BigEndian, &length0); err != nil {
 							return err
 						}
 						if version != VERSION {
@@ -768,10 +775,10 @@ func (o *Store) readRoots() (err error) {
 								"current version: %v != found version: %v",
 								VERSION, version)
 						}
-						if length != uint32(o.size-offset) {
+						if length0 != length {
 							return fmt.Errorf("length mismatch: "+
 								"wanted length: %v != found length: %v",
-								uint32(o.size-offset), length)
+								length0, length)
 						}
 						m := &Store{}
 						if err = json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m); err != nil {
@@ -783,8 +790,8 @@ func (o *Store) readRoots() (err error) {
 							t.compare = bytes.Compare
 						}
 						return nil
-					}
-				}
+					} // else, perhaps value was unlucky in having MAGIC_END's.
+				} // else, perhaps a gkvlite file was stored as a value.
 				o.size = o.size - 1 // Roots were wrong, so keep scanning.
 			}
 		}

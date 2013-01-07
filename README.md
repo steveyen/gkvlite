@@ -190,8 +190,12 @@ TRADEOFF: the append-only persistence design means file sizes will
 grow until there's a compaction.  To get a compacted file, use
 CopyTo() with a high "flushEvery" argument.
 
-TRADEOFF: the current simple design means you can't store the bytes of
-a gkvlite database file as a value inside of another gkvlite database.
+TRADEOFF: the append-only design means it's possible for an advanced
+adversary to corrupt a gkvlite file by cleverly storing the bytes of a
+valid gkvlite root record as a value; however, they would need to know
+the size of the containing gkvlite database file in order to compute a
+valid gkvlite root record and be able to force a process or machine
+crash before the next good root record is written/sync'ed.
 
 The immutable, copy-on-write treap plus the append-only persistence
 design allows for fast and efficient MVCC snapshots.
