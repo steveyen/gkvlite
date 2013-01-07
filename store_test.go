@@ -161,7 +161,7 @@ func TestStoreMem(t *testing.T) {
 		t.Error("expected error on too long item Key")
 	}
 	if xx.SetItem(&Item{Key: []byte("hi"), Val: make([]byte, 2*32+1)}) == nil {
-		t.Error("expected error on too long item Key")
+		t.Error("expected error on too long item Val")
 	}
 }
 
