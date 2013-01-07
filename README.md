@@ -78,15 +78,19 @@ Other features
   provide.
 * You provide the os.File.Sync() - if you want to fsync your file,
   call file.Sync() after you do a Flush().
+* Similar to SQLite's VFS feature, you can supply your own StoreFile
+  interface implementation instead of an actual os.File, for your own
+  advanced testing or file interposing needs.
 * You can supply your own KeyCompare function to order items however
   you want.  The default is bytes.Compare().
 * You can control item priority to access hotter items faster by
-  shuffling them closer to the tops of balanced binary trees (warning:
+  shuffling them closer to the top of balanced binary trees (warning:
   intricate/advanced tradeoffs here).
 * Errors from file operations are propagated all the way back to your
   code, so your application can respond appropriately.
 * Small - the implementation is a single file < 1000 lines of code.
 * Tested - "go test" unit tests.
+* Docs - "go doc" documentation.
 
 LICENSE
 =======
@@ -199,17 +203,27 @@ garbage collector (GC).
 TODO / ideas
 ============
 
-* Performance: consider splitting item storage from node storage, so
-  we're not mixing metadata and data in same page cache pages.  Need
-  to measure how much win this could be in cases like compaction.
+* TODO: Performance: consider splitting item storage from node
+  storage, so we're not mixing metadata and data in same qcache pages.
+  Need to measure how much win this could be in cases like compaction.
   Tradeoff as this could mean no more single file simplicity.
 
-* Allow snapshots to be concurrent, accessible by separate goroutines.
+* TODO: Allow snapshots to be concurrent, accessible by separate
+  goroutines.
 
-* Allow mutability for less garbage, perhaps switching to immutable
-  only when there are in-use snapshots.  This probably won't be a win
-  if there are always active snapshots.
+* TODO: Allow mutability for less garbage, perhaps switching to
+  immutable only when there are in-use snapshots.  This probably won't
+  be a win if there are always active snapshots.
 
-* Keep stats on misses, disk fetches & writes, tree depth, etc.
+* TODO: Keep stats on misses, disk fetches & writes, tree depth, etc.
+
+* TODO: Provide O(1) collection copying.
+
+* TODO: Provide O(log N) collection spliting.
+
+* TODO: Provide O(1) MidItem() or TopItem() implementation, so that
+  users can split collections at decent points.
+
+* TODO: Provide item priority shifting during CopyTo().
 
 * See more TODO's throughout codebase / grep.
