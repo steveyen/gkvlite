@@ -266,7 +266,6 @@ type itemLoc struct {
 }
 
 func (i *itemLoc) write(o *Store) error {
-	// TODO: allow saving a db file as a value in another db file.
 	if i.loc.isEmpty() {
 		if i.item != nil {
 			offset := o.size
