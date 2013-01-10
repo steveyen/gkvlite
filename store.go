@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"os"
 )
 
@@ -36,8 +37,8 @@ var MAGIC_END []byte = []byte("3e4a5p")
 
 // Use nil for file for in-memory-only (non-persistent) usage.
 func NewStore(file StoreFile) (res *Store, err error) {
-	if file == nil { // Return a memory-only Store.
-		return &Store{Coll: make(map[string]*Collection)}, nil
+	if file == nil || !reflect.ValueOf(file).Elem().IsValid() {
+		return &Store{Coll: make(map[string]*Collection)}, nil // Memory-only Store.
 	}
 	res = &Store{Coll: make(map[string]*Collection), file: file}
 	if err = res.readRoots(); err == nil {
