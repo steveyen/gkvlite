@@ -522,12 +522,10 @@ func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
 }
 
 func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
-	err = this.read(o)
-	if err != nil {
+	if err = this.read(o); err != nil {
 		return empty, err
 	}
-	err = that.read(o)
-	if err != nil {
+	if err = that.read(o); err != nil {
 		return empty, err
 	}
 	if this.isEmpty() {
@@ -537,13 +535,11 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		return this, nil
 	}
 	thisItem := &this.node.item
-	err = thisItem.read(o, false)
-	if err != nil {
+	if err = thisItem.read(o, false); err != nil {
 		return empty, err
 	}
 	thatItem := &that.node.item
-	err = thatItem.read(o, false)
-	if err != nil {
+	if err = thatItem.read(o, false); err != nil {
 		return empty, err
 	}
 	if thisItem.item.Priority > thatItem.item.Priority {
@@ -638,12 +634,10 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 
 // All the keys from this should be < keys from that.
 func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
-	err = this.read(o)
-	if err != nil {
+	if err = this.read(o); err != nil {
 		return empty, err
 	}
-	err = that.read(o)
-	if err != nil {
+	if err = that.read(o); err != nil {
 		return empty, err
 	}
 	if this.isEmpty() {
@@ -653,13 +647,11 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 		return this, nil
 	}
 	thisItem := &this.node.item
-	err = thisItem.read(o, false)
-	if err != nil {
+	if err = thisItem.read(o, false); err != nil {
 		return empty, err
 	}
 	thatItem := &that.node.item
-	err = thatItem.read(o, false)
-	if err != nil {
+	if err = thatItem.read(o, false); err != nil {
 		return empty, err
 	}
 	if thisItem.item.Priority > thatItem.item.Priority {
@@ -813,13 +805,11 @@ func (o *Store) readRoots() error {
 				}
 				if version != VERSION {
 					return fmt.Errorf("version mismatch: "+
-						"current version: %v != found version: %v",
-						VERSION, version)
+						"current version: %v != found version: %v", VERSION, version)
 				}
 				if length0 != length {
 					return fmt.Errorf("length mismatch: "+
-						"wanted length: %v != found length: %v",
-						length0, length)
+						"wanted length: %v != found length: %v", length0, length)
 				}
 				m := &Store{}
 				if err = json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m); err != nil {
