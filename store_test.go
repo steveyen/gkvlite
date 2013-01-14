@@ -160,6 +160,12 @@ func TestStoreMem(t *testing.T) {
 	if xx.SetItem(&Item{Key: make([]byte, 0xffff+1), Val: []byte{}}) == nil {
 		t.Error("expected error on too long item Key")
 	}
+	if xx.SetItem(&Item{Key: make([]byte, 0xffff-1), Val: []byte{}}) != nil {
+		t.Error("expected success on just under key length")
+	}
+	if xx.SetItem(&Item{Key: make([]byte, 0xffff), Val: []byte{}}) != nil {
+		t.Error("expected success on just perfect key length")
+	}
 }
 
 func loadCollection(x *Collection, arr []string) {
