@@ -522,63 +522,74 @@ func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
 }
 
 func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
-	if err = this.read(o); err == nil {
-		if err = that.read(o); err == nil {
-			if this.isEmpty() {
-				return that, nil
-			}
-			if that.isEmpty() {
-				return this, nil
-			}
-			thisItem := &this.node.item
-			if err = thisItem.read(o, false); err == nil {
-				thatItem := &that.node.item
-				if err = thatItem.read(o, false); err == nil {
-					if thisItem.item.Priority > thatItem.item.Priority {
-						left, middle, right, err := o.split(t, that, thisItem.item.Key)
-						if err == nil {
-							newLeft, err := o.union(t, &this.node.left, left)
-							if err == nil {
-								newRight, err := o.union(t, &this.node.right, right)
-								if err == nil {
-									if middle.isEmpty() {
-										return &nodeLoc{node: &node{
-											item:  *thisItem,
-											left:  *newLeft,
-											right: *newRight,
-										}}, nil
-									} else {
-										return &nodeLoc{node: &node{
-											item:  middle.node.item,
-											left:  *newLeft,
-											right: *newRight,
-										}}, nil
-									}
-								}
-							}
-						}
-					} else {
-						// We don't use middle because the "that" node has precendence.
-						left, _, right, err := o.split(t, this, thatItem.item.Key)
-						if err == nil {
-							newLeft, err := o.union(t, left, &that.node.left)
-							if err == nil {
-								newRight, err := o.union(t, right, &that.node.right)
-								if err == nil {
-									return &nodeLoc{node: &node{
-										item:  *thatItem,
-										left:  *newLeft,
-										right: *newRight,
-									}}, nil
-								}
-							}
-						}
-					}
-				}
-			}
-		}
+	err = this.read(o)
+	if err != nil {
+		return empty, err
 	}
-	return empty, err
+	err = that.read(o)
+	if err != nil {
+		return empty, err
+	}
+	if this.isEmpty() {
+		return that, nil
+	}
+	if that.isEmpty() {
+		return this, nil
+	}
+	thisItem := &this.node.item
+	err = thisItem.read(o, false)
+	if err != nil {
+		return empty, err
+	}
+	thatItem := &that.node.item
+	err = thatItem.read(o, false)
+	if err != nil {
+		return empty, err
+	}
+	if thisItem.item.Priority > thatItem.item.Priority {
+		left, middle, right, err := o.split(t, that, thisItem.item.Key)
+		if err != nil {
+			return empty, err
+		}
+		newLeft, err := o.union(t, &this.node.left, left)
+		if err != nil {
+			return empty, err
+		}
+		newRight, err := o.union(t, &this.node.right, right)
+		if err != nil {
+			return empty, err
+		}
+		if middle.isEmpty() {
+			return &nodeLoc{node: &node{
+					item:  *thisItem,
+					left:  *newLeft,
+					right: *newRight,
+			}}, nil
+		}
+		return &nodeLoc{node: &node{
+				item:  middle.node.item,
+				left:  *newLeft,
+				right: *newRight,
+		}}, nil
+	}
+	// We don't use middle because the "that" node has precendence.
+	left, _, right, err := o.split(t, this, thatItem.item.Key)
+	if err != nil {
+		return empty, err
+	}
+	newLeft, err := o.union(t, left, &that.node.left)
+	if err != nil {
+		return empty, err
+	}
+	newRight, err := o.union(t, right, &that.node.right)
+	if err != nil {
+		return empty, err
+	}
+	return &nodeLoc{node: &node{
+			item:  *thatItem,
+			left:  *newLeft,
+			right: *newRight,
+	}}, nil
 }
 
 // Splits a treap into two treaps based on a split key "s".  The
