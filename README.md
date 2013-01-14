@@ -231,13 +231,20 @@ TODO / ideas
 
 * TODO: Provide item priority shifting during CopyTo().
 
+* TODO: Consider tracking item counts.  Users can workaround this by
+  counting themselves and storing that and other metdata in their
+  own collections.
+
+* TODO: Allow users to retrieve an item's value size (in bytes)
+  without having to first fetch the item into memory.
+
 * TODO: Allow more fine-grained cached item and node eviction.  Node
-  and item objects are current cached in-memory by gkvlite for higher
-  retrieval performance, only for the nodes & items that you either
-  have updated or have fetched from disk.  Certain applications may
-  need that memory instead, though, for more important tasks.  The
-  current sledgehammer workaround is to drop all your references to
-  any relevant Stores and Collections, let GC reclaim memory, and
-  start brand new Store/Collection references.
+  and item objects are currently cached in-memory by gkvlite for
+  higher retrieval performance, only for the nodes & items that you
+  either have updated or have fetched from disk.  Certain applications
+  may need that memory instead, though, for more important tasks.  The
+  current coarse workaround is to drop all your references to any
+  relevant Stores and Collections, start brand new Store/Collection
+  instances, and let GC reclaim memory.
 
 * See more TODO's throughout codebase / grep.
