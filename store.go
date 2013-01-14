@@ -139,39 +139,41 @@ func (s *Store) Snapshot() (snapshot *Store) {
 // copying.  The copy will not include any old items or nodes so the
 // copy should be more compact if flushEvery is relatively large.
 func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error) {
-	if dstStore, err := NewStore(dstFile); err == nil {
-		for name, srcColl := range s.Coll {
-			dstColl := dstStore.SetCollection(name, srcColl.compare)
-			if minItem, err := srcColl.MinItem(true); err == nil && minItem != nil {
-				numItems := 0
-				var errCopyItem error = nil
-				if err = srcColl.VisitItemsAscend(minItem.Key, true, func(i *Item) bool {
-					if errCopyItem = dstColl.SetItem(i); errCopyItem != nil {
+	dstStore, err := NewStore(dstFile)
+	if err != nil {
+		return nil, err
+	}
+	for name, srcColl := range s.Coll {
+		dstColl := dstStore.SetCollection(name, srcColl.compare)
+		if minItem, err := srcColl.MinItem(true); err == nil && minItem != nil {
+			numItems := 0
+			var errCopyItem error = nil
+			err = srcColl.VisitItemsAscend(minItem.Key, true, func(i *Item) bool {
+				if errCopyItem = dstColl.SetItem(i); errCopyItem != nil {
+					return false
+				}
+				numItems++
+				if flushEvery > 0 && numItems%flushEvery == 0 {
+					if errCopyItem = dstStore.Flush(); errCopyItem != nil {
 						return false
 					}
-					numItems++
-					if flushEvery > 0 && numItems%flushEvery == 0 {
-						if errCopyItem = dstStore.Flush(); errCopyItem != nil {
-							return false
-						}
-					}
-					return true
-				}); err != nil {
-					return nil, err
 				}
-				if errCopyItem != nil {
-					return nil, errCopyItem
-				}
-			}
-		}
-		if flushEvery > 0 {
-			if err = dstStore.Flush(); err != nil {
+				return true
+			})
+			if err != nil {
 				return nil, err
 			}
+			if errCopyItem != nil {
+				return nil, errCopyItem
+			}
 		}
-		return dstStore, nil
 	}
-	return nil, err
+	if flushEvery > 0 {
+		if err = dstStore.Flush(); err != nil {
+			return nil, err
+		}
+	}
+	return dstStore, nil
 }
 
 // User-supplied key comparison func should return 0 if a == b,
