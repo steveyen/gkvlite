@@ -270,7 +270,7 @@ func TestStoreFile(t *testing.T) {
 	os.Remove(fname)
 	f, err := os.Create(fname)
 	if err != nil || f == nil {
-		t.Error("could not create file: %v", fname)
+		t.Errorf("could not create file: %v", fname)
 	}
 
 	s, err := NewStore(f)
@@ -664,15 +664,15 @@ func TestStoreFile(t *testing.T) {
 		os.Remove(ccName)
 		ccFile, err := os.Create(ccName)
 		if err != nil || f == nil {
-			t.Error("%v: could not create file: %v", ccTestIdx, fname)
+			t.Errorf("%v: could not create file: %v", ccTestIdx, fname)
 		}
 		cc, err := ccTest.src.CopyTo(ccFile, ccTest.fevery)
 		if err != nil {
-			t.Error("%v: expected successful CopyTo, got: %v", ccTestIdx, err)
+			t.Errorf("%v: expected successful CopyTo, got: %v", ccTestIdx, err)
 		}
 		cx := cc.GetCollection("x")
 		if cx == nil {
-			t.Error("%v: expected successful CopyTo of x coll", ccTestIdx)
+			t.Errorf("%v: expected successful CopyTo of x coll", ccTestIdx)
 		}
 		visitExpectCollection(t, cx, "a", ccTest.expect)
 		if ccTest.fevery > 100 {
@@ -687,7 +687,8 @@ func TestStoreFile(t *testing.T) {
 		} else {
 			err = cc.Flush()
 			if err != nil {
-				t.Error("%v: expect Flush() to work on snapshot, got: %v", ccTestIdx, err)
+				t.Errorf("%v: expect Flush() to work on snapshot, got: %v",
+					ccTestIdx, err)
 			}
 		}
 		ccFile.Close()
@@ -696,11 +697,12 @@ func TestStoreFile(t *testing.T) {
 		ccFile, err = os.Open(ccName)
 		cc, err = NewStore(ccFile)
 		if err != nil {
-			t.Error("%v: expected successful NewStore against snapshot file, got: %v", ccTestIdx, err)
+			t.Errorf("%v: expected successful NewStore against snapshot file, got: %v",
+				ccTestIdx, err)
 		}
 		cx = cc.GetCollection("x")
 		if cx == nil {
-			t.Error("%v: expected successful CopyTo of x coll", ccTestIdx)
+			t.Errorf("%v: expected successful CopyTo of x coll", ccTestIdx)
 		}
 		visitExpectCollection(t, cx, "a", ccTest.expect)
 		if ccTest.fevery > 100 {
@@ -708,7 +710,7 @@ func TestStoreFile(t *testing.T) {
 			finfoSrc, _ := ccTest.src.file.Stat()
 			finfoCpy, _ := cc.file.Stat()
 			if finfoSrc.Size() < finfoCpy.Size() {
-				t.Error("%v: expected copy to be smaller / compacted"+
+				t.Errorf("%v: expected copy to be smaller / compacted"+
 					"src size: %v, cpy size: %v", ccTestIdx,
 					finfoSrc.Size(), finfoCpy.Size())
 			}
@@ -723,7 +725,7 @@ func TestStoreMultipleCollections(t *testing.T) {
 	os.Remove(fname)
 	f, err := os.Create(fname)
 	if err != nil || f == nil {
-		t.Error("could not create file: %v", fname)
+		t.Errorf("could not create file: %v", fname)
 	}
 
 	s, err := NewStore(f)
