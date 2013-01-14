@@ -394,7 +394,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
 			err = n.read(t.store)
 		} else {
 			if withValue {
-				if err := i.read(t.store, withValue); err != nil {
+				if err = i.read(t.store, withValue); err != nil {
 					return nil, err
 				}
 			}
@@ -407,10 +407,14 @@ func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
 // Retrieve a value by its key.  Returns nil if the item is not in the
 // collection.  The returned value should be treated as immutable.
 func (t *Collection) Get(key []byte) (val []byte, err error) {
-	if i, err := t.GetItem(key, true); err == nil && i != nil {
+	i, err := t.GetItem(key, true)
+	if err != nil {
+		return nil, err
+	}
+	if i != nil {
 		return i.Val, nil
 	}
-	return nil, err
+	return nil, nil
 }
 
 // Replace or insert an item of a given key.
@@ -422,15 +426,17 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		item.Val == nil || len(item.Val) > 2^32 {
 		return errors.New("Item.Key/Val missing or too long")
 	}
-	if r, err := t.store.union(t, &t.root,
+	r, err := t.store.union(t, &t.root,
 		&nodeLoc{node: &node{item: itemLoc{item: &Item{
 			Key:      item.Key,
 			Val:      item.Val,
 			Priority: item.Priority,
-		}}}}); err == nil {
-		t.root = *r
+		}}}})
+	if err != nil {
+		return err
 	}
-	return err
+	t.root = *r
+	return nil
 }
 
 // Replace or insert an item of a given key.
@@ -440,12 +446,16 @@ func (t *Collection) Set(key []byte, val []byte) error {
 
 // Deletes an item of a given key.
 func (t *Collection) Delete(key []byte) (err error) {
-	if left, _, right, err := t.store.split(t, &t.root, key); err == nil {
-		if r, err := t.store.join(left, right); err == nil {
-			t.root = *r
-		}
+	left, _, right, err := t.store.split(t, &t.root, key)
+	if err != nil {
+		return err
 	}
-	return err
+	r, err := t.store.join(left, right)
+	if err != nil {
+		return err
+	}
+	t.root = *r
+	return nil
 }
 
 // Retrieves the item with the "smallest" key.
