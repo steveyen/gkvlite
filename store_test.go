@@ -157,11 +157,8 @@ func TestStoreMem(t *testing.T) {
 	if xx.SetItem(&Item{Key: []byte{}, Val: []byte{}}) == nil {
 		t.Error("expected error on zero-length item Key")
 	}
-	if xx.SetItem(&Item{Key: make([]byte, 2*16+1), Val: []byte{}}) == nil {
+	if xx.SetItem(&Item{Key: make([]byte, 0xffff+1), Val: []byte{}}) == nil {
 		t.Error("expected error on too long item Key")
-	}
-	if xx.SetItem(&Item{Key: []byte("hi"), Val: make([]byte, 2*32+1)}) == nil {
-		t.Error("expected error on too long item Val")
 	}
 }
 

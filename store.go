@@ -424,8 +424,8 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 // but advanced users may consider using non-random item priorities
 // at the risk of unbalancing the lookup tree.
 func (t *Collection) SetItem(item *Item) (err error) {
-	if item.Key == nil || len(item.Key) > 2^16 || len(item.Key) == 0 ||
-		item.Val == nil || len(item.Val) > 2^32 {
+	if item.Key == nil || len(item.Key) > 0xffff || len(item.Key) == 0 ||
+		item.Val == nil {
 		return errors.New("Item.Key/Val missing or too long")
 	}
 	r, err := t.store.union(t, &t.root,
