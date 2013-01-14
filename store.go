@@ -561,15 +561,15 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		}
 		if middle.isEmpty() {
 			return &nodeLoc{node: &node{
-					item:  *thisItem,
-					left:  *newLeft,
-					right: *newRight,
+				item:  *thisItem,
+				left:  *newLeft,
+				right: *newRight,
 			}}, nil
 		}
 		return &nodeLoc{node: &node{
-				item:  middle.node.item,
-				left:  *newLeft,
-				right: *newRight,
+			item:  middle.node.item,
+			left:  *newLeft,
+			right: *newRight,
 		}}, nil
 	}
 	// We don't use middle because the "that" node has precendence.
@@ -586,9 +586,9 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		return empty, err
 	}
 	return &nodeLoc{node: &node{
-			item:  *thatItem,
-			left:  *newLeft,
-			right: *newRight,
+		item:  *thatItem,
+		left:  *newLeft,
+		right: *newRight,
 	}}, nil
 }
 
@@ -602,6 +602,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	if err := n.read(o); err != nil || n.isEmpty() {
 		return empty, empty, empty, err
 	}
+
 	nItem := &n.node.item
 	if err := nItem.read(o, false); err != nil {
 		return empty, empty, empty, err
@@ -637,40 +638,50 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 
 // All the keys from this should be < keys from that.
 func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
-	if err = this.read(o); err == nil {
-		if err = that.read(o); err == nil {
-			if this.isEmpty() {
-				return that, nil
-			}
-			if that.isEmpty() {
-				return this, nil
-			}
-			thisItem := &this.node.item
-			if err = thisItem.read(o, false); err == nil {
-				thatItem := &that.node.item
-				if err = thatItem.read(o, false); err == nil {
-					if thisItem.item.Priority > thatItem.item.Priority {
-						if newRight, err := o.join(&this.node.right, that); err == nil {
-							return &nodeLoc{node: &node{
-								item:  *thisItem,
-								left:  this.node.left,
-								right: *newRight,
-							}}, nil
-						}
-					} else {
-						if newLeft, err := o.join(this, &that.node.left); err == nil {
-							return &nodeLoc{node: &node{
-								item:  *thatItem,
-								left:  *newLeft,
-								right: that.node.right,
-							}}, nil
-						}
-					}
-				}
-			}
-		}
+	err = this.read(o)
+	if err != nil {
+		return empty, err
 	}
-	return empty, err
+	err = that.read(o)
+	if err != nil {
+		return empty, err
+	}
+	if this.isEmpty() {
+		return that, nil
+	}
+	if that.isEmpty() {
+		return this, nil
+	}
+	thisItem := &this.node.item
+	err = thisItem.read(o, false)
+	if err != nil {
+		return empty, err
+	}
+	thatItem := &that.node.item
+	err = thatItem.read(o, false)
+	if err != nil {
+		return empty, err
+	}
+	if thisItem.item.Priority > thatItem.item.Priority {
+		newRight, err := o.join(&this.node.right, that)
+		if err != nil {
+			return empty, err
+		}
+		return &nodeLoc{node: &node{
+			item:  *thisItem,
+			left:  this.node.left,
+			right: *newRight,
+		}}, nil
+	}
+	newLeft, err := o.join(this, &that.node.left)
+	if err != nil {
+		return empty, err
+	}
+	return &nodeLoc{node: &node{
+		item:  *thatItem,
+		left:  *newLeft,
+		right: that.node.right,
+	}}, nil
 }
 
 func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
@@ -723,101 +734,106 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 	return o.visitAscendNode(t, &n.node.right, target, withValue, visitor)
 }
 
-func (o *Store) writeRoots() (err error) {
-	if sJSON, err := json.Marshal(o); err == nil {
-		offset := o.size
-		length := 2*len(MAGIC_BEG) + 4 + 4 + len(sJSON) + 8 + 4 + 2*len(MAGIC_END)
-		b := bytes.NewBuffer(make([]byte, length)[:0])
-		b.Write(MAGIC_BEG)
-		b.Write(MAGIC_BEG)
-		binary.Write(b, binary.BigEndian, uint32(VERSION))
-		binary.Write(b, binary.BigEndian, uint32(length))
-		b.Write(sJSON)
-		binary.Write(b, binary.BigEndian, int64(offset))
-		binary.Write(b, binary.BigEndian, uint32(length))
-		b.Write(MAGIC_END)
-		b.Write(MAGIC_END)
-		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
-			return err
-		}
-		o.size = offset + int64(length)
+func (o *Store) writeRoots() error {
+	sJSON, err := json.Marshal(o)
+	if err != nil {
+		return err
 	}
-	return err
+	offset := o.size
+	length := 2*len(MAGIC_BEG) + 4 + 4 + len(sJSON) + 8 + 4 + 2*len(MAGIC_END)
+	b := bytes.NewBuffer(make([]byte, length)[:0])
+	b.Write(MAGIC_BEG)
+	b.Write(MAGIC_BEG)
+	binary.Write(b, binary.BigEndian, uint32(VERSION))
+	binary.Write(b, binary.BigEndian, uint32(length))
+	b.Write(sJSON)
+	binary.Write(b, binary.BigEndian, int64(offset))
+	binary.Write(b, binary.BigEndian, uint32(length))
+	b.Write(MAGIC_END)
+	b.Write(MAGIC_END)
+	if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
+		return err
+	}
+	o.size = offset + int64(length)
+	return nil
 }
 
-func (o *Store) readRoots() (err error) {
-	if finfo, err := o.file.Stat(); err == nil {
-		o.size = finfo.Size()
-		if o.size > 0 {
-			endBArr := make([]byte, 8+4+2*len(MAGIC_END))
-			minSize := int64(2*len(MAGIC_BEG) + 4 + 4 + len(endBArr))
-			for {
-				for { // Scan backwards for MAGIC_END.
-					if o.size <= minSize {
-						return errors.New("couldn't find roots; file corrupted or wrong?")
-					}
-					if _, err := o.file.ReadAt(endBArr,
-						o.size-int64(len(endBArr))); err != nil {
-						return err
-					}
-					if bytes.Equal(MAGIC_END, endBArr[8+4:8+4+len(MAGIC_END)]) &&
-						bytes.Equal(MAGIC_END, endBArr[8+4+len(MAGIC_END):]) {
-						break
-					}
-					o.size = o.size - 1 // TODO: optimizations to scan backwards faster.
-				}
-				// Read and check the roots.
-				var offset int64
-				var length uint32
-				endBuf := bytes.NewBuffer(endBArr)
-				err = binary.Read(endBuf, binary.BigEndian, &offset)
-				if err != nil {
-					return err
-				}
-				if err = binary.Read(endBuf, binary.BigEndian, &length); err != nil {
-					return err
-				}
-				if offset >= 0 && offset < o.size-int64(minSize) &&
-					length == uint32(o.size-offset) {
-					data := make([]byte, o.size-offset-int64(len(endBArr)))
-					if _, err := o.file.ReadAt(data, offset); err != nil {
-						return err
-					}
-					if bytes.Equal(MAGIC_BEG, data[:len(MAGIC_BEG)]) &&
-						bytes.Equal(MAGIC_BEG, data[len(MAGIC_BEG):2*len(MAGIC_BEG)]) {
-						var version, length0 uint32
-						b := bytes.NewBuffer(data[2*len(MAGIC_BEG):])
-						if err = binary.Read(b, binary.BigEndian, &version); err != nil {
-							return err
-						}
-						if err = binary.Read(b, binary.BigEndian, &length0); err != nil {
-							return err
-						}
-						if version != VERSION {
-							return fmt.Errorf("version mismatch: "+
-								"current version: %v != found version: %v",
-								VERSION, version)
-						}
-						if length0 != length {
-							return fmt.Errorf("length mismatch: "+
-								"wanted length: %v != found length: %v",
-								length0, length)
-						}
-						m := &Store{}
-						if err = json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m); err != nil {
-							return err
-						}
-						o.Coll = m.Coll
-						for _, t := range o.Coll {
-							t.store = o
-							t.compare = bytes.Compare
-						}
-						return nil
-					} // else, perhaps value was unlucky in having MAGIC_END's.
-				} // else, perhaps a gkvlite file was stored as a value.
-				o.size = o.size - 1 // Roots were wrong, so keep scanning.
-			}
-		}
+func (o *Store) readRoots() error {
+	finfo, err := o.file.Stat()
+	if err != nil {
+		return err
 	}
-	return err
+	o.size = finfo.Size()
+	if o.size <= 0 {
+		return nil
+	}
+	endBArr := make([]byte, 8+4+2*len(MAGIC_END))
+	minSize := int64(2*len(MAGIC_BEG) + 4 + 4 + len(endBArr))
+	for {
+		for { // Scan backwards for MAGIC_END.
+			if o.size <= minSize {
+				return errors.New("couldn't find roots; file corrupted or wrong?")
+			}
+			if _, err := o.file.ReadAt(endBArr,
+				o.size-int64(len(endBArr))); err != nil {
+				return err
+			}
+			if bytes.Equal(MAGIC_END, endBArr[8+4:8+4+len(MAGIC_END)]) &&
+				bytes.Equal(MAGIC_END, endBArr[8+4+len(MAGIC_END):]) {
+				break
+			}
+			o.size = o.size - 1 // TODO: optimizations to scan backwards faster.
+		}
+		// Read and check the roots.
+		var offset int64
+		var length uint32
+		endBuf := bytes.NewBuffer(endBArr)
+		err = binary.Read(endBuf, binary.BigEndian, &offset)
+		if err != nil {
+			return err
+		}
+		if err = binary.Read(endBuf, binary.BigEndian, &length); err != nil {
+			return err
+		}
+		if offset >= 0 && offset < o.size-int64(minSize) &&
+			length == uint32(o.size-offset) {
+			data := make([]byte, o.size-offset-int64(len(endBArr)))
+			if _, err := o.file.ReadAt(data, offset); err != nil {
+				return err
+			}
+			if bytes.Equal(MAGIC_BEG, data[:len(MAGIC_BEG)]) &&
+				bytes.Equal(MAGIC_BEG, data[len(MAGIC_BEG):2*len(MAGIC_BEG)]) {
+				var version, length0 uint32
+				b := bytes.NewBuffer(data[2*len(MAGIC_BEG):])
+				if err = binary.Read(b, binary.BigEndian, &version); err != nil {
+					return err
+				}
+				if err = binary.Read(b, binary.BigEndian, &length0); err != nil {
+					return err
+				}
+				if version != VERSION {
+					return fmt.Errorf("version mismatch: "+
+						"current version: %v != found version: %v",
+						VERSION, version)
+				}
+				if length0 != length {
+					return fmt.Errorf("length mismatch: "+
+						"wanted length: %v != found length: %v",
+						length0, length)
+				}
+				m := &Store{}
+				if err = json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m); err != nil {
+					return err
+				}
+				o.Coll = m.Coll
+				for _, t := range o.Coll {
+					t.store = o
+					t.compare = bytes.Compare
+				}
+				return nil
+			} // else, perhaps value was unlucky in having MAGIC_END's.
+		} // else, perhaps a gkvlite file was stored as a value.
+		o.size = o.size - 1 // Roots were wrong, so keep scanning.
+	}
+	return nil
 }
