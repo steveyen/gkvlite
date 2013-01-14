@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"reflect"
@@ -14,8 +15,9 @@ import (
 // The StoreFile interface is implemented by os.File, where this
 // extra level of indirection is inspired by SQLite's VFS layer.
 type StoreFile interface {
-	WriteAt(b []byte, offset int64) (numWritten int, err error)
-	ReadAt(b []byte, offset int64) (numRead int, err error)
+	io.ReaderAt
+	io.WriterAt
+
 	Stat() (os.FileInfo, error)
 }
 
