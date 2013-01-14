@@ -169,6 +169,11 @@ collection can hold a JSON document per user, keyed by userId.
 Another "userEmails" collection can be used like a secondary index,
 keyed by "emailAddress:userId", with empty values (e.g., []byte{}).
 
+To perform "bulk inserts", or batched mutations, this is roughly
+supported in gkvlite where your application should only occasionally
+invoke Flush() after N mutations, as opposed to invoking a Flush()
+after every Set/Delete().
+
 Implementation / design
 =======================
 
