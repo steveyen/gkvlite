@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"reflect"
 	"os"
+	"reflect"
 )
 
 // The StoreFile interface is implemented by os.File, where this
@@ -477,7 +477,7 @@ func (t *Collection) MarshalJSON() ([]byte, error) {
 // Unmarshals JSON representation of root node file location.
 func (t *Collection) UnmarshalJSON(d []byte) (err error) {
 	p := ploc{}
-	if err := json.Unmarshal(d, &p); err == nil {
+	if err = json.Unmarshal(d, &p); err == nil {
 		t.root.loc = &p
 	}
 	return err
@@ -510,8 +510,8 @@ func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
 }
 
 func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
-	if err := this.read(o); err == nil {
-		if err := that.read(o); err == nil {
+	if err = this.read(o); err == nil {
+		if err = that.read(o); err == nil {
 			if this.isEmpty() {
 				return that, nil
 			}
@@ -519,9 +519,9 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 				return this, nil
 			}
 			thisItem := &this.node.item
-			if err := thisItem.read(o, false); err == nil {
+			if err = thisItem.read(o, false); err == nil {
 				thatItem := &that.node.item
-				if err := thatItem.read(o, false); err == nil {
+				if err = thatItem.read(o, false); err == nil {
 					if thisItem.item.Priority > thatItem.item.Priority {
 						left, middle, right, err := o.split(t, that, thisItem.item.Key)
 						if err == nil {
