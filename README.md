@@ -213,6 +213,12 @@ garbage collector (GC).
 TODO / ideas
 ============
 
+* TODO: Instead of the current "single-threaded" limitation, allow
+  users to have multiple, concurrent goroutines: multiple readers, one
+  mutator, one flusher, one compactor.  What if any of those
+  goroutines, however, need to fetch from disk?  Perhaps allow more
+  than 1 os.File's?
+
 * TODO: Performance: consider splitting item storage from node
   storage, so we're not mixing metadata and data in same cache pages.
   Need to measure how much win this could be in cases like compaction.
