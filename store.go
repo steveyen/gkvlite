@@ -147,27 +147,32 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 	}
 	for name, srcColl := range s.Coll {
 		dstColl := dstStore.SetCollection(name, srcColl.compare)
-		if minItem, err := srcColl.MinItem(true); err == nil && minItem != nil {
-			numItems := 0
-			var errCopyItem error = nil
-			err = srcColl.VisitItemsAscend(minItem.Key, true, func(i *Item) bool {
-				if errCopyItem = dstColl.SetItem(i); errCopyItem != nil {
+		minItem, err := srcColl.MinItem(true)
+		if err != nil {
+			return nil, err
+		}
+		if minItem == nil {
+			continue
+		}
+		numItems := 0
+		var errCopyItem error = nil
+		err = srcColl.VisitItemsAscend(minItem.Key, true, func(i *Item) bool {
+			if errCopyItem = dstColl.SetItem(i); errCopyItem != nil {
+				return false
+			}
+			numItems++
+			if flushEvery > 0 && numItems%flushEvery == 0 {
+				if errCopyItem = dstStore.Flush(); errCopyItem != nil {
 					return false
 				}
-				numItems++
-				if flushEvery > 0 && numItems%flushEvery == 0 {
-					if errCopyItem = dstStore.Flush(); errCopyItem != nil {
-						return false
-					}
-				}
-				return true
-			})
-			if err != nil {
-				return nil, err
 			}
-			if errCopyItem != nil {
-				return nil, errCopyItem
-			}
+			return true
+		})
+		if err != nil {
+			return nil, err
+		}
+		if errCopyItem != nil {
+			return nil, errCopyItem
 		}
 	}
 	if flushEvery > 0 {
