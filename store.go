@@ -25,8 +25,7 @@ type StoreFile interface {
 
 // A persistable store holding collections of ordered keys & values.
 // The persistence is append-only based on immutable, copy-on-write
-// treaps for robustness.  This implementation is single-threaded, so
-// users should serialize their accesses.
+// treaps for robustness.
 type Store struct {
 	coll     unsafe.Pointer // Immutable, read-only map[string]*Collection.
 	file     StoreFile
@@ -321,40 +320,48 @@ type Item struct {
 // A persistable item and its persistence location.
 type itemLoc struct {
 	loc  unsafe.Pointer // *ploc - can be nil if item is dirty (not yet persisted).
-	item *Item          // Can be nil if item is not fetched into memory yet.
+	item unsafe.Pointer // *Item - can be nil if item is not fetched into memory yet.
 }
 
 func (i *itemLoc) Loc() *ploc {
 	return (*ploc)(atomic.LoadPointer(&i.loc))
 }
 
+func (i *itemLoc) Item() *Item {
+	return (*Item)(atomic.LoadPointer(&i.item))
+}
+
 func (i *itemLoc) write(o *Store) error {
 	if i.Loc().isEmpty() {
-		if i.item != nil {
-			offset := atomic.LoadInt64(&o.size)
-			length := 4 + 2 + 4 + 4 + len(i.item.Key) + len(i.item.Val)
-			b := bytes.NewBuffer(make([]byte, length)[:0])
-			binary.Write(b, binary.BigEndian, uint32(length))
-			binary.Write(b, binary.BigEndian, uint16(len(i.item.Key)))
-			binary.Write(b, binary.BigEndian, uint32(len(i.item.Val)))
-			binary.Write(b, binary.BigEndian, int32(i.item.Priority))
-			b.Write(i.item.Key)
-			b.Write(i.item.Val) // TODO: handle large values more efficiently.
-			if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
-				return err
-			}
-			atomic.StoreInt64(&o.size, offset+int64(length))
-			atomic.StorePointer(&i.loc,
-				unsafe.Pointer(&ploc{Offset: offset, Length: uint32(length)}))
-		} else {
-			return errors.New("flushItems saw node with no itemLoc and no item")
+		iItem := i.Item()
+		if iItem == nil {
+			return errors.New("itemLoc.write with nil item")
 		}
+		offset := atomic.LoadInt64(&o.size)
+		length := 4 + 2 + 4 + 4 + len(iItem.Key) + len(iItem.Val)
+		b := bytes.NewBuffer(make([]byte, length)[:0])
+		binary.Write(b, binary.BigEndian, uint32(length))
+		binary.Write(b, binary.BigEndian, uint16(len(iItem.Key)))
+		binary.Write(b, binary.BigEndian, uint32(len(iItem.Val)))
+		binary.Write(b, binary.BigEndian, int32(iItem.Priority))
+		b.Write(iItem.Key)
+		b.Write(iItem.Val) // TODO: handle large values more efficiently.
+		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
+			return err
+		}
+		atomic.StoreInt64(&o.size, offset+int64(length))
+		atomic.StorePointer(&i.loc,
+			unsafe.Pointer(&ploc{Offset: offset, Length: uint32(length)}))
 	}
 	return nil
 }
 
 func (i *itemLoc) read(o *Store, withValue bool) (err error) {
-	if i != nil && (i.item == nil || (i.item.Val == nil && withValue)) {
+	if i == nil {
+		return nil
+	}
+	iItem := i.Item()
+	if iItem == nil || (iItem.Val == nil && withValue) {
 		loc := i.Loc()
 		if loc.isEmpty() {
 			return nil
@@ -387,7 +394,7 @@ func (i *itemLoc) read(o *Store, withValue bool) (err error) {
 		if withValue {
 			item.Val = b[hdrLength+int(keyLength) : hdrLength+int(keyLength)+int(valLength)]
 		}
-		i.item = item
+		atomic.StorePointer(&i.item, unsafe.Pointer(item))
 	}
 	return nil
 }
@@ -447,10 +454,11 @@ func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
 		if err := i.read(t.store, false); err != nil {
 			return nil, err
 		}
-		if i == nil || i.item == nil || i.item.Key == nil {
-			return nil, errors.New("no item after item.read() in GetItem()")
+		iItem := i.Item()
+		if iItem == nil || iItem.Key == nil {
+			return nil, errors.New("missing item after item.read() in GetItem()")
 		}
-		c := t.compare(key, i.item.Key)
+		c := t.compare(key, iItem.Key)
 		if c < 0 {
 			n = &n.Node().left
 			err = n.read(t.store)
@@ -463,7 +471,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
 					return nil, err
 				}
 			}
-			return i.item, nil
+			return i.Item(), nil // Need to use Item() due to 2nd read().
 		}
 	}
 	return nil, err
@@ -492,11 +500,11 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		return errors.New("Item.Key/Val missing or too long")
 	}
 	r, err := t.store.union(t, &t.root,
-		&nodeLoc{node: unsafe.Pointer(&node{item: itemLoc{item: &Item{
+		&nodeLoc{node: unsafe.Pointer(&node{item: itemLoc{item: unsafe.Pointer(&Item{
 			Key:      item.Key,
 			Val:      item.Val,
 			Priority: item.Priority,
-		}}})})
+		})}})})
 	if err != nil {
 		return err
 	}
@@ -617,8 +625,8 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 	if err = thatItem.read(o, false); err != nil {
 		return empty, err
 	}
-	if thisItem.item.Priority > thatItem.item.Priority {
-		left, middle, right, err := o.split(t, that, thisItem.item.Key)
+	if thisItem.Item().Priority > thatItem.Item().Priority {
+		left, middle, right, err := o.split(t, that, thisItem.Item().Key)
 		if err != nil {
 			return empty, err
 		}
@@ -644,7 +652,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		})}, nil
 	}
 	// We don't use middle because the "that" node has precendence.
-	left, _, right, err := o.split(t, this, thatItem.item.Key)
+	left, _, right, err := o.split(t, this, thatItem.Item().Key)
 	if err != nil {
 		return empty, err
 	}
@@ -680,7 +688,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		return empty, empty, empty, err
 	}
 
-	c := t.compare(s, nItem.item.Key)
+	c := t.compare(s, nItem.Item().Key)
 	if c == 0 {
 		return &nNode.left, n, &nNode.right, nil
 	}
@@ -730,7 +738,7 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 	if err = thatItem.read(o, false); err != nil {
 		return empty, err
 	}
-	if thisItem.item.Priority > thatItem.item.Priority {
+	if thisItem.Item().Priority > thatItem.Item().Priority {
 		newRight, err := o.join(&this.Node().right, that)
 		if err != nil {
 			return empty, err
@@ -766,7 +774,7 @@ func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
 		if child.isEmpty() {
 			i := &n.Node().item
 			if err = i.read(o, withValue); err == nil {
-				return i.item, nil
+				return i.Item(), nil
 			}
 			return nil, err
 		}
@@ -787,7 +795,7 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 	if err := nItem.read(o, false); err != nil {
 		return false, err
 	}
-	if t.compare(target, nItem.item.Key) <= 0 {
+	if t.compare(target, nItem.Item().Key) <= 0 {
 		keepGoing, err := o.visitAscendNode(t, &n.Node().left, target, withValue, visitor)
 		if err != nil || !keepGoing {
 			return false, err
@@ -795,7 +803,7 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 		if err := nItem.read(o, withValue); err != nil {
 			return false, err
 		}
-		if !visitor(nItem.item) {
+		if !visitor(nItem.Item()) {
 			return false, nil
 		}
 	}

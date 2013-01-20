@@ -317,6 +317,20 @@ func TestStoreFile(t *testing.T) {
 	}
 	f.Sync()
 
+	i, err := x.GetItem([]byte("a"), true)
+	if err != nil {
+		t.Errorf("expected s.GetItem(a) to not error, err: %v", err)
+	}
+	if i == nil {
+		t.Errorf("expected s.GetItem(a) to return non-nil item")
+	}
+	if string(i.Key) != "a" {
+		t.Errorf("expected s.GetItem(a) to return key a, got: %v", i.Key)
+	}
+	if string(i.Val) != "a" {
+		t.Errorf("expected s.GetItem(a) to return val a, got: %v", i.Val)
+	}
+
 	// ------------------------------------------------
 
 	f2, err := os.Open(fname) // Test reading the file.
@@ -334,7 +348,7 @@ func TestStoreFile(t *testing.T) {
 	if x2 == nil {
 		t.Errorf("expected x2 to be there")
 	}
-	i, err := x2.GetItem([]byte("a"), true)
+	i, err = x2.GetItem([]byte("a"), true)
 	if err != nil {
 		t.Errorf("expected s2.GetItem(a) to not error, err: %v", err)
 	}
@@ -345,7 +359,7 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected s2.GetItem(a) to return key a, got: %v", i.Key)
 	}
 	if string(i.Val) != "a" {
-		t.Errorf("expected s2.GetItem(a) to return val a, got: %v", i.Val)
+		t.Errorf("expected s2.GetItem(a) to return val a, got: %+v", i)
 	}
 	i2, err := x2.GetItem([]byte("not-there"), true)
 	if i2 != nil || err != nil {
