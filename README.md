@@ -56,8 +56,24 @@ Performance
 Concurrency
 ===========
 
-gkvlite is single-threaded.  Users are encouraged to use Go channels
-or their own locking to serialize access to a Store.
+The simplest way to use gkvlite is in single-threaded fashion, such as
+by using a go channel or other locking to serialize access to a Store.
+
+More advanced users may want to use gkvlite's support for concurrent
+goroutines, where the user's provided StoreFile interface
+implementation must be concurrent safe.  In concurrent usage, it is
+recommended that you have only a single read-write goroutine per
+Store, and should have only a single persistence goroutine per Store
+(doing Flush()'s, which can be a different goroutine than the
+read-write goroutine).  But, you may have multiple, concurrent
+read-only goroutines per Store (doing Get()'s, Snapshot()'s and
+CopyTo()'s).
+
+The idea is that reader goroutines, the read-write goroutine, and the
+persistence goroutine do not need to block each other.
+
+Note that os.File is not a concurrent safe implementation of the
+StoreFile interface.
 
 Snapshots
 =========
@@ -212,16 +228,6 @@ garbage collector (GC).
 
 TODO / ideas
 ============
-
-* TODO: Instead of the current "single-threaded" limitation, allow
-  users to have multiple, concurrent goroutines: multiple readers, one
-  in-memory mutator, one flusher, one compactor.  Switch to atomic CAS
-  variables.  What if any of those goroutines, however, need to fetch
-  from disk?  The os.File needs to be serialized; perhaps do that
-  "outside" due to StoreFile interface.
-
-* TODO: Allow snapshots to be concurrent, accessible by separate
-  goroutines.
 
 * TODO: Performance: consider splitting item storage from node
   storage, so we're not mixing metadata and data in same cache pages.
