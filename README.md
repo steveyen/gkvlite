@@ -220,11 +220,6 @@ TODO / ideas
   from disk?  The os.File needs to be serialized; perhaps do that
   "outside" due to StoreFile interface.
 
-* TODO: The top-level collections map needs to be serialized?
-  GetCollection/SetCollection/RemoveCollection/GetCollectionNames and
-  Flush, Snapshot, CopyTo need to be serialized, as they all access
-  the coll map.
-
 * TODO: Allow snapshots to be concurrent, accessible by separate
   goroutines.
 

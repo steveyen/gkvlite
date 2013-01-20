@@ -11,6 +11,7 @@ import (
 	"os"
 	"reflect"
 	"sync/atomic"
+	"unsafe"
 )
 
 // The StoreFile interface is implemented by os.File, where this
@@ -27,7 +28,7 @@ type StoreFile interface {
 // treaps for robustness.  This implementation is single-threaded, so
 // users should serialize their accesses.
 type Store struct {
-	coll     map[string]*Collection
+	coll     unsafe.Pointer // Immutable, read-only map[string]*Collection.
 	file     StoreFile
 	size     int64
 	readOnly bool
@@ -39,15 +40,18 @@ var MAGIC_BEG []byte = []byte("0g1t2r")
 var MAGIC_END []byte = []byte("3e4a5p")
 
 // Use nil for file for in-memory-only (non-persistent) usage.
-func NewStore(file StoreFile) (res *Store, err error) {
+func NewStore(file StoreFile) (*Store, error) {
+	res := &Store{}
+	coll := make(map[string]*Collection)
+	atomic.StorePointer(&res.coll, unsafe.Pointer(&coll))
 	if file == nil || !reflect.ValueOf(file).Elem().IsValid() {
-		return &Store{coll: make(map[string]*Collection)}, nil // Memory-only Store.
+		return res, nil // Memory-only Store.
 	}
-	res = &Store{coll: make(map[string]*Collection), file: file}
-	if err = res.readRoots(); err == nil {
-		return res, nil
+	res.file = file
+	if err := res.readRoots(); err != nil {
+		return nil, err
 	}
-	return nil, err
+	return res, nil
 }
 
 // SetCollection() is used to create a named Collection, or to modify
@@ -58,21 +62,30 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 	if compare == nil {
 		compare = bytes.Compare
 	}
-	if s.coll[name] == nil {
-		s.coll[name] = &Collection{store: s, compare: compare}
+	for {
+		orig := atomic.LoadPointer(&s.coll)
+		coll := copyColl(*(*map[string]*Collection)(orig))
+		if coll[name] == nil {
+			coll[name] = &Collection{store: s, compare: compare}
+		}
+		coll[name].compare = compare
+		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
+			return coll[name]
+		}
 	}
-	s.coll[name].compare = compare
-	return s.coll[name]
+	return nil // Never reached.
 }
 
 // Retrieves a named Collection.
 func (s *Store) GetCollection(name string) *Collection {
-	return s.coll[name]
+	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
+	return coll[name]
 }
 
 func (s *Store) GetCollectionNames() []string {
-	res := make([]string, len(s.coll))[:0]
-	for name, _ := range s.coll {
+	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
+	res := make([]string, len(coll))[:0]
+	for name, _ := range coll {
 		res = append(res, name)
 	}
 	return res
@@ -82,7 +95,22 @@ func (s *Store) GetCollectionNames() []string {
 // you do a Flush().  Invoking RemoveCollection(x) and then
 // SetCollection(x) is a fast way to empty a Collection.
 func (s *Store) RemoveCollection(name string) {
-	delete(s.coll, name)
+	for {
+		orig := atomic.LoadPointer(&s.coll)
+		coll := copyColl(*(*map[string]*Collection)(orig))
+		delete(coll, name)
+		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
+			return
+		}
+	}
+}
+
+func copyColl(orig map[string]*Collection) map[string]*Collection {
+	res := make(map[string]*Collection)
+	for name, c := range orig {
+		res[name] = c
+	}
+	return res
 }
 
 // Writes (appends) any unpersisted data to file.  As a
@@ -98,7 +126,8 @@ func (s *Store) Flush() (err error) {
 	if s.file == nil {
 		return errors.New("no file / in-memory only, so cannot Flush()")
 	}
-	for _, t := range s.coll {
+	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
+	for _, t := range coll {
 		if err = t.store.flushItems(&t.root); err != nil {
 			return err
 		}
@@ -120,14 +149,15 @@ func (s *Store) Flush() (err error) {
 // persist the snapshot (and any updates on it) to a new file, use
 // snapshot.CopyTo().
 func (s *Store) Snapshot() (snapshot *Store) {
+	coll := copyColl(*(*map[string]*Collection)(atomic.LoadPointer(&s.coll)))
 	res := &Store{
-		coll:     make(map[string]*Collection),
 		file:     s.file,
 		size:     atomic.LoadInt64(&s.size),
 		readOnly: true,
 	}
-	for name, c := range s.coll {
-		res.coll[name] = &Collection{
+	atomic.StorePointer(&res.coll, unsafe.Pointer(&coll))
+	for name, c := range coll {
+		coll[name] = &Collection{
 			store:   res,
 			compare: c.compare,
 			root:    c.root,
@@ -146,7 +176,8 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 	if err != nil {
 		return nil, err
 	}
-	for name, srcColl := range s.coll {
+	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
+	for name, srcColl := range coll {
 		dstColl := dstStore.SetCollection(name, srcColl.compare)
 		minItem, err := srcColl.MinItem(true)
 		if err != nil {
@@ -735,7 +766,8 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 }
 
 func (o *Store) writeRoots() error {
-	sJSON, err := json.Marshal(o.coll)
+	coll := *(*map[string]*Collection)(atomic.LoadPointer(&o.coll))
+	sJSON, err := json.Marshal(coll)
 	if err != nil {
 		return err
 	}
@@ -823,11 +855,11 @@ func (o *Store) readRoots() error {
 				if err = json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m); err != nil {
 					return err
 				}
-				o.coll = m
-				for _, t := range o.coll {
+				for _, t := range m {
 					t.store = o
 					t.compare = bytes.Compare
 				}
+				atomic.StorePointer(&o.coll, unsafe.Pointer(&m))
 				return nil
 			} // else, perhaps value was unlucky in having MAGIC_END's.
 		} // else, perhaps a gkvlite file was stored as a value.
