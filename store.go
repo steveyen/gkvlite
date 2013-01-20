@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"sync/atomic"
 )
 
 // The StoreFile interface is implemented by os.File, where this
@@ -122,7 +123,7 @@ func (s *Store) Snapshot() (snapshot *Store) {
 	res := &Store{
 		Coll:     make(map[string]*Collection),
 		file:     s.file,
-		size:     s.size,
+		size:     atomic.LoadInt64(&s.size),
 		readOnly: true,
 	}
 	for name, coll := range s.Coll {
@@ -214,7 +215,7 @@ func (nloc *nodeLoc) isEmpty() bool {
 
 func (nloc *nodeLoc) write(o *Store) error {
 	if nloc != nil && nloc.loc.isEmpty() && nloc.node != nil {
-		offset := o.size
+		offset := atomic.LoadInt64(&o.size)
 		length := ploc_length + ploc_length + ploc_length
 		b := bytes.NewBuffer(make([]byte, length)[:0])
 		if err := nloc.node.item.loc.write(b); err != nil {
@@ -229,7 +230,7 @@ func (nloc *nodeLoc) write(o *Store) error {
 		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 			return err
 		}
-		o.size = offset + int64(length)
+		atomic.StoreInt64(&o.size, offset+int64(length))
 		nloc.loc = &ploc{Offset: offset, Length: uint32(length)}
 	}
 	return nil
@@ -278,7 +279,7 @@ type itemLoc struct {
 func (i *itemLoc) write(o *Store) error {
 	if i.loc.isEmpty() {
 		if i.item != nil {
-			offset := o.size
+			offset := atomic.LoadInt64(&o.size)
 			length := 4 + 2 + 4 + 4 + len(i.item.Key) + len(i.item.Val)
 			b := bytes.NewBuffer(make([]byte, length)[:0])
 			binary.Write(b, binary.BigEndian, uint32(length))
@@ -290,7 +291,7 @@ func (i *itemLoc) write(o *Store) error {
 			if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 				return err
 			}
-			o.size = offset + int64(length)
+			atomic.StoreInt64(&o.size, offset+int64(length))
 			i.loc = &ploc{Offset: offset, Length: uint32(length)}
 		} else {
 			return errors.New("flushItems saw node with no itemLoc and no item")
@@ -738,7 +739,7 @@ func (o *Store) writeRoots() error {
 	if err != nil {
 		return err
 	}
-	offset := o.size
+	offset := atomic.LoadInt64(&o.size)
 	length := 2*len(MAGIC_BEG) + 4 + 4 + len(sJSON) + 8 + 4 + 2*len(MAGIC_END)
 	b := bytes.NewBuffer(make([]byte, length)[:0])
 	b.Write(MAGIC_BEG)
@@ -753,7 +754,7 @@ func (o *Store) writeRoots() error {
 	if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 		return err
 	}
-	o.size = offset + int64(length)
+	atomic.StoreInt64(&o.size, offset+int64(length))
 	return nil
 }
 
@@ -762,7 +763,7 @@ func (o *Store) readRoots() error {
 	if err != nil {
 		return err
 	}
-	o.size = finfo.Size()
+	atomic.StoreInt64(&o.size, finfo.Size())
 	if o.size <= 0 {
 		return nil
 	}
@@ -770,18 +771,18 @@ func (o *Store) readRoots() error {
 	minSize := int64(2*len(MAGIC_BEG) + 4 + 4 + len(endBArr))
 	for {
 		for { // Scan backwards for MAGIC_END.
-			if o.size <= minSize {
+			if atomic.LoadInt64(&o.size) <= minSize {
 				return errors.New("couldn't find roots; file corrupted or wrong?")
 			}
 			if _, err := o.file.ReadAt(endBArr,
-				o.size-int64(len(endBArr))); err != nil {
+				atomic.LoadInt64(&o.size)-int64(len(endBArr))); err != nil {
 				return err
 			}
 			if bytes.Equal(MAGIC_END, endBArr[8+4:8+4+len(MAGIC_END)]) &&
 				bytes.Equal(MAGIC_END, endBArr[8+4+len(MAGIC_END):]) {
 				break
 			}
-			o.size = o.size - 1 // TODO: optimizations to scan backwards faster.
+			atomic.AddInt64(&o.size, -1) // TODO: optimizations to scan backwards faster.
 		}
 		// Read and check the roots.
 		var offset int64
@@ -794,9 +795,9 @@ func (o *Store) readRoots() error {
 		if err = binary.Read(endBuf, binary.BigEndian, &length); err != nil {
 			return err
 		}
-		if offset >= 0 && offset < o.size-int64(minSize) &&
-			length == uint32(o.size-offset) {
-			data := make([]byte, o.size-offset-int64(len(endBArr)))
+		if offset >= 0 && offset < atomic.LoadInt64(&o.size)-int64(minSize) &&
+			length == uint32(atomic.LoadInt64(&o.size)-offset) {
+			data := make([]byte, atomic.LoadInt64(&o.size)-offset-int64(len(endBArr)))
 			if _, err := o.file.ReadAt(data, offset); err != nil {
 				return err
 			}
@@ -830,7 +831,7 @@ func (o *Store) readRoots() error {
 				return nil
 			} // else, perhaps value was unlucky in having MAGIC_END's.
 		} // else, perhaps a gkvlite file was stored as a value.
-		o.size = o.size - 1 // Roots were wrong, so keep scanning.
+		atomic.AddInt64(&o.size, -1) // Roots were wrong, so keep scanning.
 	}
 	return nil
 }

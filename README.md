@@ -215,17 +215,19 @@ TODO / ideas
 
 * TODO: Instead of the current "single-threaded" limitation, allow
   users to have multiple, concurrent goroutines: multiple readers, one
-  mutator, one flusher, one compactor.  What if any of those
-  goroutines, however, need to fetch from disk?  Perhaps allow more
-  than 1 os.File's?
+  in-memory mutator, one flusher, one compactor.  Switch to atomic CAS
+  variables.  What if any of those goroutines, however, need to fetch
+  from disk?  The os.File needs to be serialized; perhaps do that
+  "outside" due to StoreFile interface.  Also, the top-level collections
+  map and size needs to be serialized?
+
+* TODO: Allow snapshots to be concurrent, accessible by separate
+  goroutines.
 
 * TODO: Performance: consider splitting item storage from node
   storage, so we're not mixing metadata and data in same cache pages.
   Need to measure how much win this could be in cases like compaction.
   Tradeoff as this could mean no more single file simplicity.
-
-* TODO: Allow snapshots to be concurrent, accessible by separate
-  goroutines.
 
 * TODO: Allow mutability for less garbage, perhaps switching to
   immutable only when there are in-use snapshots.  This probably won't
