@@ -234,43 +234,52 @@ type node struct {
 
 // A persistable node and its persistence location.
 type nodeLoc struct {
-	loc  *ploc // Can be nil if node is dirty (not yet persisted).
-	node *node // Can be nil if node is not fetched into memory yet.
+	loc  unsafe.Pointer // *ploc - can be nil if node is dirty (not yet persisted).
+	node *node          // Can be nil if node is not fetched into memory yet.
 }
 
 var empty = &nodeLoc{} // Sentinel.
 
+func (nloc *nodeLoc) Loc() *ploc {
+	return (*ploc)(atomic.LoadPointer(&nloc.loc))
+}
+
 func (nloc *nodeLoc) isEmpty() bool {
-	return nloc == nil || (nloc.loc.isEmpty() && nloc.node == nil)
+	return nloc == nil || (nloc.Loc().isEmpty() && nloc.node == nil)
 }
 
 func (nloc *nodeLoc) write(o *Store) error {
-	if nloc != nil && nloc.loc.isEmpty() && nloc.node != nil {
+	if nloc != nil && nloc.Loc().isEmpty() && nloc.node != nil {
 		offset := atomic.LoadInt64(&o.size)
 		length := ploc_length + ploc_length + ploc_length
 		b := bytes.NewBuffer(make([]byte, length)[:0])
-		if err := nloc.node.item.loc.write(b); err != nil {
+		if err := nloc.node.item.Loc().write(b); err != nil {
 			return err
 		}
-		if err := nloc.node.left.loc.write(b); err != nil {
+		if err := nloc.node.left.Loc().write(b); err != nil {
 			return err
 		}
-		if err := nloc.node.right.loc.write(b); err != nil {
+		if err := nloc.node.right.Loc().write(b); err != nil {
 			return err
 		}
 		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 			return err
 		}
 		atomic.StoreInt64(&o.size, offset+int64(length))
-		nloc.loc = &ploc{Offset: offset, Length: uint32(length)}
+		atomic.StorePointer(&nloc.loc,
+			unsafe.Pointer(&ploc{Offset: offset, Length: uint32(length)}))
 	}
 	return nil
 }
 
 func (nloc *nodeLoc) read(o *Store) (err error) {
-	if nloc != nil && nloc.node == nil && !nloc.loc.isEmpty() {
-		b := make([]byte, nloc.loc.Length)
-		if _, err := o.file.ReadAt(b, nloc.loc.Offset); err != nil {
+	if nloc != nil && nloc.node == nil {
+		loc := nloc.Loc()
+		if loc.isEmpty() {
+			return nil
+		}
+		b := make([]byte, loc.Length)
+		if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
 			return err
 		}
 		buf := bytes.NewBuffer(b)
@@ -279,17 +288,17 @@ func (nloc *nodeLoc) read(o *Store) (err error) {
 		if p, err = p.read(buf); err != nil {
 			return err
 		}
-		n.item.loc = p
+		atomic.StorePointer(&n.item.loc, unsafe.Pointer(p))
 		p = &ploc{}
 		if p, err = p.read(buf); err != nil {
 			return err
 		}
-		n.left.loc = p
+		atomic.StorePointer(&n.left.loc, unsafe.Pointer(p))
 		p = &ploc{}
 		if p, err = p.read(buf); err != nil {
 			return err
 		}
-		n.right.loc = p
+		atomic.StorePointer(&n.right.loc, unsafe.Pointer(p))
 		nloc.node = n
 	}
 	return nil
@@ -303,12 +312,16 @@ type Item struct {
 
 // A persistable item and its persistence location.
 type itemLoc struct {
-	loc  *ploc // Can be nil if item is dirty (not yet persisted).
-	item *Item // Can be nil if item is not fetched into memory yet.
+	loc  unsafe.Pointer // *ploc - can be nil if item is dirty (not yet persisted).
+	item *Item          // Can be nil if item is not fetched into memory yet.
+}
+
+func (i *itemLoc) Loc() *ploc {
+	return (*ploc)(atomic.LoadPointer(&i.loc))
 }
 
 func (i *itemLoc) write(o *Store) error {
-	if i.loc.isEmpty() {
+	if i.Loc().isEmpty() {
 		if i.item != nil {
 			offset := atomic.LoadInt64(&o.size)
 			length := 4 + 2 + 4 + 4 + len(i.item.Key) + len(i.item.Val)
@@ -323,7 +336,8 @@ func (i *itemLoc) write(o *Store) error {
 				return err
 			}
 			atomic.StoreInt64(&o.size, offset+int64(length))
-			i.loc = &ploc{Offset: offset, Length: uint32(length)}
+			atomic.StorePointer(&i.loc,
+				unsafe.Pointer(&ploc{Offset: offset, Length: uint32(length)}))
 		} else {
 			return errors.New("flushItems saw node with no itemLoc and no item")
 		}
@@ -332,9 +346,13 @@ func (i *itemLoc) write(o *Store) error {
 }
 
 func (i *itemLoc) read(o *Store, withValue bool) (err error) {
-	if i != nil && (i.item == nil || (i.item.Val == nil && withValue)) && !i.loc.isEmpty() {
-		b := make([]byte, i.loc.Length)
-		if _, err := o.file.ReadAt(b, i.loc.Offset); err != nil {
+	if i != nil && (i.item == nil || (i.item.Val == nil && withValue)) {
+		loc := i.Loc()
+		if loc.isEmpty() {
+			return nil
+		}
+		b := make([]byte, loc.Length)
+		if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
 			return err
 		}
 		buf := bytes.NewBuffer(b)
@@ -519,23 +537,25 @@ func (t *Collection) VisitItemsAscend(target []byte, withValue bool, visitor Ite
 
 // Returns JSON representation of root node file location.
 func (t *Collection) MarshalJSON() ([]byte, error) {
-	if t.root.loc.isEmpty() {
+	loc := t.root.Loc()
+	if loc.isEmpty() {
 		return json.Marshal(ploc_empty)
 	}
-	return json.Marshal(t.root.loc)
+	return json.Marshal(loc)
 }
 
 // Unmarshals JSON representation of root node file location.
-func (t *Collection) UnmarshalJSON(d []byte) (err error) {
+func (t *Collection) UnmarshalJSON(d []byte) error {
 	p := ploc{}
-	if err = json.Unmarshal(d, &p); err == nil {
-		t.root.loc = &p
+	if err := json.Unmarshal(d, &p); err != nil {
+		return err
 	}
-	return err
+	atomic.StorePointer(&t.root.loc, unsafe.Pointer(&p))
+	return nil
 }
 
 func (o *Store) flushItems(nloc *nodeLoc) (err error) {
-	if nloc == nil || !nloc.loc.isEmpty() || nloc.node == nil {
+	if nloc == nil || !nloc.Loc().isEmpty() || nloc.node == nil {
 		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
 	}
 	if err = o.flushItems(&nloc.node.left); err != nil {
@@ -548,7 +568,7 @@ func (o *Store) flushItems(nloc *nodeLoc) (err error) {
 }
 
 func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
-	if nloc == nil || !nloc.loc.isEmpty() || nloc.node == nil {
+	if nloc == nil || !nloc.Loc().isEmpty() || nloc.node == nil {
 		return nil // Flush only non-empty, unpersisted nodes.
 	}
 	if err = o.flushNodes(&nloc.node.left); err != nil {
