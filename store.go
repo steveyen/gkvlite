@@ -65,7 +65,11 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 		orig := atomic.LoadPointer(&s.coll)
 		coll := copyColl(*(*map[string]*Collection)(orig))
 		if coll[name] == nil {
-			coll[name] = &Collection{store: s, compare: compare}
+			coll[name] = &Collection{
+				store:   s,
+				compare: compare,
+				root:    unsafe.Pointer(&nodeLoc{}),
+			}
 		}
 		coll[name].compare = compare
 		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
@@ -127,10 +131,11 @@ func (s *Store) Flush() (err error) {
 	}
 	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
 	for _, t := range coll {
-		if err = t.store.flushItems(&t.root); err != nil {
+		root := (*nodeLoc)(atomic.LoadPointer(&t.root))
+		if err = t.store.flushItems(root); err != nil {
 			return err
 		}
-		if err = t.store.flushNodes(&t.root); err != nil {
+		if err = t.store.flushNodes(root); err != nil {
 			return err
 		}
 	}
@@ -150,16 +155,16 @@ func (s *Store) Flush() (err error) {
 func (s *Store) Snapshot() (snapshot *Store) {
 	coll := copyColl(*(*map[string]*Collection)(atomic.LoadPointer(&s.coll)))
 	res := &Store{
+		coll:     unsafe.Pointer(&coll),
 		file:     s.file,
 		size:     atomic.LoadInt64(&s.size),
 		readOnly: true,
 	}
-	atomic.StorePointer(&res.coll, unsafe.Pointer(&coll))
 	for name, c := range coll {
 		coll[name] = &Collection{
 			store:   res,
 			compare: c.compare,
-			root:    c.root,
+			root:    unsafe.Pointer(atomic.LoadPointer(&c.root)),
 		}
 	}
 	return res
@@ -222,7 +227,7 @@ type KeyCompare func(a, b []byte) int
 type Collection struct {
 	store   *Store
 	compare KeyCompare
-	root    nodeLoc
+	root    unsafe.Pointer // Value is *nodeLoc type.
 }
 
 // A persistable node.
@@ -444,7 +449,7 @@ func (p *ploc) read(b *bytes.Buffer) (res *ploc, err error) {
 // to save on I/O and memory resources, especially for large values.
 // The returned Item should be treated as immutable.
 func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
-	n := &t.root
+	n := (*nodeLoc)(atomic.LoadPointer(&t.root))
 	err := n.read(t.store)
 	for {
 		if err != nil || n.isEmpty() {
@@ -499,7 +504,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		item.Val == nil {
 		return errors.New("Item.Key/Val missing or too long")
 	}
-	r, err := t.store.union(t, &t.root,
+	r, err := t.store.union(t, (*nodeLoc)(atomic.LoadPointer(&t.root)),
 		&nodeLoc{node: unsafe.Pointer(&node{item: itemLoc{item: unsafe.Pointer(&Item{
 			Key:      item.Key,
 			Val:      item.Val,
@@ -508,7 +513,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	if err != nil {
 		return err
 	}
-	t.root = *r
+	atomic.StorePointer(&t.root, unsafe.Pointer(r)) // TODO: Use CAS?
 	return nil
 }
 
@@ -519,7 +524,7 @@ func (t *Collection) Set(key []byte, val []byte) error {
 
 // Deletes an item of a given key.
 func (t *Collection) Delete(key []byte) (err error) {
-	left, _, right, err := t.store.split(t, &t.root, key)
+	left, _, right, err := t.store.split(t, (*nodeLoc)(atomic.LoadPointer(&t.root)), key)
 	if err != nil {
 		return err
 	}
@@ -527,7 +532,7 @@ func (t *Collection) Delete(key []byte) (err error) {
 	if err != nil {
 		return err
 	}
-	t.root = *r
+	atomic.StorePointer(&t.root, unsafe.Pointer(r)) // TODO: Use CAS?
 	return nil
 }
 
@@ -547,13 +552,14 @@ type ItemVisitor func(i *Item) bool
 
 // Visit items greater-than-or-equal to the target key.
 func (t *Collection) VisitItemsAscend(target []byte, withValue bool, visitor ItemVisitor) error {
-	_, err := t.store.visitAscendNode(t, &t.root, target, withValue, visitor)
+	_, err := t.store.visitAscendNode(t, (*nodeLoc)(atomic.LoadPointer(&t.root)),
+		target, withValue, visitor)
 	return err
 }
 
 // Returns JSON representation of root node file location.
 func (t *Collection) MarshalJSON() ([]byte, error) {
-	loc := t.root.Loc()
+	loc := ((*nodeLoc)(atomic.LoadPointer(&t.root))).Loc()
 	if loc.isEmpty() {
 		return json.Marshal(ploc_empty)
 	}
@@ -566,7 +572,7 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 	if err := json.Unmarshal(d, &p); err != nil {
 		return err
 	}
-	atomic.StorePointer(&t.root.loc, unsafe.Pointer(&p))
+	atomic.StorePointer(&t.root, unsafe.Pointer(&nodeLoc{loc: unsafe.Pointer(&p)}))
 	return nil
 }
 
@@ -762,7 +768,7 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 
 func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
 	res *Item, err error) {
-	n := &t.root
+	n := (*nodeLoc)(atomic.LoadPointer(&t.root))
 	if err = n.read(o); err != nil || n.isEmpty() {
 		return nil, err
 	}
