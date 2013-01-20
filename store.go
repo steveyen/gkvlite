@@ -235,7 +235,7 @@ type node struct {
 // A persistable node and its persistence location.
 type nodeLoc struct {
 	loc  unsafe.Pointer // *ploc - can be nil if node is dirty (not yet persisted).
-	node *node          // Can be nil if node is not fetched into memory yet.
+	node unsafe.Pointer // *node - can be nil if node is not fetched into memory yet.
 }
 
 var empty = &nodeLoc{} // Sentinel.
@@ -244,22 +244,30 @@ func (nloc *nodeLoc) Loc() *ploc {
 	return (*ploc)(atomic.LoadPointer(&nloc.loc))
 }
 
+func (nloc *nodeLoc) Node() *node {
+	return (*node)(atomic.LoadPointer(&nloc.node))
+}
+
 func (nloc *nodeLoc) isEmpty() bool {
-	return nloc == nil || (nloc.Loc().isEmpty() && nloc.node == nil)
+	return nloc == nil || (nloc.Loc().isEmpty() && nloc.Node() == nil)
 }
 
 func (nloc *nodeLoc) write(o *Store) error {
-	if nloc != nil && nloc.Loc().isEmpty() && nloc.node != nil {
+	if nloc != nil && nloc.Loc().isEmpty() {
+		node := nloc.Node()
+		if node == nil {
+			return nil
+		}
 		offset := atomic.LoadInt64(&o.size)
 		length := ploc_length + ploc_length + ploc_length
 		b := bytes.NewBuffer(make([]byte, length)[:0])
-		if err := nloc.node.item.Loc().write(b); err != nil {
+		if err := node.item.Loc().write(b); err != nil {
 			return err
 		}
-		if err := nloc.node.left.Loc().write(b); err != nil {
+		if err := node.left.Loc().write(b); err != nil {
 			return err
 		}
-		if err := nloc.node.right.Loc().write(b); err != nil {
+		if err := node.right.Loc().write(b); err != nil {
 			return err
 		}
 		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
@@ -273,7 +281,7 @@ func (nloc *nodeLoc) write(o *Store) error {
 }
 
 func (nloc *nodeLoc) read(o *Store) (err error) {
-	if nloc != nil && nloc.node == nil {
+	if nloc != nil && nloc.Node() == nil {
 		loc := nloc.Loc()
 		if loc.isEmpty() {
 			return nil
@@ -299,7 +307,7 @@ func (nloc *nodeLoc) read(o *Store) (err error) {
 			return err
 		}
 		atomic.StorePointer(&n.right.loc, unsafe.Pointer(p))
-		nloc.node = n
+		atomic.StorePointer(&nloc.node, unsafe.Pointer(n))
 	}
 	return nil
 }
@@ -435,7 +443,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
 		if err != nil || n.isEmpty() {
 			break
 		}
-		i := &n.node.item
+		i := &n.Node().item
 		if err := i.read(t.store, false); err != nil {
 			return nil, err
 		}
@@ -444,10 +452,10 @@ func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
 		}
 		c := t.compare(key, i.item.Key)
 		if c < 0 {
-			n = &n.node.left
+			n = &n.Node().left
 			err = n.read(t.store)
 		} else if c > 0 {
-			n = &n.node.right
+			n = &n.Node().right
 			err = n.read(t.store)
 		} else {
 			if withValue {
@@ -484,11 +492,11 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		return errors.New("Item.Key/Val missing or too long")
 	}
 	r, err := t.store.union(t, &t.root,
-		&nodeLoc{node: &node{item: itemLoc{item: &Item{
+		&nodeLoc{node: unsafe.Pointer(&node{item: itemLoc{item: &Item{
 			Key:      item.Key,
 			Val:      item.Val,
 			Priority: item.Priority,
-		}}}})
+		}}})})
 	if err != nil {
 		return err
 	}
@@ -555,26 +563,34 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 }
 
 func (o *Store) flushItems(nloc *nodeLoc) (err error) {
-	if nloc == nil || !nloc.Loc().isEmpty() || nloc.node == nil {
+	if nloc == nil || !nloc.Loc().isEmpty() {
 		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
 	}
-	if err = o.flushItems(&nloc.node.left); err != nil {
+	node := nloc.Node()
+	if node == nil {
+		return nil
+	}
+	if err = o.flushItems(&node.left); err != nil {
 		return err
 	}
-	if err = nloc.node.item.write(o); err != nil { // Write items in key order.
+	if err = node.item.write(o); err != nil { // Write items in key order.
 		return err
 	}
-	return o.flushItems(&nloc.node.right)
+	return o.flushItems(&node.right)
 }
 
 func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
-	if nloc == nil || !nloc.Loc().isEmpty() || nloc.node == nil {
+	if nloc == nil || !nloc.Loc().isEmpty() {
 		return nil // Flush only non-empty, unpersisted nodes.
 	}
-	if err = o.flushNodes(&nloc.node.left); err != nil {
+	node := nloc.Node()
+	if node == nil {
+		return nil
+	}
+	if err = o.flushNodes(&node.left); err != nil {
 		return err
 	}
-	if err = o.flushNodes(&nloc.node.right); err != nil {
+	if err = o.flushNodes(&node.right); err != nil {
 		return err
 	}
 	return nloc.write(o) // Write nodes in children-first order.
@@ -593,11 +609,11 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 	if that.isEmpty() {
 		return this, nil
 	}
-	thisItem := &this.node.item
+	thisItem := &this.Node().item
 	if err = thisItem.read(o, false); err != nil {
 		return empty, err
 	}
-	thatItem := &that.node.item
+	thatItem := &that.Node().item
 	if err = thatItem.read(o, false); err != nil {
 		return empty, err
 	}
@@ -606,45 +622,45 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		if err != nil {
 			return empty, err
 		}
-		newLeft, err := o.union(t, &this.node.left, left)
+		newLeft, err := o.union(t, &this.Node().left, left)
 		if err != nil {
 			return empty, err
 		}
-		newRight, err := o.union(t, &this.node.right, right)
+		newRight, err := o.union(t, &this.Node().right, right)
 		if err != nil {
 			return empty, err
 		}
 		if middle.isEmpty() {
-			return &nodeLoc{node: &node{
+			return &nodeLoc{node: unsafe.Pointer(&node{
 				item:  *thisItem,
 				left:  *newLeft,
 				right: *newRight,
-			}}, nil
+			})}, nil
 		}
-		return &nodeLoc{node: &node{
-			item:  middle.node.item,
+		return &nodeLoc{node: unsafe.Pointer(&node{
+			item:  middle.Node().item,
 			left:  *newLeft,
 			right: *newRight,
-		}}, nil
+		})}, nil
 	}
 	// We don't use middle because the "that" node has precendence.
 	left, _, right, err := o.split(t, this, thatItem.item.Key)
 	if err != nil {
 		return empty, err
 	}
-	newLeft, err := o.union(t, left, &that.node.left)
+	newLeft, err := o.union(t, left, &that.Node().left)
 	if err != nil {
 		return empty, err
 	}
-	newRight, err := o.union(t, right, &that.node.right)
+	newRight, err := o.union(t, right, &that.Node().right)
 	if err != nil {
 		return empty, err
 	}
-	return &nodeLoc{node: &node{
+	return &nodeLoc{node: unsafe.Pointer(&node{
 		item:  *thatItem,
 		left:  *newLeft,
 		right: *newRight,
-	}}, nil
+	})}, nil
 }
 
 // Splits a treap into two treaps based on a split key "s".  The
@@ -658,37 +674,38 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		return empty, empty, empty, err
 	}
 
-	nItem := &n.node.item
+	nNode := n.Node()
+	nItem := &nNode.item
 	if err := nItem.read(o, false); err != nil {
 		return empty, empty, empty, err
 	}
 
 	c := t.compare(s, nItem.item.Key)
 	if c == 0 {
-		return &n.node.left, n, &n.node.right, nil
+		return &nNode.left, n, &nNode.right, nil
 	}
 
 	if c < 0 {
-		left, middle, right, err := o.split(t, &n.node.left, s)
+		left, middle, right, err := o.split(t, &nNode.left, s)
 		if err != nil {
 			return empty, empty, empty, err
 		}
-		return left, middle, &nodeLoc{node: &node{
+		return left, middle, &nodeLoc{node: unsafe.Pointer(&node{
 			item:  *nItem,
 			left:  *right,
-			right: n.node.right,
-		}}, nil
+			right: nNode.right,
+		})}, nil
 	}
 
-	left, middle, right, err := o.split(t, &n.node.right, s)
+	left, middle, right, err := o.split(t, &nNode.right, s)
 	if err != nil {
 		return empty, empty, empty, err
 	}
-	return &nodeLoc{node: &node{
+	return &nodeLoc{node: unsafe.Pointer(&node{
 		item:  *nItem,
-		left:  n.node.left,
+		left:  nNode.left,
 		right: *left,
-	}}, middle, right, nil
+	})}, middle, right, nil
 }
 
 // All the keys from this should be < keys from that.
@@ -705,34 +722,34 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 	if that.isEmpty() {
 		return this, nil
 	}
-	thisItem := &this.node.item
+	thisItem := &this.Node().item
 	if err = thisItem.read(o, false); err != nil {
 		return empty, err
 	}
-	thatItem := &that.node.item
+	thatItem := &that.Node().item
 	if err = thatItem.read(o, false); err != nil {
 		return empty, err
 	}
 	if thisItem.item.Priority > thatItem.item.Priority {
-		newRight, err := o.join(&this.node.right, that)
+		newRight, err := o.join(&this.Node().right, that)
 		if err != nil {
 			return empty, err
 		}
-		return &nodeLoc{node: &node{
+		return &nodeLoc{node: unsafe.Pointer(&node{
 			item:  *thisItem,
-			left:  this.node.left,
+			left:  this.Node().left,
 			right: *newRight,
-		}}, nil
+		})}, nil
 	}
-	newLeft, err := o.join(this, &that.node.left)
+	newLeft, err := o.join(this, &that.Node().left)
 	if err != nil {
 		return empty, err
 	}
-	return &nodeLoc{node: &node{
+	return &nodeLoc{node: unsafe.Pointer(&node{
 		item:  *thatItem,
 		left:  *newLeft,
-		right: that.node.right,
-	}}, nil
+		right: that.Node().right,
+	})}, nil
 }
 
 func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
@@ -742,12 +759,12 @@ func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
 		return nil, err
 	}
 	for {
-		child := cfn(n.node)
+		child := cfn(n.Node())
 		if err = child.read(o); err != nil {
 			return nil, err
 		}
 		if child.isEmpty() {
-			i := &n.node.item
+			i := &n.Node().item
 			if err = i.read(o, withValue); err == nil {
 				return i.item, nil
 			}
@@ -766,12 +783,12 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 	if n.isEmpty() {
 		return true, nil
 	}
-	nItem := &n.node.item
+	nItem := &n.Node().item
 	if err := nItem.read(o, false); err != nil {
 		return false, err
 	}
 	if t.compare(target, nItem.item.Key) <= 0 {
-		keepGoing, err := o.visitAscendNode(t, &n.node.left, target, withValue, visitor)
+		keepGoing, err := o.visitAscendNode(t, &n.Node().left, target, withValue, visitor)
 		if err != nil || !keepGoing {
 			return false, err
 		}
@@ -782,7 +799,7 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 			return false, nil
 		}
 	}
-	return o.visitAscendNode(t, &n.node.right, target, withValue, visitor)
+	return o.visitAscendNode(t, &n.Node().right, target, withValue, visitor)
 }
 
 func (o *Store) writeRoots() error {
