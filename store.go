@@ -27,13 +27,13 @@ type StoreFile interface {
 // treaps for robustness.  This implementation is single-threaded, so
 // users should serialize their accesses.
 type Store struct {
-	Coll     map[string]*Collection `json:"c"` // Exposed only for json'ification.
+	coll     map[string]*Collection
 	file     StoreFile
 	size     int64
 	readOnly bool
 }
 
-const VERSION = uint32(2)
+const VERSION = uint32(3)
 
 var MAGIC_BEG []byte = []byte("0g1t2r")
 var MAGIC_END []byte = []byte("3e4a5p")
@@ -41,9 +41,9 @@ var MAGIC_END []byte = []byte("3e4a5p")
 // Use nil for file for in-memory-only (non-persistent) usage.
 func NewStore(file StoreFile) (res *Store, err error) {
 	if file == nil || !reflect.ValueOf(file).Elem().IsValid() {
-		return &Store{Coll: make(map[string]*Collection)}, nil // Memory-only Store.
+		return &Store{coll: make(map[string]*Collection)}, nil // Memory-only Store.
 	}
-	res = &Store{Coll: make(map[string]*Collection), file: file}
+	res = &Store{coll: make(map[string]*Collection), file: file}
 	if err = res.readRoots(); err == nil {
 		return res, nil
 	}
@@ -58,21 +58,21 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 	if compare == nil {
 		compare = bytes.Compare
 	}
-	if s.Coll[name] == nil {
-		s.Coll[name] = &Collection{store: s, compare: compare}
+	if s.coll[name] == nil {
+		s.coll[name] = &Collection{store: s, compare: compare}
 	}
-	s.Coll[name].compare = compare
-	return s.Coll[name]
+	s.coll[name].compare = compare
+	return s.coll[name]
 }
 
 // Retrieves a named Collection.
 func (s *Store) GetCollection(name string) *Collection {
-	return s.Coll[name]
+	return s.coll[name]
 }
 
 func (s *Store) GetCollectionNames() []string {
-	res := make([]string, len(s.Coll))[:0]
-	for name, _ := range s.Coll {
+	res := make([]string, len(s.coll))[:0]
+	for name, _ := range s.coll {
 		res = append(res, name)
 	}
 	return res
@@ -82,7 +82,7 @@ func (s *Store) GetCollectionNames() []string {
 // you do a Flush().  Invoking RemoveCollection(x) and then
 // SetCollection(x) is a fast way to empty a Collection.
 func (s *Store) RemoveCollection(name string) {
-	delete(s.Coll, name)
+	delete(s.coll, name)
 }
 
 // Writes (appends) any unpersisted data to file.  As a
@@ -98,7 +98,7 @@ func (s *Store) Flush() (err error) {
 	if s.file == nil {
 		return errors.New("no file / in-memory only, so cannot Flush()")
 	}
-	for _, t := range s.Coll {
+	for _, t := range s.coll {
 		if err = t.store.flushItems(&t.root); err != nil {
 			return err
 		}
@@ -121,16 +121,16 @@ func (s *Store) Flush() (err error) {
 // snapshot.CopyTo().
 func (s *Store) Snapshot() (snapshot *Store) {
 	res := &Store{
-		Coll:     make(map[string]*Collection),
+		coll:     make(map[string]*Collection),
 		file:     s.file,
 		size:     atomic.LoadInt64(&s.size),
 		readOnly: true,
 	}
-	for name, coll := range s.Coll {
-		res.Coll[name] = &Collection{
+	for name, c := range s.coll {
+		res.coll[name] = &Collection{
 			store:   res,
-			compare: coll.compare,
-			root:    coll.root,
+			compare: c.compare,
+			root:    c.root,
 		}
 	}
 	return res
@@ -146,7 +146,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 	if err != nil {
 		return nil, err
 	}
-	for name, srcColl := range s.Coll {
+	for name, srcColl := range s.coll {
 		dstColl := dstStore.SetCollection(name, srcColl.compare)
 		minItem, err := srcColl.MinItem(true)
 		if err != nil {
@@ -735,7 +735,7 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 }
 
 func (o *Store) writeRoots() error {
-	sJSON, err := json.Marshal(o)
+	sJSON, err := json.Marshal(o.coll)
 	if err != nil {
 		return err
 	}
@@ -819,12 +819,12 @@ func (o *Store) readRoots() error {
 					return fmt.Errorf("length mismatch: "+
 						"wanted length: %v != found length: %v", length0, length)
 				}
-				m := &Store{}
+				m := make(map[string]*Collection)
 				if err = json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m); err != nil {
 					return err
 				}
-				o.Coll = m.Coll
-				for _, t := range o.Coll {
+				o.coll = m
+				for _, t := range o.coll {
 					t.store = o
 					t.compare = bytes.Compare
 				}
