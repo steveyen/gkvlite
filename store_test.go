@@ -856,3 +856,36 @@ func TestStoreConcurrentVisits(t *testing.T) {
 		}()
 	}
 }
+
+func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	s, _ := NewStore(f)
+	x := s.SetCollection("x", nil)
+	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
+	s.Flush()
+	f.Close()
+
+	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
+	s1, _ := NewStore(f1)
+	x1 := s1.GetCollection("x")
+
+	exp := []string{"a", "b", "c", "d", "e"}
+	toDelete := len(exp)
+
+	// Concurrent mutations like a delete should not affect a visit()
+	// that's already inflight.
+	visitExpectCollection(t, x1, "a", exp, func(i *Item) {
+		go func() {
+			toDelete--
+			toDeleteKey := exp[toDelete]
+			if err := x1.Delete([]byte(toDeleteKey)); err != nil {
+				t.Errorf("expected concurrent delete to work on key: %v, got: %v",
+					toDeleteKey, err)
+			}
+		}()
+		runtime.Gosched() // Some tests want to test concurrency.
+	})
+}
