@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 )
 
@@ -181,6 +182,7 @@ func loadCollection(x *Collection, arr []string) {
 func visitExpectCollection(t *testing.T, x *Collection, start string, arr []string) {
 	n := 0
 	err := x.VisitItemsAscend([]byte(start), true, func(i *Item) bool {
+		runtime.Gosched() // Some tests want to test concurrency.
 		if string(i.Key) != arr[n] {
 			t.Errorf("expected visit item: %v, saw: %v", arr[n], i)
 		}
@@ -826,5 +828,27 @@ func TestStoreMultipleCollections(t *testing.T) {
 
 	if err = s2.Flush(); err == nil {
 		t.Errorf("expected Flush() to fail on a readonly file")
+	}
+}
+
+func TestStoreConcurrentVisits(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	s, _ := NewStore(f)
+	x := s.SetCollection("x", nil)
+	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"})
+	s.Flush()
+	f.Close()
+
+	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
+	s1, _ := NewStore(f1)
+	x1 := s1.GetCollection("x")
+
+	for i := 0; i < 100; i++ {
+		go func() {
+			visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"})
+		}()
 	}
 }
