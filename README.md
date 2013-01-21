@@ -7,7 +7,7 @@ Overview
 ========
 
 gkvlite is a library that provides a simple key-value persistence
-implementation, inspired by SQLite and CouchDB/Couchstore.
+store, inspired by SQLite and CouchDB/Couchstore.
 
 gkvlite has the following features...
 
@@ -17,14 +17,13 @@ gkvlite has the following features...
 * On-disk storage for a "Store" is a single file.
 * ACID properties are supported via a simple, append-only,
   copy-on-write storage design.
+* Concurrent application goroutines will not block each other.
 
 Key concepts
 ============
 
-* Multiple key-value Collections are supported in a single storage
-  file (a Store).
-* That is, one Store can have zero or more Collections.
-* And, a Collection can have zero or more Items (key-value).
+* A Store can have zero or more Collections.
+* A Collection can have zero or more Items (key-value).
 * A key is a []byte, max length 64KB.
 * A value is a []byte, max length 4GB.
 
@@ -66,14 +65,22 @@ recommended that you have only a single read-write goroutine per
 Store, and should have only a single persistence goroutine per Store
 (doing Flush()'s, which can be a different goroutine than the
 read-write goroutine).  But, you may have multiple, concurrent
-read-only goroutines per Store (doing Get()'s, Snapshot()'s and
-CopyTo()'s).
+read-only goroutines per Store (doing Get()'s, Visit()'s,
+Snapshot()'s, CopyTo()'s, etc).
 
 The idea is that reader goroutines, the read-write goroutine, and the
 persistence goroutine do not need to block each other.
 
+A read-only goroutine that performs a long, multiple item read
+operation, like VisitItemsAscend(), will see a consistent, isolated
+view of the collection.  That is, concurrent mutations that happened
+after the VisitItemsAscend() started will not be seen by the visitor,
+even if the visitor is slow and takes a long time.
+
 Note that os.File is not a concurrent safe implementation of the
-StoreFile interface.
+StoreFile interface.  You will need to provide your own implementation
+of the StoreFile interface, such as by using a channel to serialize
+StoreFile requests.
 
 Snapshots
 =========
@@ -97,7 +104,7 @@ Other features
 * Similar to SQLite's VFS feature, you can supply your own StoreFile
   interface implementation instead of an actual os.File, for your own
   advanced testing or I/O interposing needs (e.g., compression,
-  checksums, I/O statistics, etc).
+  checksums, I/O statistics, caching, enabling concurrency, etc).
 * You can supply your own KeyCompare function to order items however
   you want.  The default is bytes.Compare().
 * You can control item priority to access hotter items faster by
@@ -185,10 +192,10 @@ collection can hold a JSON document per user, keyed by userId.
 Another "userEmails" collection can be used like a secondary index,
 keyed by "emailAddress:userId", with empty values (e.g., []byte{}).
 
-To perform "bulk inserts", or batched mutations, this is roughly
-supported in gkvlite where your application should only occasionally
-invoke Flush() after N mutations, as opposed to invoking a Flush()
-after every Set/Delete().
+Bulk inserts or batched mutations are roughly supported in gkvlite
+where your application should only occasionally invoke Flush() after N
+mutations or after a given amount of time, as opposed to invoking a
+Flush() after every Set/Delete().
 
 Implementation / design
 =======================
@@ -217,7 +224,8 @@ adversary to corrupt a gkvlite file by cleverly storing the bytes of a
 valid gkvlite root record as a value; however, they would need to know
 the size of the containing gkvlite database file in order to compute a
 valid gkvlite root record and be able to force a process or machine
-crash before the next good root record is written/sync'ed.
+crash after their fake root record is written but before the next good
+root record is written/sync'ed.
 
 The immutable, copy-on-write treap plus the append-only persistence
 design allows for fast and efficient MVCC snapshots.
@@ -240,9 +248,9 @@ TODO / ideas
 
 * TODO: Keep stats on misses, disk fetches & writes, tree depth, etc.
 
-* TODO: Provide O(1) collection copying.
+* TODO: Provide public API for O(1) collection copying.
 
-* TODO: Provide O(log N) collection spliting.
+* TODO: Provide public API for O(log N) collection spliting & joining.
 
 * TODO: Provide O(1) MidItem() or TopItem() implementation, so that
   users can split collections at decent points.
