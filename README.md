@@ -82,6 +82,10 @@ StoreFile interface.  You will need to provide your own implementation
 of the StoreFile interface, such as by using a channel to serialize
 StoreFile requests.
 
+Finally, extra advanced users may wish to have a read-write goroutine
+per Collection instead of per Store.  There should only be, though,
+only a single persistence goroutine per Store.
+
 Snapshots
 =========
 
