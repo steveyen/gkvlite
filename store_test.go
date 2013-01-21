@@ -851,7 +851,7 @@ func TestStoreConcurrentVisits(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		go func() {
 			visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, func(i *Item) {
-				runtime.Gosched() // Some tests want to test concurrency.
+				runtime.Gosched() // Yield to test concurrency.
 			})
 		}()
 	}
@@ -886,6 +886,40 @@ func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 					toDeleteKey, err)
 			}
 		}()
-		runtime.Gosched() // Some tests want to test concurrency.
+		runtime.Gosched() // Yield to test concurrency.
+	})
+}
+
+func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	s, _ := NewStore(f)
+	x := s.SetCollection("x", nil)
+	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
+	s.Flush()
+	f.Close()
+
+	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
+	s1, _ := NewStore(f1)
+	x1 := s1.GetCollection("x")
+
+	exp := []string{"a", "b", "c", "d", "e"}
+	add := []string{"A", "1", "E", "2", "C"}
+	toAdd := 0
+
+	// Concurrent mutations like inserts should not affect a visit()
+	// that's already inflight.
+	visitExpectCollection(t, x1, "a", exp, func(i *Item) {
+		go func() {
+			toAddKey := []byte(add[toAdd])
+			toAdd++
+			if err := x1.Set(toAddKey, toAddKey); err != nil {
+				t.Errorf("expected concurrent set to work on key: %v, got: %v",
+					toAddKey, err)
+			}
+		}()
+		runtime.Gosched() // Yield to test concurrency.
 	})
 }
