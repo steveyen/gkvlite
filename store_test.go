@@ -179,10 +179,12 @@ func loadCollection(x *Collection, arr []string) {
 	}
 }
 
-func visitExpectCollection(t *testing.T, x *Collection, start string, arr []string) {
+func visitExpectCollection(t *testing.T, x *Collection, start string, arr []string, cb func(i *Item)) {
 	n := 0
 	err := x.VisitItemsAscend([]byte(start), true, func(i *Item) bool {
-		runtime.Gosched() // Some tests want to test concurrency.
+		if cb != nil {
+			cb(i)
+		}
 		if string(i.Key) != arr[n] {
 			t.Errorf("expected visit item: %v, saw: %v", arr[n], i)
 		}
@@ -219,7 +221,7 @@ func TestVisitStoreMem(t *testing.T) {
 		t.Errorf("expected coll y to be nil")
 	}
 
-	visitExpectCollection(t, x, "a", []string{})
+	visitExpectCollection(t, x, "a", []string{}, nil)
 	min, err := x.MinItem(true)
 	if err != nil || min != nil {
 		t.Errorf("expected no min, got: %v, err: %v", min, err)
@@ -235,16 +237,16 @@ func TestVisitStoreMem(t *testing.T) {
 	}
 
 	visitX := func() {
-		visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"})
-		visitExpectCollection(t, x, "a1", []string{"b", "c", "d", "e"})
-		visitExpectCollection(t, x, "b", []string{"b", "c", "d", "e"})
-		visitExpectCollection(t, x, "b1", []string{"c", "d", "e"})
-		visitExpectCollection(t, x, "c", []string{"c", "d", "e"})
-		visitExpectCollection(t, x, "c1", []string{"d", "e"})
-		visitExpectCollection(t, x, "d", []string{"d", "e"})
-		visitExpectCollection(t, x, "d1", []string{"e"})
-		visitExpectCollection(t, x, "e", []string{"e"})
-		visitExpectCollection(t, x, "f", []string{})
+		visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
+		visitExpectCollection(t, x, "a1", []string{"b", "c", "d", "e"}, nil)
+		visitExpectCollection(t, x, "b", []string{"b", "c", "d", "e"}, nil)
+		visitExpectCollection(t, x, "b1", []string{"c", "d", "e"}, nil)
+		visitExpectCollection(t, x, "c", []string{"c", "d", "e"}, nil)
+		visitExpectCollection(t, x, "c1", []string{"d", "e"}, nil)
+		visitExpectCollection(t, x, "d", []string{"d", "e"}, nil)
+		visitExpectCollection(t, x, "d1", []string{"e"}, nil)
+		visitExpectCollection(t, x, "e", []string{"e"}, nil)
+		visitExpectCollection(t, x, "f", []string{}, nil)
 	}
 	visitX()
 
@@ -410,8 +412,8 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected c to be in x.")
 	}
 
-	visitExpectCollection(t, x, "a", []string{"a", "b", "c"})
-	visitExpectCollection(t, x2, "a", []string{"a"})
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c"}, nil)
+	visitExpectCollection(t, x2, "a", []string{"a"}, nil)
 
 	// ------------------------------------------------
 
@@ -431,9 +433,9 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected x2 to be there")
 	}
 
-	visitExpectCollection(t, x, "a", []string{"a", "b", "c"})
-	visitExpectCollection(t, x2, "a", []string{"a"})
-	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c"}, nil)
+	visitExpectCollection(t, x2, "a", []string{"a"}, nil)
+	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"}, nil)
 
 	i, err = x3.GetItem([]byte("a"), true)
 	if i == nil || err != nil {
@@ -463,10 +465,10 @@ func TestStoreFile(t *testing.T) {
 	s4, err := NewStore(f4)
 	x4 := s4.GetCollection("x")
 
-	visitExpectCollection(t, x, "a", []string{"a", "c"})
-	visitExpectCollection(t, x2, "a", []string{"a"})
-	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
-	visitExpectCollection(t, x4, "a", []string{"a", "c"})
+	visitExpectCollection(t, x, "a", []string{"a", "c"}, nil)
+	visitExpectCollection(t, x2, "a", []string{"a"}, nil)
+	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"}, nil)
+	visitExpectCollection(t, x4, "a", []string{"a", "c"}, nil)
 
 	i, err = x4.GetItem([]byte("a"), true)
 	if i == nil || err != nil {
@@ -503,11 +505,11 @@ func TestStoreFile(t *testing.T) {
 	s5, err := NewStore(f5)
 	x5 := s5.GetCollection("x")
 
-	visitExpectCollection(t, x, "a", []string{"a", "d"})
-	visitExpectCollection(t, x2, "a", []string{"a"})
-	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
-	visitExpectCollection(t, x4, "a", []string{"a", "c"})
-	visitExpectCollection(t, x5, "a", []string{"a", "d"})
+	visitExpectCollection(t, x, "a", []string{"a", "d"}, nil)
+	visitExpectCollection(t, x2, "a", []string{"a"}, nil)
+	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"}, nil)
+	visitExpectCollection(t, x4, "a", []string{"a", "c"}, nil)
+	visitExpectCollection(t, x5, "a", []string{"a", "d"}, nil)
 
 	// ------------------------------------------------
 
@@ -608,12 +610,12 @@ func TestStoreFile(t *testing.T) {
 	s6, err := NewStore(f6)
 	x6 := s6.GetCollection("x")
 
-	visitExpectCollection(t, x, "a", []string{})
-	visitExpectCollection(t, x2, "a", []string{"a"})
-	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
-	visitExpectCollection(t, x4, "a", []string{"a", "c"})
-	visitExpectCollection(t, x5, "a", []string{"a", "d"})
-	visitExpectCollection(t, x6, "a", []string{})
+	visitExpectCollection(t, x, "a", []string{}, nil)
+	visitExpectCollection(t, x2, "a", []string{"a"}, nil)
+	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"}, nil)
+	visitExpectCollection(t, x4, "a", []string{"a", "c"}, nil)
+	visitExpectCollection(t, x5, "a", []string{"a", "d"}, nil)
+	visitExpectCollection(t, x6, "a", []string{}, nil)
 
 	// ------------------------------------------------
 
@@ -625,7 +627,7 @@ func TestStoreFile(t *testing.T) {
 	if xsnap == nil {
 		t.Errorf("expected snapshot to have x")
 	}
-	visitExpectCollection(t, xsnap, "a", []string{})
+	visitExpectCollection(t, xsnap, "a", []string{}, nil)
 	if ssnap.Flush() == nil {
 		t.Errorf("expected snapshot Flush() error")
 	}
@@ -638,7 +640,7 @@ func TestStoreFile(t *testing.T) {
 	if x3snap == nil {
 		t.Errorf("expected snapshot to have x")
 	}
-	visitExpectCollection(t, x3snap, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x3snap, "a", []string{"a", "b", "c"}, nil)
 	if s3snap.Flush() == nil {
 		t.Errorf("expected snapshot Flush() error")
 	}
@@ -651,14 +653,14 @@ func TestStoreFile(t *testing.T) {
 	if x3snap1 == nil {
 		t.Errorf("expected snapshot to have x")
 	}
-	visitExpectCollection(t, x3snap1, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x3snap1, "a", []string{"a", "b", "c"}, nil)
 	if s3snap1.Flush() == nil {
 		t.Errorf("expected snapshot Flush() error")
 	}
 
 	loadCollection(x3snap, []string{"e", "d", "a", "c", "b", "c", "a"})
-	visitExpectCollection(t, x3snap1, "a", []string{"a", "b", "c"})
-	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"})
+	visitExpectCollection(t, x3snap1, "a", []string{"a", "b", "c"}, nil)
+	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"}, nil)
 
 	// ------------------------------------------------
 
@@ -693,7 +695,7 @@ func TestStoreFile(t *testing.T) {
 		if cx == nil {
 			t.Errorf("%v: expected successful CopyTo of x coll", ccTestIdx)
 		}
-		visitExpectCollection(t, cx, "a", ccTest.expect)
+		visitExpectCollection(t, cx, "a", ccTest.expect, nil)
 		if ccTest.fevery > 100 {
 			// Expect file to be more compact when there's less flushing.
 			finfoSrc, _ := ccTest.src.file.Stat()
@@ -723,7 +725,7 @@ func TestStoreFile(t *testing.T) {
 		if cx == nil {
 			t.Errorf("%v: expected successful CopyTo of x coll", ccTestIdx)
 		}
-		visitExpectCollection(t, cx, "a", ccTest.expect)
+		visitExpectCollection(t, cx, "a", ccTest.expect, nil)
 		if ccTest.fevery > 100 {
 			// Expect file to be more compact when there's less flushing.
 			finfoSrc, _ := ccTest.src.file.Stat()
@@ -762,9 +764,9 @@ func TestStoreMultipleCollections(t *testing.T) {
 	loadCollection(y, []string{"1", "2", "3", "4", "5"})
 	loadCollection(z, []string{"D", "C", "B", "A"})
 
-	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"})
-	visitExpectCollection(t, y, "1", []string{"1", "2", "3", "4", "5"})
-	visitExpectCollection(t, z, "A", []string{"A", "B", "C", "D"})
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
+	visitExpectCollection(t, y, "1", []string{"1", "2", "3", "4", "5"}, nil)
+	visitExpectCollection(t, z, "A", []string{"A", "B", "C", "D"}, nil)
 
 	err = s.Flush()
 	if err != nil {
@@ -785,9 +787,9 @@ func TestStoreMultipleCollections(t *testing.T) {
 	y1 := s1.GetCollection("y")
 	z1 := s1.GetCollection("z")
 
-	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"})
-	visitExpectCollection(t, y1, "1", []string{"1", "2", "3", "4", "5"})
-	visitExpectCollection(t, z1, "A", []string{"A", "B", "C", "D"})
+	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil)
+	visitExpectCollection(t, y1, "1", []string{"1", "2", "3", "4", "5"}, nil)
+	visitExpectCollection(t, z1, "A", []string{"A", "B", "C", "D"}, nil)
 
 	s1.RemoveCollection("x")
 
@@ -819,8 +821,8 @@ func TestStoreMultipleCollections(t *testing.T) {
 		t.Errorf("expected x coll to be gone")
 	}
 
-	visitExpectCollection(t, y2, "1", []string{})
-	visitExpectCollection(t, z2, "A", []string{"A", "B", "C", "D"})
+	visitExpectCollection(t, y2, "1", []string{}, nil)
+	visitExpectCollection(t, z2, "A", []string{"A", "B", "C", "D"}, nil)
 
 	if err = z2.Set([]byte("hi"), []byte("world")); err != nil {
 		t.Errorf("expected set to work, got %v", err)
@@ -838,7 +840,7 @@ func TestStoreConcurrentVisits(t *testing.T) {
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
-	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"})
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
 	s.Flush()
 	f.Close()
 
@@ -848,7 +850,9 @@ func TestStoreConcurrentVisits(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		go func() {
-			visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"})
+			visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, func(i *Item) {
+				runtime.Gosched() // Some tests want to test concurrency.
+			})
 		}()
 	}
 }
