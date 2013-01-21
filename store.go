@@ -40,9 +40,8 @@ var MAGIC_END []byte = []byte("3e4a5p")
 
 // Use nil for file for in-memory-only (non-persistent) usage.
 func NewStore(file StoreFile) (*Store, error) {
-	res := &Store{}
 	coll := make(map[string]*Collection)
-	atomic.StorePointer(&res.coll, unsafe.Pointer(&coll))
+	res := &Store{coll: unsafe.Pointer(&coll)}
 	if file == nil || !reflect.ValueOf(file).Elem().IsValid() {
 		return res, nil // Memory-only Store.
 	}
