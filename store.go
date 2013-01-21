@@ -14,8 +14,8 @@ import (
 	"unsafe"
 )
 
-// The StoreFile interface is implemented by os.File, where this
-// extra level of indirection is inspired by SQLite's VFS layer.
+// The StoreFile interface is implemented by os.File.  Application
+// specific implementations may add concurrency, caching, stats, etc.
 type StoreFile interface {
 	io.ReaderAt
 	io.WriterAt
@@ -144,14 +144,14 @@ func (s *Store) Flush() (err error) {
 
 // Returns a non-persistable snapshot, including any mutations that
 // have not been Flush()'ed to disk yet.  The snapshot has its Flush()
-// disabled because the original store "owns" writes to the os.File.
+// disabled because the original store "owns" writes to the StoreFile.
 // Caller should ensure that the returned snapshot store and the
-// original store are used in "single-threaded" manner as they share
-// internal memory structures.  On isolation: if you make updates to a
-// snapshot store, those updates will not be seen by the original
-// store; and vice-versa for mutations on the original store.  To
-// persist the snapshot (and any updates on it) to a new file, use
-// snapshot.CopyTo().
+// original store are either used in "single-threaded" manner or that
+// the underlying StoreFile supports concurrent operations.  On
+// isolation: if you make updates to a snapshot store, those updates
+// will not be seen by the original store; and vice-versa for
+// mutations on the original store.  To persist the snapshot (and any
+// updates on it) to a new file, use snapshot.CopyTo().
 func (s *Store) Snapshot() (snapshot *Store) {
 	coll := copyColl(*(*map[string]*Collection)(atomic.LoadPointer(&s.coll)))
 	res := &Store{
