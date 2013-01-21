@@ -504,7 +504,8 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		item.Val == nil {
 		return errors.New("Item.Key/Val missing or too long")
 	}
-	r, err := t.store.union(t, (*nodeLoc)(atomic.LoadPointer(&t.root)),
+	root := atomic.LoadPointer(&t.root)
+	r, err := t.store.union(t, (*nodeLoc)(root),
 		&nodeLoc{node: unsafe.Pointer(&node{item: itemLoc{item: unsafe.Pointer(&Item{
 			Key:      item.Key,
 			Val:      item.Val,
@@ -513,7 +514,9 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	if err != nil {
 		return err
 	}
-	atomic.StorePointer(&t.root, unsafe.Pointer(r)) // TODO: Use CAS?
+	if !atomic.CompareAndSwapPointer(&t.root, root, unsafe.Pointer(r)) {
+		return errors.New("concurrent mutation attempted")
+	}
 	return nil
 }
 
@@ -524,7 +527,8 @@ func (t *Collection) Set(key []byte, val []byte) error {
 
 // Deletes an item of a given key.
 func (t *Collection) Delete(key []byte) (err error) {
-	left, _, right, err := t.store.split(t, (*nodeLoc)(atomic.LoadPointer(&t.root)), key)
+	root := atomic.LoadPointer(&t.root)
+	left, _, right, err := t.store.split(t, (*nodeLoc)(root), key)
 	if err != nil {
 		return err
 	}
@@ -532,7 +536,9 @@ func (t *Collection) Delete(key []byte) (err error) {
 	if err != nil {
 		return err
 	}
-	atomic.StorePointer(&t.root, unsafe.Pointer(r)) // TODO: Use CAS?
+	if !atomic.CompareAndSwapPointer(&t.root, root, unsafe.Pointer(r)) {
+		return errors.New("concurrent mutation attempted")
+	}
 	return nil
 }
 
