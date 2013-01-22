@@ -24,8 +24,6 @@ type StoreFile interface {
 }
 
 // A persistable store holding collections of ordered keys & values.
-// The persistence is append-only based on immutable, copy-on-write
-// treaps for robustness.
 type Store struct {
 	coll     unsafe.Pointer // Immutable, read-only map[string]*Collection.
 	file     StoreFile
