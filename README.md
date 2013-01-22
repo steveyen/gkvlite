@@ -117,6 +117,8 @@ Other features
 * You can associate transient, ephemeral (non-persisted) data with
   your items.  If you do use the Item.Transient field, you should use
   sync/atomic pointer functions for concurrency correctness.
+  In general, Item's should be treated as immutable, except for the
+  Item.Transient field.
 * Errors from file operations are propagated all the way back to your
   code, so your application can respond appropriately.
 * Small - the implementation is a single file < 1000 lines of code.
