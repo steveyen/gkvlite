@@ -114,6 +114,9 @@ Other features
 * You can control item priority to access hotter items faster by
   shuffling them closer to the top of balanced binary trees (warning:
   intricate/advanced tradeoffs here).
+* You can associate transient, ephemeral (non-persisted) data with
+  your items.  If you do use the Item.Transient field, you should use
+  sync/atomic pointer functions for concurrency correctness.
 * Errors from file operations are propagated all the way back to your
   code, so your application can respond appropriately.
 * Small - the implementation is a single file < 1000 lines of code.

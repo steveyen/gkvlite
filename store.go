@@ -315,8 +315,9 @@ func (nloc *nodeLoc) read(o *Store) (err error) {
 
 // A persistable item.
 type Item struct {
-	Key, Val []byte // Val may be nil if not fetched into memory yet.
-	Priority int32  // Use rand.Int() for probabilistic balancing.
+	Key, Val  []byte         // Val may be nil if not fetched into memory yet.
+	Priority  int32          // Use rand.Int() for probabilistic balancing.
+	Transient unsafe.Pointer // For any ephemeral data; atomic CAS recommended.
 }
 
 // A persistable item and its persistence location.
