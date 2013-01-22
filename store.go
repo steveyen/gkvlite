@@ -368,7 +368,7 @@ func (i *itemLoc) read(o *Store, withValue bool) (err error) {
 		if loc.isEmpty() {
 			return nil
 		}
-		b := make([]byte, loc.Length)
+		b := make([]byte, loc.Length) // TODO: Read less when not withValue.
 		if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
 			return err
 		}
