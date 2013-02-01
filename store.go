@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"sort"
 	"sync/atomic"
 	"unsafe"
 )
@@ -83,11 +84,15 @@ func (s *Store) GetCollection(name string) *Collection {
 }
 
 func (s *Store) GetCollectionNames() []string {
-	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
+	return collNames(*(*map[string]*Collection)(atomic.LoadPointer(&s.coll)))
+}
+
+func collNames(coll map[string]*Collection) []string {
 	res := make([]string, len(coll))[:0]
 	for name, _ := range coll {
 		res = append(res, name)
 	}
+	sort.Strings(res) // Sorting because common callers need stability.
 	return res
 }
 
@@ -127,7 +132,8 @@ func (s *Store) Flush() (err error) {
 		return errors.New("no file / in-memory only, so cannot Flush()")
 	}
 	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
-	for _, t := range coll {
+	for _, name := range collNames(coll) {
+		t := coll[name]
 		root := (*nodeLoc)(atomic.LoadPointer(&t.root))
 		if err = t.store.flushItems(root); err != nil {
 			return err
@@ -157,11 +163,11 @@ func (s *Store) Snapshot() (snapshot *Store) {
 		size:     atomic.LoadInt64(&s.size),
 		readOnly: true,
 	}
-	for name, c := range coll {
+	for _, name := range collNames(coll) {
 		coll[name] = &Collection{
 			store:   res,
-			compare: c.compare,
-			root:    unsafe.Pointer(atomic.LoadPointer(&c.root)),
+			compare: coll[name].compare,
+			root:    unsafe.Pointer(atomic.LoadPointer(&coll[name].root)),
 		}
 	}
 	return res
