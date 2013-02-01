@@ -124,7 +124,7 @@ func copyColl(orig map[string]*Collection) map[string]*Collection {
 // have a less occasional Flush() instead of Flush()'ing after every
 // mutation.  Users may also wish to file.Sync() after a Flush() for
 // extra data-loss protection.
-func (s *Store) Flush() (err error) {
+func (s *Store) Flush() error {
 	if s.readOnly {
 		return errors.New("readonly, so cannot Flush()")
 	}
@@ -133,12 +133,7 @@ func (s *Store) Flush() (err error) {
 	}
 	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
 	for _, name := range collNames(coll) {
-		t := coll[name]
-		root := (*nodeLoc)(atomic.LoadPointer(&t.root))
-		if err = t.store.flushItems(root); err != nil {
-			return err
-		}
-		if err = t.store.flushNodes(root); err != nil {
+		if err := coll[name].Write(); err != nil {
 			return err
 		}
 	}
@@ -584,6 +579,20 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 		return err
 	}
 	atomic.StorePointer(&t.root, unsafe.Pointer(&nodeLoc{loc: unsafe.Pointer(&p)}))
+	return nil
+}
+
+// Writes dirty items of a collection BUT (WARNING) does NOT write new
+// root records.  Use Store.Flush() to write root records, which would
+// make these writes visible to the next file re-opening/re-loading.
+func (t *Collection) Write() (err error) {
+	root := (*nodeLoc)(atomic.LoadPointer(&t.root))
+	if err = t.store.flushItems(root); err != nil {
+		return err
+	}
+	if err = t.store.flushNodes(root); err != nil {
+		return err
+	}
 	return nil
 }
 
