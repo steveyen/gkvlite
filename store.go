@@ -184,7 +184,8 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 		return nil, err
 	}
 	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
-	for name, srcColl := range coll {
+	for _, name := range collNames(coll) {
+		srcColl := coll[name]
 		dstColl := dstStore.SetCollection(name, srcColl.compare)
 		minItem, err := srcColl.MinItem(true)
 		if err != nil {
