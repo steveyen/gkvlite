@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"testing"
 )
 
@@ -922,4 +923,26 @@ func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
 		}()
 		runtime.Gosched() // Yield to test concurrency.
 	})
+}
+
+func BenchmarkSets(b *testing.B) {
+	s, _ := NewStore(nil)
+	x := s.SetCollection("x", nil)
+	v := []byte("")
+	for i := 0; i < b.N; i++ {
+		x.Set([]byte(strconv.Itoa(i)), v)
+	}
+}
+
+func BenchmarkGets(b *testing.B) {
+	s, _ := NewStore(nil)
+	x := s.SetCollection("x", nil)
+	v := []byte("")
+	for i := 0; i < b.N; i++ {
+		x.Set([]byte(strconv.Itoa(i)), v)
+	}
+	b.ResetTimer() // Ignore time from above.
+	for i := 0; i < b.N; i++ {
+		x.Get([]byte(strconv.Itoa(i)))
+	}
 }
