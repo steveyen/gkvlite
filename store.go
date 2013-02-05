@@ -677,7 +677,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 			right: *newRight,
 		})}, nil
 	}
-	// We don't use middle because the "that" node has precendence.
+	// We don't use middle because the "that" node has precedence.
 	left, _, right, err := o.split(t, this, thatItem.Item().Key)
 	if err != nil {
 		return empty, err
