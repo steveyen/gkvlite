@@ -26,10 +26,19 @@ type StoreFile interface {
 
 // A persistable store holding collections of ordered keys & values.
 type Store struct {
-	coll     unsafe.Pointer // Immutable, read-only map[string]*Collection.
-	file     StoreFile
-	size     int64
-	readOnly bool
+	coll      unsafe.Pointer // Immutable, read-only map[string]*Collection.
+	file      StoreFile
+	size      int64
+	readOnly  bool
+	callbacks StoreCallbacks
+}
+
+type ItemCallback func(*Item) (*Item, error)
+
+// Allows users to interpose before/after certain events.
+type StoreCallbacks struct {
+	BeforeItemWrite ItemCallback
+	AfterItemRead   ItemCallback
 }
 
 const VERSION = uint32(3)
@@ -39,8 +48,12 @@ var MAGIC_END []byte = []byte("3e4a5p")
 
 // Use nil for file for in-memory-only (non-persistent) usage.
 func NewStore(file StoreFile) (*Store, error) {
+	return NewStoreEx(file, StoreCallbacks{})
+}
+func NewStoreEx(file StoreFile,
+	callbacks StoreCallbacks) (*Store, error) {
 	coll := make(map[string]*Collection)
-	res := &Store{coll: unsafe.Pointer(&coll)}
+	res := &Store{coll: unsafe.Pointer(&coll), callbacks: callbacks}
 	if file == nil || !reflect.ValueOf(file).Elem().IsValid() {
 		return res, nil // Memory-only Store.
 	}
@@ -162,10 +175,11 @@ func (s *Store) Flush() error {
 func (s *Store) Snapshot() (snapshot *Store) {
 	coll := copyColl(*(*map[string]*Collection)(atomic.LoadPointer(&s.coll)))
 	res := &Store{
-		coll:     unsafe.Pointer(&coll),
-		file:     s.file,
-		size:     atomic.LoadInt64(&s.size),
-		readOnly: true,
+		coll:      unsafe.Pointer(&coll),
+		file:      s.file,
+		size:      atomic.LoadInt64(&s.size),
+		readOnly:  true,
+		callbacks: s.callbacks,
 	}
 	for _, name := range collNames(coll) {
 		coll[name] = &Collection{
@@ -345,11 +359,17 @@ func (i *itemLoc) Item() *Item {
 	return (*Item)(atomic.LoadPointer(&i.item))
 }
 
-func (i *itemLoc) write(o *Store) error {
+func (i *itemLoc) write(o *Store) (err error) {
 	if i.Loc().isEmpty() {
 		iItem := i.Item()
 		if iItem == nil {
 			return errors.New("itemLoc.write with nil item")
+		}
+		if o.callbacks.BeforeItemWrite != nil {
+			iItem, err = o.callbacks.BeforeItemWrite(iItem)
+			if err != nil {
+				return err
+			}
 		}
 		offset := atomic.LoadInt64(&o.size)
 		length := 4 + 2 + 4 + 4 + len(iItem.Key) + len(iItem.Val)
@@ -407,6 +427,12 @@ func (i *itemLoc) read(o *Store, withValue bool) (err error) {
 		item.Key = b[hdrLength : hdrLength+int(keyLength)]
 		if withValue {
 			item.Val = b[hdrLength+int(keyLength) : hdrLength+int(keyLength)+int(valLength)]
+		}
+		if o.callbacks.AfterItemRead != nil {
+			item, err = o.callbacks.AfterItemRead(item)
+			if err != nil {
+				return err
+			}
 		}
 		atomic.StorePointer(&i.item, unsafe.Pointer(item))
 	}
