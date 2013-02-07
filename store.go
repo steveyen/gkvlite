@@ -63,11 +63,7 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 		orig := atomic.LoadPointer(&s.coll)
 		coll := copyColl(*(*map[string]*Collection)(orig))
 		if coll[name] == nil {
-			coll[name] = &Collection{
-				store:   s,
-				compare: compare,
-				root:    unsafe.Pointer(&nodeLoc{}),
-			}
+			coll[name] = s.MakePrivateCollection(compare)
 		}
 		coll[name].compare = compare
 		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
@@ -75,6 +71,19 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 		}
 	}
 	return nil // Never reached.
+}
+
+// Returns a new, unregistered (non-named) collection.  This allows
+// advanced users to manage collections of private collections.
+func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
+	if compare == nil {
+		compare = bytes.Compare
+	}
+	return &Collection{
+		store:   s,
+		compare: compare,
+		root:    unsafe.Pointer(&nodeLoc{}),
+	}
 }
 
 // Retrieves a named Collection.
