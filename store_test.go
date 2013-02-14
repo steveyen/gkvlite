@@ -107,7 +107,7 @@ func TestStoreMem(t *testing.T) {
 					testIdx, err)
 			}
 		case "del":
-			err := x.Delete([]byte(test.val))
+			_, err := x.Delete([]byte(test.val))
 			if err != nil {
 				t.Errorf("test: %v, expected del nil error, got: %v",
 					testIdx, err)
@@ -139,7 +139,7 @@ func TestStoreMem(t *testing.T) {
 					testIdx, err)
 			}
 		case "del":
-			err := xx.Delete([]byte(test.val))
+			_, err := xx.Delete([]byte(test.val))
 			if err != nil {
 				t.Errorf("test: %v, expected del nil error, got: %v",
 					testIdx, err)
@@ -454,7 +454,7 @@ func TestStoreFile(t *testing.T) {
 	// ------------------------------------------------
 
 	// Exercising deletion.
-	if err = x.Delete([]byte("b")); err != nil {
+	if _, err = x.Delete([]byte("b")); err != nil {
 		t.Errorf("expected Delete to have no error, err: %v", err)
 	}
 	if err := s.Flush(); err != nil {
@@ -487,14 +487,14 @@ func TestStoreFile(t *testing.T) {
 	// ------------------------------------------------
 
 	// Exercising deletion more.
-	if err = x.Delete([]byte("c")); err != nil {
+	if _, err = x.Delete([]byte("c")); err != nil {
 		t.Errorf("expected Delete to have no error, err: %v", err)
 	}
 	loadCollection(x, []string{"d", "c", "b", "b", "c"})
-	if err = x.Delete([]byte("b")); err != nil {
+	if _, err = x.Delete([]byte("b")); err != nil {
 		t.Errorf("expected Delete to have no error, err: %v", err)
 	}
-	if err = x.Delete([]byte("c")); err != nil {
+	if _, err = x.Delete([]byte("c")); err != nil {
 		t.Errorf("expected Delete to have no error, err: %v", err)
 	}
 	if err := s.Flush(); err != nil {
@@ -598,7 +598,7 @@ func TestStoreFile(t *testing.T) {
 
 	// Exercising delete everything.
 	for _, k := range []string{"a", "b", "c", "d"} {
-		if err = x.Delete([]byte(k)); err != nil {
+		if _, err = x.Delete([]byte(k)); err != nil {
 			t.Errorf("expected Delete to have no error, err: %v", err)
 		}
 	}
@@ -882,7 +882,7 @@ func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 		go func() {
 			toDelete--
 			toDeleteKey := exp[toDelete]
-			if err := x1.Delete([]byte(toDeleteKey)); err != nil {
+			if _, err := x1.Delete([]byte(toDeleteKey)); err != nil {
 				t.Errorf("expected concurrent delete to work on key: %v, got: %v",
 					toDeleteKey, err)
 			}
@@ -923,6 +923,41 @@ func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
 		}()
 		runtime.Gosched() // Yield to test concurrency.
 	})
+}
+
+func TestWasDeleted(t *testing.T) {
+	s, _ := NewStore(nil)
+	x := s.SetCollection("x", bytes.Compare)
+	wasDeleted, err := x.Delete([]byte("notThere"))
+	if err != nil {
+		t.Errorf("expected no deletion error")
+	}
+	if wasDeleted {
+		t.Errorf("expected wasDeleted false")
+	}
+
+	loadCollection(x, []string{"a", "b"})
+	wasDeleted, err = x.Delete([]byte("notThere"))
+	if err != nil {
+		t.Errorf("expected no deletion error")
+	}
+	if wasDeleted {
+		t.Errorf("expected wasDeleted false")
+	}
+	wasDeleted, err = x.Delete([]byte("a"))
+	if err != nil {
+		t.Errorf("expected no deletion error")
+	}
+	if !wasDeleted {
+		t.Errorf("expected wasDeleted true")
+	}
+	wasDeleted, err = x.Delete([]byte("notThere"))
+	if err != nil {
+		t.Errorf("expected no deletion error")
+	}
+	if wasDeleted {
+		t.Errorf("expected wasDeleted false")
+	}
 }
 
 func BenchmarkSets(b *testing.B) {

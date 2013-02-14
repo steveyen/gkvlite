@@ -561,20 +561,20 @@ func (t *Collection) Set(key []byte, val []byte) error {
 }
 
 // Deletes an item of a given key.
-func (t *Collection) Delete(key []byte) (err error) {
+func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	root := atomic.LoadPointer(&t.root)
-	left, _, right, err := t.store.split(t, (*nodeLoc)(root), key)
-	if err != nil {
-		return err
+	left, middle, right, err := t.store.split(t, (*nodeLoc)(root), key)
+	if err != nil || middle.isEmpty() {
+		return false, err
 	}
 	r, err := t.store.join(left, right)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !atomic.CompareAndSwapPointer(&t.root, root, unsafe.Pointer(r)) {
-		return errors.New("concurrent mutation attempted")
+		return false, errors.New("concurrent mutation attempted")
 	}
-	return nil
+	return true, nil
 }
 
 // Retrieves the item with the "smallest" key.
