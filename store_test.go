@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strconv"
 	"testing"
+	"unsafe"
 )
 
 func TestStoreMem(t *testing.T) {
@@ -980,4 +981,16 @@ func BenchmarkGets(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		x.Get([]byte(strconv.Itoa(i)))
 	}
+}
+
+func TestSizeof(t *testing.T) {
+	t.Logf("sizeof various structs and types, in bytes...")
+	t.Logf("  node: %v", unsafe.Sizeof(node{}))
+	t.Logf("  nodeLoc: %v", unsafe.Sizeof(nodeLoc{}))
+	t.Logf("  Item: %v", unsafe.Sizeof(Item{}))
+	t.Logf("  itemLoc: %v", unsafe.Sizeof(itemLoc{}))
+	t.Logf("  ploc: %v", unsafe.Sizeof(ploc{}))
+	t.Logf("  []byte: %v", unsafe.Sizeof([]byte{}))
+	t.Logf("  uint32: %v", unsafe.Sizeof(uint32(0)))
+	t.Logf("  uint64: %v", unsafe.Sizeof(uint64(0)))
 }
