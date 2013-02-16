@@ -23,9 +23,10 @@ Key concepts
 ============
 
 * A Store can have zero or more Collections.
-* A Collection can have zero or more Items (key-value).
-* A key is a []byte, max length 64KB.
-* A value is a []byte, max length 4GB.
+* A Collection can have zero or more Items.
+* An Item is a key and value.
+* A key is a []byte, max length 64KB (uint16).
+* A value is a []byte, max length 4GB (uint32).
 
 ACID properties
 ===============
@@ -52,40 +53,6 @@ Performance
   especially when you have many large values and you just need to
   retrieve only keys from disk for some requests.
 
-Concurrency
-===========
-
-The simplest way to use gkvlite is in single-threaded fashion, such as
-by using a go channel or other locking to serialize access to a Store.
-
-More advanced users may want to use gkvlite's support for concurrent
-goroutines, where the user's provided StoreFile interface
-implementation must be concurrent safe.  In concurrent usage, it is
-recommended that you have only a single read-write goroutine per
-Store, and should have only a single persistence goroutine per Store
-(doing Flush()'s, which can be a different goroutine than the
-read-write goroutine).  But, you may have multiple, concurrent
-read-only goroutines per Store (doing Get()'s, Visit()'s,
-Snapshot()'s, CopyTo()'s, etc).
-
-The idea is that reader goroutines, the read-write goroutine, and the
-persistence goroutine do not need to block each other.
-
-A read-only goroutine that performs a long, multiple item read
-operation, like VisitItemsAscend(), will see a consistent, isolated
-view of the collection.  That is, concurrent mutations that happened
-after the VisitItemsAscend() started will not be seen by the visitor,
-even if the visitor is slow and takes a long time.
-
-Note that os.File is not a concurrent safe implementation of the
-StoreFile interface.  You will need to provide your own implementation
-of the StoreFile interface, such as by using a channel to serialize
-StoreFile requests.
-
-Finally, extra advanced users may wish to have a read-write goroutine
-per Collection instead of per Store.  There should only be, though,
-only a single persistence goroutine per Store.
-
 Snapshots
 =========
 
@@ -95,6 +62,42 @@ Snapshots
   from) the original Store.
 * And, mutations on the original Store won't be seen by snapshots.
 * Snapshot creation is a fast O(1) operation per Collection.
+
+Concurrency
+===========
+
+The simplest way to use gkvlite is in single-threaded fashion, such as
+by using a go channel or other locking to serialize access to a Store.
+
+More advanced users may want to use gkvlite's support for concurrent
+goroutines.  The idea is that multiple read-only goroutines, a single
+read-write (mutation) goroutine, and a single persistence (flusher)
+goroutine do not need to block each other.
+
+In more detail, you should have only a single read-write (or mutation)
+goroutine per Store, and should have only a single persistence
+goroutine per Store (doing Flush()'s).  And, you may have multiple,
+concurrent read-only goroutines per Store (doing read-only operations
+like Get()'s, Visit()'s, Snapshot()'s, CopyTo()'s, etc).
+
+A read-only goroutine that performs a long or slow read operation,
+like a Get() that must retrieve from disk or a range scan, will see a
+consistent, isolated view of the collection.  That is, mutations that
+happened after the Get() or the range scan has started will not be
+seen by the reader, even if the read operation is slow and takes a
+long time.
+
+In concurrent usage, the user must provide a StoreFile implementation
+that is concurrent safe.
+
+Note that os.File is not a concurrent safe implementation of the
+StoreFile interface.  You will need to provide your own implementation
+of the StoreFile interface, such as by using a channel to serialize
+StoreFile method invocations.
+
+Finally, extra advanced users may wish to have a read-write (mutation)
+goroutine per Collection instead of per Store.  There should only be,
+though, only a single persistence (flusher) goroutine per Store.
 
 Other features
 ==============
@@ -121,7 +124,7 @@ Other features
   Item.Transient field.
 * Errors from file operations are propagated all the way back to your
   code, so your application can respond appropriately.
-* Small - the implementation is a single file < 1000 lines of code.
+* Small - the implementation is less than 1000 lines of code.
 * Tested - "go test" unit tests.
 * Docs - "go doc" documentation.
 
