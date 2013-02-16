@@ -3,6 +3,7 @@ package gkvlite
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"runtime"
 	"strconv"
@@ -1003,5 +1004,23 @@ func TestPrivateCollection(t *testing.T) {
 	}
 	if len(s.GetCollectionNames()) != 0 {
 		t.Errorf("expected private collection to be unlisted")
+	}
+}
+
+func TestBadStoreFile(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	ioutil.WriteFile(fname, []byte("not a real store file"), 0600)
+	defer os.Remove(fname)
+	f, err := os.Open(fname)
+	if err != nil || f == nil {
+		t.Errorf("could not reopen file: %v", fname)
+	}
+	s, err := NewStore(f)
+	if err == nil {
+		t.Errorf("expected NewStore(f) to fail")
+	}
+	if s != nil {
+		t.Errorf("expected NewStore(f) to fail with s")
 	}
 }
