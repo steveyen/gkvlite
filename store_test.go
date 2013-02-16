@@ -994,3 +994,14 @@ func TestSizeof(t *testing.T) {
 	t.Logf("  uint32: %v", unsafe.Sizeof(uint32(0)))
 	t.Logf("  uint64: %v", unsafe.Sizeof(uint64(0)))
 }
+
+func TestPrivateCollection(t *testing.T) {
+	s, _ := NewStore(nil)
+	x := s.MakePrivateCollection(nil)
+	if x == nil {
+		t.Errorf("expected private collection")
+	}
+	if len(s.GetCollectionNames()) != 0 {
+		t.Errorf("expected private collection to be unlisted")
+	}
+}
