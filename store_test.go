@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"unsafe"
 )
@@ -876,14 +877,14 @@ func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 	x1 := s1.GetCollection("x")
 
 	exp := []string{"a", "b", "c", "d", "e"}
-	toDelete := len(exp)
+	toDelete := int32(len(exp))
 
 	// Concurrent mutations like a delete should not affect a visit()
 	// that's already inflight.
 	visitExpectCollection(t, x1, "a", exp, func(i *Item) {
 		go func() {
-			toDelete--
-			toDeleteKey := exp[toDelete]
+			d := atomic.AddInt32(&toDelete, -1)
+			toDeleteKey := exp[d]
 			if _, err := x1.Delete([]byte(toDeleteKey)); err != nil {
 				t.Errorf("expected concurrent delete to work on key: %v, got: %v",
 					toDeleteKey, err)
@@ -910,14 +911,14 @@ func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
 
 	exp := []string{"a", "b", "c", "d", "e"}
 	add := []string{"A", "1", "E", "2", "C"}
-	toAdd := 0
+	toAdd := int32(0)
 
 	// Concurrent mutations like inserts should not affect a visit()
 	// that's already inflight.
 	visitExpectCollection(t, x1, "a", exp, func(i *Item) {
 		go func() {
-			toAddKey := []byte(add[toAdd])
-			toAdd++
+			a := atomic.AddInt32(&toAdd, 1)
+			toAddKey := []byte(add[a-1])
 			if err := x1.Set(toAddKey, toAddKey); err != nil {
 				t.Errorf("expected concurrent set to work on key: %v, got: %v",
 					toAddKey, err)
