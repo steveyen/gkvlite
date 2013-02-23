@@ -575,13 +575,13 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 // Retrieves the item with the "smallest" key.
 // The returned item should be treated as immutable.
 func (t *Collection) MinItem(withValue bool) (*Item, error) {
-	return t.store.edge(t, withValue, func(n *node) *nodeLoc { return &n.left })
+	return t.store.walk(t, withValue, func(n *node) *nodeLoc { return &n.left })
 }
 
 // Retrieves the item with the "largest" key.
 // The returned item should be treated as immutable.
 func (t *Collection) MaxItem(withValue bool) (*Item, error) {
-	return t.store.edge(t, withValue, func(n *node) *nodeLoc { return &n.right })
+	return t.store.walk(t, withValue, func(n *node) *nodeLoc { return &n.right })
 }
 
 type ItemVisitor func(i *Item) bool
@@ -816,7 +816,7 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 	})}, nil
 }
 
-func (o *Store) edge(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
+func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
 	res *Item, err error) {
 	n := (*nodeLoc)(atomic.LoadPointer(&t.root))
 	if err = n.read(o); err != nil || n.isEmpty() {
