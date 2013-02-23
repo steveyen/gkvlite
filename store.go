@@ -481,15 +481,14 @@ func (p *ploc) read(b *bytes.Buffer) (res *ploc, err error) {
 // need the item's value (Item.Val may be nil), which might be able
 // to save on I/O and memory resources, especially for large values.
 // The returned Item should be treated as immutable.
-func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
+func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 	n := (*nodeLoc)(atomic.LoadPointer(&t.root))
-	err := n.read(t.store)
 	for {
-		if err != nil || n.isEmpty() {
+		if err = n.read(t.store); err != nil || n.isEmpty() {
 			break
 		}
 		i := &n.Node().item
-		if err := i.read(t.store, false); err != nil {
+		if err = i.read(t.store, false); err != nil {
 			return nil, err
 		}
 		iItem := i.Item()
@@ -499,10 +498,8 @@ func (t *Collection) GetItem(key []byte, withValue bool) (*Item, error) {
 		c := t.compare(key, iItem.Key)
 		if c < 0 {
 			n = &n.Node().left
-			err = n.read(t.store)
 		} else if c > 0 {
 			n = &n.Node().right
-			err = n.read(t.store)
 		} else {
 			if withValue {
 				if err = i.read(t.store, withValue); err != nil {
