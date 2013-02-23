@@ -1032,16 +1032,20 @@ func TestEvictSomeItems(t *testing.T) {
 	f, _ := os.Create(fname)
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
+	numEvicted := uint64(0)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
 	for i := 0; i < 1000; i++ {
 		visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
 		s.Flush()
-		x.EvictSomeItems()
+		numEvicted += x.EvictSomeItems()
 	}
 	for i := 0; i < 1000; i++ {
 		visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
 		loadCollection(x, []string{"e", "d", "a"})
 		s.Flush()
-		x.EvictSomeItems()
+		numEvicted += x.EvictSomeItems()
+	}
+	if numEvicted == 0 {
+		t.Errorf("expected some evictions")
 	}
 }
