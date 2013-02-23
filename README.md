@@ -114,9 +114,11 @@ Other features
   checksums, I/O statistics, caching, enabling concurrency, etc).
 * You can supply your own KeyCompare function to order items however
   you want.  The default is bytes.Compare().
-* To evict O(log N) number of items, call Collection.EvictSomeItems(),
-  which traverses a random tree branch and evicts any clean items
-  found during that traversal.
+* To evict O(log N) number of items from memory, call
+  Collection.EvictSomeItems(), which traverses a random tree branch
+  and evicts any clean (already persisted) items found during that
+  traversal.  Eviction is current safe: similar to concurrent reader
+  goroutines, you may have concurrent evictor goroutines.
 * You can control item priority to access hotter items faster by
   shuffling them closer to the top of balanced binary trees (warning:
   intricate/advanced tradeoffs here).
