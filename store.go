@@ -15,15 +15,6 @@ import (
 	"unsafe"
 )
 
-// The StoreFile interface is implemented by os.File.  Application
-// specific implementations may add concurrency, caching, stats, etc.
-type StoreFile interface {
-	io.ReaderAt
-	io.WriterAt
-
-	Stat() (os.FileInfo, error)
-}
-
 // A persistable store holding collections of ordered keys & values.
 type Store struct {
 	coll      unsafe.Pointer // Immutable, read-only map[string]*Collection.
@@ -33,19 +24,27 @@ type Store struct {
 	callbacks StoreCallbacks
 }
 
-type ItemCallback func(*Item) (*Item, error)
+// The StoreFile interface is implemented by os.File.  Application
+// specific implementations may add concurrency, caching, stats, etc.
+type StoreFile interface {
+	io.ReaderAt
+	io.WriterAt
+	Stat() (os.FileInfo, error)
+}
 
-// Allows users to interpose before/after certain events.
+// Allows applications to interpose before/after certain events.
 type StoreCallbacks struct {
 	BeforeItemWrite, AfterItemRead ItemCallback
 }
+
+type ItemCallback func(*Item) (*Item, error)
 
 const VERSION = uint32(3)
 
 var MAGIC_BEG []byte = []byte("0g1t2r")
 var MAGIC_END []byte = []byte("3e4a5p")
 
-// Use nil for file for in-memory-only (non-persistent) usage.
+// Provide a nil StoreFile for in-memory-only (non-persistent) usage.
 func NewStore(file StoreFile) (*Store, error) {
 	return NewStoreEx(file, StoreCallbacks{})
 }
