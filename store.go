@@ -37,8 +37,7 @@ type ItemCallback func(*Item) (*Item, error)
 
 // Allows users to interpose before/after certain events.
 type StoreCallbacks struct {
-	BeforeItemWrite ItemCallback
-	AfterItemRead   ItemCallback
+	BeforeItemWrite, AfterItemRead ItemCallback
 }
 
 const VERSION = uint32(3)
@@ -110,7 +109,7 @@ func (s *Store) GetCollectionNames() []string {
 }
 
 func collNames(coll map[string]*Collection) []string {
-	res := make([]string, len(coll))[:0]
+	res := make([]string, 0, len(coll))
 	for name, _ := range coll {
 		res = append(res, name)
 	}
@@ -286,7 +285,7 @@ func (nloc *nodeLoc) write(o *Store) error {
 		}
 		offset := atomic.LoadInt64(&o.size)
 		length := ploc_length + ploc_length + ploc_length
-		b := bytes.NewBuffer(make([]byte, length)[:0])
+		b := bytes.NewBuffer(make([]byte, 0, length))
 		if err := node.item.Loc().write(b); err != nil {
 			return err
 		}
