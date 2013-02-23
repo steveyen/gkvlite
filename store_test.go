@@ -1025,3 +1025,23 @@ func TestBadStoreFile(t *testing.T) {
 		t.Errorf("expected NewStore(f) to fail with s")
 	}
 }
+
+func TestEvictSomeItems(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	s, _ := NewStore(f)
+	x := s.SetCollection("x", nil)
+	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+	for i := 0; i < 1000; i++ {
+		visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
+		s.Flush()
+		x.EvictSomeItems()
+	}
+	for i := 0; i < 1000; i++ {
+		visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
+		loadCollection(x, []string{"e", "d", "a"})
+		s.Flush()
+		x.EvictSomeItems()
+	}
+}

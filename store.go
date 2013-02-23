@@ -575,13 +575,34 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 // Retrieves the item with the "smallest" key.
 // The returned item should be treated as immutable.
 func (t *Collection) MinItem(withValue bool) (*Item, error) {
-	return t.store.walk(t, withValue, func(n *node) *nodeLoc { return &n.left })
+	return t.store.walk(t, withValue,
+		func(n *node) (*nodeLoc, bool) { return &n.left, true })
 }
 
 // Retrieves the item with the "largest" key.
 // The returned item should be treated as immutable.
 func (t *Collection) MaxItem(withValue bool) (*Item, error) {
-	return t.store.walk(t, withValue, func(n *node) *nodeLoc { return &n.right })
+	return t.store.walk(t, withValue,
+		func(n *node) (*nodeLoc, bool) { return &n.right, true })
+}
+
+// Evict some clean items found by randomly walking a tree branch.
+func (t *Collection) EvictSomeItems() (numEvicted uint64) {
+	t.store.walk(t, false, func(n *node) (*nodeLoc, bool) {
+		if !n.item.Loc().isEmpty() {
+			atomic.StorePointer(&n.item.item, unsafe.Pointer(nil))
+			numEvicted++
+		}
+		next := &n.left
+		if (rand.Int() & 0x01) == 0x01 {
+			next = &n.right
+		}
+		if next.isEmpty() {
+			return nil, false
+		}
+		return next, true
+	})
+	return numEvicted
 }
 
 type ItemVisitor func(i *Item) bool
@@ -816,14 +837,17 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 	})}, nil
 }
 
-func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) *nodeLoc) (
+func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, bool)) (
 	res *Item, err error) {
 	n := (*nodeLoc)(atomic.LoadPointer(&t.root))
 	if err = n.read(o); err != nil || n.isEmpty() {
 		return nil, err
 	}
 	for {
-		child := cfn(n.Node())
+		child, ok := cfn(n.Node())
+		if !ok {
+			return nil, nil
+		}
 		if err = child.read(o); err != nil {
 			return nil, err
 		}
