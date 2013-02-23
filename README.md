@@ -114,6 +114,9 @@ Other features
   checksums, I/O statistics, caching, enabling concurrency, etc).
 * You can supply your own KeyCompare function to order items however
   you want.  The default is bytes.Compare().
+* To evict O(log N) number of items, call Collection.EvictSomeItems(),
+  which traverses a random tree branch and evicts any clean items
+  found during that traversal.
 * You can control item priority to access hotter items faster by
   shuffling them closer to the top of balanced binary trees (warning:
   intricate/advanced tradeoffs here).
@@ -124,7 +127,7 @@ Other features
   Item.Transient field.
 * Errors from file operations are propagated all the way back to your
   code, so your application can respond appropriately.
-* Small - the implementation is less than 1000 lines of code.
+* Small - the implementation is about 1000 lines of code.
 * Tested - "go test" unit tests.
 * Docs - "go doc" documentation.
 
