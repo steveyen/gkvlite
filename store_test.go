@@ -2,6 +2,7 @@ package gkvlite
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -11,6 +12,30 @@ import (
 	"testing"
 	"unsafe"
 )
+
+type mockfile struct {
+	f       *os.File
+	readat  func(p []byte, off int64) (n int, err error)
+	writeat func(p []byte, off int64) (n int, err error)
+}
+
+func (m *mockfile) ReadAt(p []byte, off int64) (n int, err error) {
+	if m.readat != nil {
+		return m.readat(p, off)
+	}
+	return m.f.ReadAt(p, off)
+}
+
+func (m *mockfile) WriteAt(p []byte, off int64) (n int, err error) {
+	if m.writeat != nil {
+		return m.writeat(p, off)
+	}
+	return m.f.WriteAt(p, off)
+}
+
+func (m *mockfile) Stat() (fi os.FileInfo, err error) {
+	return m.f.Stat()
+}
 
 func TestStoreMem(t *testing.T) {
 	s, err := NewStore(nil)
@@ -1047,5 +1072,132 @@ func TestEvictSomeItems(t *testing.T) {
 	}
 	if numEvicted == 0 {
 		t.Errorf("expected some evictions")
+	}
+}
+
+func TestJoinWithFileErrors(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	defer os.Remove(fname)
+
+	errAfter := 0x1000000
+	numReads := 0
+
+	m := &mockfile{
+		f: f,
+		readat: func(p []byte, off int64) (n int, err error) {
+			numReads++
+			if numReads >= errAfter {
+				return 0, errors.New("mockfile error")
+			}
+			return f.ReadAt(p, off)
+		},
+	}
+
+	sOrig, _ := NewStore(m)
+	xOrig := sOrig.SetCollection("x", nil)
+	loadCollection(xOrig, []string{"a", "b", "c", "d", "e", "f"})
+	sOrig.Flush()
+
+	fname2 := "tmp2.test"
+	os.Remove(fname2)
+	f2, _ := os.Create(fname2)
+	defer os.Remove(fname2)
+
+	sMore, _ := NewStore(f2)
+	xMore := sMore.SetCollection("x", nil)
+	loadCollection(xMore, []string{"5", "4", "3", "2", "1", "0"})
+	sMore.Flush()
+
+	var res *nodeLoc
+	var err error
+
+	// ----------------------------------------
+
+	errAfter = 0x10000000 // Attempt with no errors.
+	numReads = 0
+
+	s2, _ := NewStore(m)
+	x2 := s2.GetCollection("x")
+
+	root := (*nodeLoc)(atomic.LoadPointer(&x2.root))
+	if root == nil || root.isEmpty() {
+		t.Errorf("expected an x2 root")
+	}
+	if root.Loc().isEmpty() {
+		t.Errorf("expected an x2 root to be on disk")
+	}
+	if root.Node() != nil {
+		t.Errorf("expected an x2 root to not be loaded into memory yet")
+	}
+
+	errAfter = 0x10000000 // Attempt with no errors.
+	numReads = 0
+
+	res, err = s2.join(root, empty)
+	if err != nil {
+		t.Errorf("expected no error")
+	}
+	if res.isEmpty() {
+		t.Errorf("expected non-empty res")
+	}
+	if numReads == 0 {
+		t.Errorf("expected some reads, got: %v", numReads)
+	}
+
+	// ----------------------------------------
+
+	for i := 1; i < 7; i++ {
+		errAfter = 0x10000000 // Attempt with no errors.
+		numReads = 0
+
+		s2, err = NewStore(m)
+		if err != nil {
+			t.Errorf("expected NewStore m to work on loop: %v", i)
+		}
+		s3, err := NewStore(f2)
+		if err != nil {
+			t.Errorf("expected NewStore f2 to work on loop: %v", i)
+		}
+
+		x2 = s2.GetCollection("x")
+		x3 := s3.GetCollection("x")
+
+		root2 := (*nodeLoc)(atomic.LoadPointer(&x2.root))
+		if root2 == nil || root2.isEmpty() {
+			t.Errorf("expected an x2 root")
+		}
+		if root2.Loc().isEmpty() {
+			t.Errorf("expected an x2 root to be on disk")
+		}
+		if root2.Node() != nil {
+			t.Errorf("expected an x2 root to not be loaded into memory yet")
+		}
+
+		root3 := (*nodeLoc)(atomic.LoadPointer(&x3.root))
+		if root3 == nil || root3.isEmpty() {
+			t.Errorf("expected an x3 root")
+		}
+		if root3.Loc().isEmpty() {
+			t.Errorf("expected an x3 root to be on disk")
+		}
+		if root3.Node() != nil {
+			t.Errorf("expected an x3 root to not be loaded into memory yet")
+		}
+
+		errAfter = i
+		numReads = 0
+
+		res, err = s2.join(root2, root3)
+		if err == nil {
+			t.Errorf("expected error due to mockfile errorAfter %v, got nil", errAfter)
+		}
+		if !res.isEmpty() {
+			t.Errorf("expected empty res due to mockfile error")
+		}
+		if numReads == 0 {
+			t.Errorf("expected some reads, got: %v", numReads)
+		}
 	}
 }
