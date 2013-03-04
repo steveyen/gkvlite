@@ -958,7 +958,7 @@ func TestStoreMultipleCollections(t *testing.T) {
 			numItems, numBytes, err)
 	}
 	numItems, numBytes, err = z2.GetTotals()
-	if err != nil || numItems != 5 || numBytes != 8 + 2 + 5 {
+	if err != nil || numItems != 5 || numBytes != 8+2+5 {
 		t.Errorf("mimatched coll totals, got: %v, %v, %v",
 			numItems, numBytes, err)
 	}
