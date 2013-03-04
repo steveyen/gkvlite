@@ -907,15 +907,12 @@ func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 	// Concurrent mutations like a delete should not affect a visit()
 	// that's already inflight.
 	visitExpectCollection(t, x1, "a", exp, func(i *Item) {
-		go func() {
-			d := atomic.AddInt32(&toDelete, -1)
-			toDeleteKey := exp[d]
-			if _, err := x1.Delete([]byte(toDeleteKey)); err != nil {
-				t.Errorf("expected concurrent delete to work on key: %v, got: %v",
-					toDeleteKey, err)
-			}
-		}()
-		runtime.Gosched() // Yield to test concurrency.
+		d := atomic.AddInt32(&toDelete, -1)
+		toDeleteKey := exp[d]
+		if _, err := x1.Delete([]byte(toDeleteKey)); err != nil {
+			t.Errorf("expected concurrent delete to work on key: %v, got: %v",
+				toDeleteKey, err)
+		}
 	})
 }
 
