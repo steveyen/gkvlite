@@ -51,6 +51,10 @@ func TestStoreMem(t *testing.T) {
 	if x2 != x {
 		t.Errorf("expected 2nd GetColl to work")
 	}
+	numItems, numBytes, err := x2.GetTotals()
+	if err != nil || numItems != 0 || numBytes != 0 {
+		t.Errorf("expected empty memory coll to be empty")
+	}
 
 	tests := []struct {
 		op  string
@@ -299,6 +303,12 @@ func TestVisitStoreMem(t *testing.T) {
 	if s.Flush() == nil {
 		t.Errorf("expected in-memory store Flush() error")
 	}
+
+	numItems, numBytes, err := x.GetTotals()
+	if err != nil || numItems != 5 || numBytes != 10 {
+		t.Errorf("mimatched memory coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
 }
 
 func TestStoreFile(t *testing.T) {
@@ -334,6 +344,12 @@ func TestStoreFile(t *testing.T) {
 			sizeAfter1stFlush)
 	}
 
+	numItems, numBytes, err := x.GetTotals()
+	if err != nil || numItems != 0 || numBytes != 0 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+
 	if len(s.GetCollectionNames()) != 1 || s.GetCollectionNames()[0] != "x" {
 		t.Errorf("expected 1 coll name x")
 	}
@@ -362,6 +378,12 @@ func TestStoreFile(t *testing.T) {
 	}
 	if string(i.Val) != "a" {
 		t.Errorf("expected s.GetItem(a) to return val a, got: %v", i.Val)
+	}
+
+	numItems, numBytes, err = x.GetTotals()
+	if err != nil || numItems != 1 || numBytes != 2 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
 	}
 
 	// ------------------------------------------------
@@ -397,6 +419,11 @@ func TestStoreFile(t *testing.T) {
 	i2, err := x2.GetItem([]byte("not-there"), true)
 	if i2 != nil || err != nil {
 		t.Errorf("expected miss to miss nicely.")
+	}
+	numItems, numBytes, err = x2.GetTotals()
+	if err != nil || numItems != 1 || numBytes != 2 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
 	}
 
 	// ------------------------------------------------
@@ -443,6 +470,17 @@ func TestStoreFile(t *testing.T) {
 
 	visitExpectCollection(t, x, "a", []string{"a", "b", "c"}, nil)
 	visitExpectCollection(t, x2, "a", []string{"a"}, nil)
+
+	numItems, numBytes, err = x.GetTotals()
+	if err != nil || numItems != 3 || numBytes != 6 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+	numItems, numBytes, err = x2.GetTotals()
+	if err != nil || numItems != 1 || numBytes != 2 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
 
 	// ------------------------------------------------
 
@@ -510,6 +548,27 @@ func TestStoreFile(t *testing.T) {
 	i, err = x4.GetItem([]byte("c"), true)
 	if i == nil || err != nil {
 		t.Errorf("expected c to be in x4.")
+	}
+
+	numItems, numBytes, err = x.GetTotals()
+	if err != nil || numItems != 2 || numBytes != 4 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+	numItems, numBytes, err = x2.GetTotals()
+	if err != nil || numItems != 1 || numBytes != 2 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+	numItems, numBytes, err = x3.GetTotals()
+	if err != nil || numItems != 3 || numBytes != 6 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+	numItems, numBytes, err = x4.GetTotals()
+	if err != nil || numItems != 2 || numBytes != 4 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
 	}
 
 	// ------------------------------------------------
@@ -797,6 +856,22 @@ func TestStoreMultipleCollections(t *testing.T) {
 	visitExpectCollection(t, y, "1", []string{"1", "2", "3", "4", "5"}, nil)
 	visitExpectCollection(t, z, "A", []string{"A", "B", "C", "D"}, nil)
 
+	numItems, numBytes, err := x.GetTotals()
+	if err != nil || numItems != 5 || numBytes != 10 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+	numItems, numBytes, err = y.GetTotals()
+	if err != nil || numItems != 5 || numBytes != 10 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+	numItems, numBytes, err = z.GetTotals()
+	if err != nil || numItems != 4 || numBytes != 8 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+
 	err = s.Flush()
 	if err != nil {
 		t.Errorf("expected flush to work")
@@ -819,6 +894,22 @@ func TestStoreMultipleCollections(t *testing.T) {
 	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil)
 	visitExpectCollection(t, y1, "1", []string{"1", "2", "3", "4", "5"}, nil)
 	visitExpectCollection(t, z1, "A", []string{"A", "B", "C", "D"}, nil)
+
+	numItems, numBytes, err = x1.GetTotals()
+	if err != nil || numItems != 5 || numBytes != 10 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+	numItems, numBytes, err = y1.GetTotals()
+	if err != nil || numItems != 5 || numBytes != 10 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+	numItems, numBytes, err = z1.GetTotals()
+	if err != nil || numItems != 4 || numBytes != 8 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
 
 	s1.RemoveCollection("x")
 
@@ -859,6 +950,17 @@ func TestStoreMultipleCollections(t *testing.T) {
 
 	if err = s2.Flush(); err == nil {
 		t.Errorf("expected Flush() to fail on a readonly file")
+	}
+
+	numItems, numBytes, err = y2.GetTotals()
+	if err != nil || numItems != 0 || numBytes != 0 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
+	}
+	numItems, numBytes, err = z2.GetTotals()
+	if err != nil || numItems != 5 || numBytes != 8 + 2 + 5 {
+		t.Errorf("mimatched coll totals, got: %v, %v, %v",
+			numItems, numBytes, err)
 	}
 }
 
