@@ -117,8 +117,9 @@ Other features
 * To evict O(log N) number of items from memory, call
   Collection.EvictSomeItems(), which traverses a random tree branch
   and evicts any clean (already persisted) items found during that
-  traversal.  Eviction is current safe: similar to concurrent reader
-  goroutines, you may have concurrent evictor goroutines.
+  traversal.
+* Eviction is NOT current safe: use it only when you've no concurrent
+  readers, mutators, flushers, etc.
 * You can control item priority to access hotter items faster by
   shuffling them closer to the top of balanced binary trees (warning:
   intricate/advanced tradeoffs here).
@@ -129,7 +130,6 @@ Other features
   Item.Transient field.
 * Errors from file operations are propagated all the way back to your
   code, so your application can respond appropriately.
-* Small - the implementation is about 1000 lines of code.
 * Tested - "go test" unit tests.
 * Docs - "go doc" documentation.
 
@@ -274,10 +274,6 @@ TODO / ideas
 
 * TODO: Provide item priority shifting during CopyTo().
 
-* TODO: Consider tracking item counts.  Users can workaround this by
-  counting themselves and storing that and other metdata in their
-  own collections.
-
 * TODO: Allow users to retrieve an item's value size (in bytes)
   without having to first fetch the item into memory.
 
@@ -289,5 +285,7 @@ TODO / ideas
   current coarse workaround is to drop all your references to any
   relevant Stores and Collections, start brand new Store/Collection
   instances, and let GC reclaim memory.
+
+* TODO: Make eviction concurrent safe.
 
 * See more TODO's throughout codebase / grep.
