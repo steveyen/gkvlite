@@ -117,8 +117,9 @@ Other features
 * To evict O(log N) number of items from memory, call
   Collection.EvictSomeItems(), which traverses a random tree branch
   and evicts any clean (already persisted) items found during that
-  traversal.
-* Eviction is NOT current safe: use it only when you've no concurrent
+  traversal.  Eviction means clearing out references to those clean
+  items, which means those items can be candidates for GC.
+* Eviction are concurrent safe: you may evict concurrently with other
   readers, mutators, flushers, etc.
 * You can control item priority to access hotter items faster by
   shuffling them closer to the top of balanced binary trees (warning:
@@ -285,7 +286,5 @@ TODO / ideas
   current coarse workaround is to drop all your references to any
   relevant Stores and Collections, start brand new Store/Collection
   instances, and let GC reclaim memory.
-
-* TODO: Make eviction concurrent safe.
 
 * See more TODO's throughout codebase / grep.
