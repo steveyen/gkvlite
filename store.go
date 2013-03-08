@@ -93,7 +93,7 @@ func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 	return &Collection{
 		store:   s,
 		compare: compare,
-		root:    unsafe.Pointer(&nodeLoc{}),
+		root:    unsafe.Pointer(empty),
 	}
 }
 
