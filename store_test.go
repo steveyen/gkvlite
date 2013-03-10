@@ -1343,3 +1343,27 @@ func TestStoreStats(t *testing.T) {
 		t.Errorf("expected 3 nodeAllocs, got: %v", m["nodeAllocs"])
 	}
 }
+
+func TestVisitItemsAscendEx(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	for i := 0; i < 40; i++ {
+		k := fmt.Sprintf("%v", i)
+		x.Set([]byte(k), []byte(k))
+	}
+	t.Logf("dumping tree for manual balancedness check")
+	err = x.VisitItemsAscendEx(nil, true, func(i *Item, depth uint64) bool {
+		o := ""
+		for i := 0; uint64(i) < depth; i++ {
+			o = o + "-"
+		}
+		t.Logf("=%v%v", o, string(i.Key))
+		return true
+	})
+	if err != nil {
+		t.Errorf("expected visit ex to work, got: %v", err)
+	}
+}
