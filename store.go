@@ -17,11 +17,12 @@ import (
 
 // A persistable store holding collections of ordered keys & values.
 type Store struct {
-	coll      unsafe.Pointer // Immutable, read-only map[string]*Collection.
-	file      StoreFile
-	size      int64
-	readOnly  bool
-	callbacks StoreCallbacks
+	coll       unsafe.Pointer // Immutable, read-only map[string]*Collection.
+	file       StoreFile
+	size       int64 // Atomic protected.
+	readOnly   bool
+	callbacks  StoreCallbacks
+	nodeAllocs uint64 // Atomic protected.
 }
 
 // The StoreFile interface is implemented by os.File.  Application
@@ -239,6 +240,12 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 	return dstStore, nil
 }
 
+// Updates provided map with statistics.
+func (s *Store) Stats(out map[string]uint64) {
+	out["fileSize"] = uint64(atomic.LoadInt64(&s.size))
+	out["nodeAllocs"] = atomic.LoadUint64(&s.nodeAllocs)
+}
+
 // User-supplied key comparison func should return 0 if a == b,
 // -1 if a < b, and +1 if a > b.  For example: bytes.Compare()
 type KeyCompare func(a, b []byte) int
@@ -328,6 +335,7 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 		return nil, err
 	}
 	buf := bytes.NewBuffer(b)
+	atomic.AddUint64(&o.nodeAllocs, 1)
 	n = &node{}
 	p := &ploc{}
 	if p, err = p.read(buf); err != nil {
@@ -584,6 +592,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		return errors.New("Item.Key/Val missing or too long")
 	}
 	root := atomic.LoadPointer(&t.root)
+	atomic.AddUint64(&t.store.nodeAllocs, 1)
 	r, err := t.store.union(t, (*nodeLoc)(root),
 		&nodeLoc{node: unsafe.Pointer(&node{item: itemLoc{item: unsafe.Pointer(&Item{
 			Key:      item.Key,
@@ -786,6 +795,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 			return empty, err
 		}
 		if middle.isEmpty() {
+			atomic.AddUint64(&o.nodeAllocs, 1)
 			return &nodeLoc{node: unsafe.Pointer(&node{
 				item:     *thisItemLoc,
 				left:     *newLeft,
@@ -802,6 +812,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		if err != nil {
 			return empty, err
 		}
+		atomic.AddUint64(&o.nodeAllocs, 1)
 		return &nodeLoc{node: unsafe.Pointer(&node{
 			item:     middleNode.item,
 			left:     *newLeft,
@@ -827,6 +838,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 	if err != nil {
 		return empty, err
 	}
+	atomic.AddUint64(&o.nodeAllocs, 1)
 	return &nodeLoc{node: unsafe.Pointer(&node{
 		item:     *thatItemLoc,
 		left:     *newLeft,
@@ -868,6 +880,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		if err != nil {
 			return empty, empty, empty, err
 		}
+		atomic.AddUint64(&o.nodeAllocs, 1)
 		return left, middle, &nodeLoc{node: unsafe.Pointer(&node{
 			item:     *nItemLoc,
 			left:     *right,
@@ -885,6 +898,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	if err != nil {
 		return empty, empty, empty, err
 	}
+	atomic.AddUint64(&o.nodeAllocs, 1)
 	return &nodeLoc{node: unsafe.Pointer(&node{
 		item:     *nItemLoc,
 		left:     nNode.left,
@@ -929,6 +943,7 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 		if err != nil {
 			return empty, err
 		}
+		atomic.AddUint64(&o.nodeAllocs, 1)
 		return &nodeLoc{node: unsafe.Pointer(&node{
 			item:     *thisItemLoc,
 			left:     thisNode.left,
@@ -945,6 +960,7 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 	if err != nil {
 		return empty, err
 	}
+	atomic.AddUint64(&o.nodeAllocs, 1)
 	return &nodeLoc{node: unsafe.Pointer(&node{
 		item:     *thatItemLoc,
 		left:     *newLeft,
