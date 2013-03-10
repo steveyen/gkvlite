@@ -1350,10 +1350,12 @@ func TestVisitItemsAscendEx(t *testing.T) {
 		t.Errorf("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	for i := 0; i < 40; i++ {
+	n := 40
+	for i := 0; i < n; i++ {
 		k := fmt.Sprintf("%v", i)
 		x.Set([]byte(k), []byte(k))
 	}
+	maxDepth := uint64(0)
 	t.Logf("dumping tree for manual balancedness check")
 	err = x.VisitItemsAscendEx(nil, true, func(i *Item, depth uint64) bool {
 		o := ""
@@ -1361,9 +1363,16 @@ func TestVisitItemsAscendEx(t *testing.T) {
 			o = o + "-"
 		}
 		t.Logf("=%v%v", o, string(i.Key))
+		if maxDepth < depth {
+			maxDepth = depth
+		}
 		return true
 	})
 	if err != nil {
 		t.Errorf("expected visit ex to work, got: %v", err)
+	}
+	if maxDepth >= uint64(n*3/4) {
+		t.Errorf("expected maxDepth to not be so unlucky, got: %v, n: %v",
+			maxDepth, n)
 	}
 }
