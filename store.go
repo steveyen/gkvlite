@@ -17,11 +17,11 @@ import (
 
 // A persistable store holding collections of ordered keys & values.
 type Store struct {
-	coll       unsafe.Pointer // Immutable, read-only map[string]*Collection.
+	coll       unsafe.Pointer // Copy-on-write map[string]*Collection.
 	file       StoreFile      // When nil, it's memory-only or no persistence.
-	size       int64          // Atomic protected.
+	size       int64          // Atomic protected; file size or next write position.
 	readOnly   bool           // When true, Flush()'ing is disallowed.
-	callbacks  StoreCallbacks // Optional.
+	callbacks  StoreCallbacks // Optional / may be nil.
 	nodeAllocs uint64         // Atomic protected.
 }
 
