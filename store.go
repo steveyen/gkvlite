@@ -667,11 +667,21 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 }
 
 type ItemVisitor func(i *Item) bool
+type ItemVisitorEx func(i *Item, depth uint64) bool
 
 // Visit items greater-than-or-equal to the target key.
-func (t *Collection) VisitItemsAscend(target []byte, withValue bool, visitor ItemVisitor) error {
+func (t *Collection) VisitItemsAscend(target []byte, withValue bool,
+	visitor ItemVisitor) error {
+	return t.VisitItemsAscendEx(target, withValue, func(i *Item, depth uint64) bool {
+		return visitor(i)
+	})
+}
+
+// Visit items greater-than-or-equal to the target key.
+func (t *Collection) VisitItemsAscendEx(target []byte, withValue bool,
+	visitor ItemVisitorEx) error {
 	_, err := t.store.visitAscendNode(t, (*nodeLoc)(atomic.LoadPointer(&t.root)),
-		target, withValue, visitor)
+		target, withValue, visitor, 0)
 	return err
 }
 
@@ -999,7 +1009,7 @@ func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, b
 }
 
 func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
-	withValue bool, visitor ItemVisitor) (bool, error) {
+	withValue bool, visitor ItemVisitorEx, depth uint64) (bool, error) {
 	nNode, err := n.read(o)
 	if err != nil {
 		return false, err
@@ -1013,7 +1023,8 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 		return false, err
 	}
 	if t.compare(target, nItem.Key) <= 0 {
-		keepGoing, err := o.visitAscendNode(t, &nNode.left, target, withValue, visitor)
+		keepGoing, err :=
+			o.visitAscendNode(t, &nNode.left, target, withValue, visitor, depth+1)
 		if err != nil || !keepGoing {
 			return false, err
 		}
@@ -1021,11 +1032,11 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 		if err != nil {
 			return false, err
 		}
-		if !visitor(nItem) {
+		if !visitor(nItem, depth) {
 			return false, nil
 		}
 	}
-	return o.visitAscendNode(t, &nNode.right, target, withValue, visitor)
+	return o.visitAscendNode(t, &nNode.right, target, withValue, visitor, depth+1)
 }
 
 func (o *Store) writeRoots() error {
