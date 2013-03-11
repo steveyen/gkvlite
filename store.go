@@ -669,20 +669,40 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 type ItemVisitor func(i *Item) bool
 type ItemVisitorEx func(i *Item, depth uint64) bool
 
-// Visit items greater-than-or-equal to the target key.
-func (t *Collection) VisitItemsAscend(target []byte, withValue bool,
-	visitor ItemVisitor) error {
-	return t.VisitItemsAscendEx(target, withValue, func(i *Item, depth uint64) bool {
-		return visitor(i)
-	})
+// Visit items greater-than-or-equal to the target key in ascending order.
+func (t *Collection) VisitItemsAscend(target []byte, withValue bool, v ItemVisitor) error {
+	return t.VisitItemsAscendEx(target, withValue,
+		func(i *Item, depth uint64) bool { return v(i) })
 }
 
-// Visit items greater-than-or-equal to the target key.
+// Visit items less-than the target key in descending order.
+func (t *Collection) VisitItemsDescend(target []byte, withValue bool, v ItemVisitor) error {
+	return t.VisitItemsDescendEx(target, withValue,
+		func(i *Item, depth uint64) bool { return v(i) })
+}
+
+// Visit items greater-than-or-equal to the target key in ascending order; with depth info.
 func (t *Collection) VisitItemsAscendEx(target []byte, withValue bool,
 	visitor ItemVisitorEx) error {
-	_, err := t.store.visitAscendNode(t, (*nodeLoc)(atomic.LoadPointer(&t.root)),
-		target, withValue, visitor, 0)
+	_, err := t.store.visitNodes(t, (*nodeLoc)(atomic.LoadPointer(&t.root)),
+		target, withValue, visitor, 0, ascendChoice)
 	return err
+}
+
+// Visit items less-than the target key in descending order; with depth info.
+func (t *Collection) VisitItemsDescendEx(target []byte, withValue bool,
+	visitor ItemVisitorEx) error {
+	_, err := t.store.visitNodes(t, (*nodeLoc)(atomic.LoadPointer(&t.root)),
+		target, withValue, visitor, 0, descendChoice)
+	return err
+}
+
+func ascendChoice(cmp int, n *node) (bool, *nodeLoc, *nodeLoc) {
+	return cmp <= 0, &n.left, &n.right
+}
+
+func descendChoice(cmp int, n *node) (bool, *nodeLoc, *nodeLoc) {
+	return cmp > 0, &n.right, &n.left
 }
 
 // Returns total number of items and total key bytes plus value bytes.
@@ -1008,8 +1028,9 @@ func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, b
 	return nil, nil
 }
 
-func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
-	withValue bool, visitor ItemVisitorEx, depth uint64) (bool, error) {
+func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,
+	withValue bool, visitor ItemVisitorEx, depth uint64,
+	choiceFunc func(int, *node) (bool, *nodeLoc, *nodeLoc)) (bool, error) {
 	nNode, err := n.read(o)
 	if err != nil {
 		return false, err
@@ -1022,9 +1043,10 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 	if err != nil {
 		return false, err
 	}
-	if t.compare(target, nItem.Key) <= 0 {
+	choice, choiceT, choiceF := choiceFunc(t.compare(target, nItem.Key), nNode)
+	if choice {
 		keepGoing, err :=
-			o.visitAscendNode(t, &nNode.left, target, withValue, visitor, depth+1)
+			o.visitNodes(t, choiceT, target, withValue, visitor, depth+1, choiceFunc)
 		if err != nil || !keepGoing {
 			return false, err
 		}
@@ -1036,7 +1058,7 @@ func (o *Store) visitAscendNode(t *Collection, n *nodeLoc, target []byte,
 			return false, nil
 		}
 	}
-	return o.visitAscendNode(t, &nNode.right, target, withValue, visitor, depth+1)
+	return o.visitNodes(t, choiceF, target, withValue, visitor, depth+1, choiceFunc)
 }
 
 func (o *Store) writeRoots() error {
