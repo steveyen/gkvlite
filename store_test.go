@@ -212,9 +212,31 @@ func loadCollection(x *Collection, arr []string) {
 	}
 }
 
-func visitExpectCollection(t *testing.T, x *Collection, start string, arr []string, cb func(i *Item)) {
+func visitExpectCollection(t *testing.T, x *Collection, start string,
+	arr []string, cb func(i *Item)) {
 	n := 0
 	err := x.VisitItemsAscend([]byte(start), true, func(i *Item) bool {
+		if cb != nil {
+			cb(i)
+		}
+		if string(i.Key) != arr[n] {
+			t.Errorf("expected visit item: %v, saw: %v", arr[n], i)
+		}
+		n++
+		return true
+	})
+	if err != nil {
+		t.Errorf("expected no visit error, got: %v", err)
+	}
+	if n != len(arr) {
+		t.Errorf("expected # visit callbacks: %v, saw: %v", len(arr), n)
+	}
+}
+
+func visitDescendExpectCollection(t *testing.T, x *Collection, tgt string,
+	arr []string, cb func(i *Item)) {
+	n := 0
+	err := x.VisitItemsDescend([]byte(tgt), true, func(i *Item) bool {
 		if cb != nil {
 			cb(i)
 		}
@@ -981,9 +1003,10 @@ func TestStoreConcurrentVisits(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		go func() {
-			visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, func(i *Item) {
-				runtime.Gosched() // Yield to test concurrency.
-			})
+			visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"},
+				func(i *Item) {
+					runtime.Gosched() // Yield to test concurrency.
+				})
 		}()
 	}
 }
@@ -1375,4 +1398,19 @@ func TestVisitItemsAscendEx(t *testing.T) {
 		t.Errorf("expected maxDepth to not be so unlucky, got: %v, n: %v",
 			maxDepth, n)
 	}
+}
+
+func TestVisitItemsDescend(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+
+	visitDescendExpectCollection(t, x, "z", []string{"e", "d", "c", "b", "a"}, nil)
+	visitDescendExpectCollection(t, x, "e", []string{"d", "c", "b", "a"}, nil)
+	visitDescendExpectCollection(t, x, "b", []string{"a"}, nil)
+	visitDescendExpectCollection(t, x, "a", []string{}, nil)
+	visitDescendExpectCollection(t, x, "", []string{}, nil)
 }
