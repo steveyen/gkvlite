@@ -124,6 +124,8 @@ Other features
 * You can control item priority to access hotter items faster by
   shuffling them closer to the top of balanced binary trees (warning:
   intricate/advanced tradeoffs here).
+* Tree depth is provided by using the VisitItemsAscendEx() or
+  VisitItemsDescendEx() methods.
 * You can associate transient, ephemeral (non-persisted) data with
   your items.  If you do use the Item.Transient field, you should use
   sync/atomic pointer functions for concurrency correctness.
@@ -264,7 +266,7 @@ TODO / ideas
   immutable only when there are in-use snapshots.  This probably won't
   be a win if there are always active snapshots.
 
-* TODO: Keep stats on misses, disk fetches & writes, tree depth, etc.
+* TODO: Keep stats on misses, disk fetches & writes, etc.
 
 * TODO: Provide public API for O(1) collection copying.
 
