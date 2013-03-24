@@ -115,7 +115,11 @@ Other features
   you want.  The default is bytes.Compare().
 * Collections are written to file sorted by Collection name.  This
   allows users with advanced concurrency needs to reason about how
-  concurrent flushes interact with concurrent mutations.
+  concurrent flushes interact with concurrent mutations.  For example,
+  if you have a main data collection and a secondary-index collection,
+  with clever collection naming you can know that the main collection
+  will always be "ahead of" the secondary-index collection even with
+  concurrent flushing.
 * To evict O(log N) number of items from memory, call
   Collection.EvictSomeItems(), which traverses a random tree branch
   and evicts any clean (already persisted) items found during that
