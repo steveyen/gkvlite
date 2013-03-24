@@ -32,10 +32,9 @@ ACID properties
 ===============
 
 * Atomicity - all unpersisted changes from all Collections during a
-  Store.Flush() will be persisted atomically.  All changes will either
-  be committed or be rolled back.
+  Store.Flush() will be persisted atomically.
 * Consistency - simple key-value level consistency is supported.
-* Isolation - mutations won't affect snapshots.
+* Isolation - mutations won't affect concurrent readers or snapshots.
 * Durability - you control when you want to Flush() to disk, so your
   application can address its performance-vs-safety tradeoffs
   appropriately.
@@ -114,6 +113,9 @@ Other features
   checksums, I/O statistics, caching, enabling concurrency, etc).
 * You can supply your own KeyCompare function to order items however
   you want.  The default is bytes.Compare().
+* Collections are written to file sorted by Collection name.  This
+  allows users with advanced concurrency needs to reason about how
+  concurrent flushes interact with concurrent mutations.
 * To evict O(log N) number of items from memory, call
   Collection.EvictSomeItems(), which traverses a random tree branch
   and evicts any clean (already persisted) items found during that
