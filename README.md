@@ -263,6 +263,10 @@ garbage collector (GC).
 TODO / ideas
 ============
 
+* TODO: Provide public API for O(1) collection swapping, allowing
+  advanced users to snapshot-modify-swap their collections for
+  transactional changes.
+
 * TODO: Performance: consider splitting item storage from node
   storage, so we're not mixing metadata and data in same cache pages.
   Need to measure how much win this could be in cases like compaction.
@@ -273,8 +277,6 @@ TODO / ideas
   be a win if there are always active snapshots.
 
 * TODO: Keep stats on misses, disk fetches & writes, etc.
-
-* TODO: Provide public API for O(1) collection copying.
 
 * TODO: Provide public API for O(log N) collection spliting & joining.
 
