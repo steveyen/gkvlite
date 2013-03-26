@@ -265,7 +265,9 @@ TODO / ideas
 
 * TODO: Provide public API for O(1) collection swapping, allowing
   advanced users to snapshot-modify-swap their collections for
-  transactional changes.
+  transactional changes.  User snapshots a collection, makes changes,
+  then swaps that collection into the registered collections of a
+  store.
 
 * TODO: Performance: consider splitting item storage from node
   storage, so we're not mixing metadata and data in same cache pages.
