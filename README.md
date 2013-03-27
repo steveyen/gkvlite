@@ -267,7 +267,7 @@ TODO / ideas
   advanced users to snapshot-modify-swap their collections for
   transactional changes.  User snapshots a collection, makes changes,
   then swaps that collection into the registered collections of a
-  store.
+  store, and the user should ensure that there is only one swapper.
 
 * TODO: Performance: consider splitting item storage from node
   storage, so we're not mixing metadata and data in same cache pages.
