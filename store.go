@@ -49,6 +49,7 @@ var MAGIC_END []byte = []byte("3e4a5p")
 func NewStore(file StoreFile) (*Store, error) {
 	return NewStoreEx(file, StoreCallbacks{})
 }
+
 func NewStoreEx(file StoreFile,
 	callbacks StoreCallbacks) (*Store, error) {
 	coll := make(map[string]*Collection)
