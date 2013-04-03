@@ -17,12 +17,13 @@ import (
 
 // A persistable store holding collections of ordered keys & values.
 type Store struct {
+	// Atomic CAS'ed int64/uint64's must be at the top for 32-bit compatibility.
+	size       int64          // Atomic protected; file size or next write position.
+	nodeAllocs uint64         // Atomic protected.
 	coll       unsafe.Pointer // Copy-on-write map[string]*Collection.
 	file       StoreFile      // When nil, it's memory-only or no persistence.
-	size       int64          // Atomic protected; file size or next write position.
-	readOnly   bool           // When true, Flush()'ing is disallowed.
 	callbacks  StoreCallbacks // Optional / may be nil.
-	nodeAllocs uint64         // Atomic protected.
+	readOnly   bool           // When true, Flush()'ing is disallowed.
 }
 
 // The StoreFile interface is implemented by os.File.  Application
@@ -260,9 +261,9 @@ type Collection struct {
 
 // A persistable node.
 type node struct {
+	numNodes, numBytes uint64
 	item               itemLoc
 	left, right        nodeLoc
-	numNodes, numBytes uint64
 }
 
 // A persistable node and its persistence location.
@@ -389,9 +390,9 @@ func numInfo(o *Store, left *nodeLoc, right *nodeLoc) (
 
 // A persistable item.
 type Item struct {
+	Transient unsafe.Pointer // For any ephemeral data; atomic CAS recommended.
 	Key, Val  []byte         // Val may be nil if not fetched into memory yet.
 	Priority  int32          // Use rand.Int() for probabilistic balancing.
-	Transient unsafe.Pointer // For any ephemeral data; atomic CAS recommended.
 }
 
 // Number of Key bytes plus number of Val bytes.
