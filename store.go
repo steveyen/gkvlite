@@ -37,6 +37,12 @@ type StoreFile interface {
 // Allows applications to interpose before/after certain events.
 type StoreCallbacks struct {
 	BeforeItemWrite, AfterItemRead ItemCallback
+
+	// Invoked when a Store is reloaded (during NewStoreEx()) from
+	// disk, this callback allows the user to optionally supply a key
+	// comparison func for each collection.  Otherwise, the default is
+	// the bytes.Compare func.
+	KeyCompareForCollection func(collName string) KeyCompare
 }
 
 type ItemCallback func(*Item) (*Item, error)
@@ -66,9 +72,9 @@ func NewStoreEx(file StoreFile,
 }
 
 // SetCollection() is used to create a named Collection, or to modify
-// the KeyCompare function on an existing, named Collection.  The new
-// Collection and any operations on it won't be reflected into
-// persistence until you do a Flush().
+// the KeyCompare function on an existing Collection.  In either case,
+// a new Collection to use is returned.  A newly created Collection
+// and any mutations on it won't be persisted until you do a Flush().
 func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 	if compare == nil {
 		compare = bytes.Compare
@@ -76,12 +82,13 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 	for {
 		orig := atomic.LoadPointer(&s.coll)
 		coll := copyColl(*(*map[string]*Collection)(orig))
-		if coll[name] == nil {
-			coll[name] = s.MakePrivateCollection(compare)
+		cnew := s.MakePrivateCollection(compare)
+		if coll[name] != nil {
+			cnew.root = unsafe.Pointer(atomic.LoadPointer(&coll[name].root))
 		}
-		coll[name].compare = compare
+		coll[name] = cnew
 		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
-			return coll[name]
+			return cnew
 		}
 	}
 	return nil // Never reached.
@@ -1153,9 +1160,14 @@ func (o *Store) readRoots() error {
 				if err = json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m); err != nil {
 					return err
 				}
-				for _, t := range m {
+				for collName, t := range m {
 					t.store = o
-					t.compare = bytes.Compare
+					if o.callbacks.KeyCompareForCollection != nil {
+						t.compare = o.callbacks.KeyCompareForCollection(collName)
+					}
+					if t.compare == nil {
+						t.compare = bytes.Compare
+					}
 				}
 				atomic.StorePointer(&o.coll, unsafe.Pointer(&m))
 				return nil

@@ -1414,3 +1414,39 @@ func TestVisitItemsDescend(t *testing.T) {
 	visitDescendExpectCollection(t, x, "a", []string{}, nil)
 	visitDescendExpectCollection(t, x, "", []string{}, nil)
 }
+
+func TestKeyCompareForCollectionCallback(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	s, _ := NewStore(f)
+	x := s.SetCollection("x", nil)
+	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
+	s.Flush()
+	f.Close()
+
+	comparisons := 0
+	myKeyCompare := func(a, b []byte) int {
+		comparisons++
+		return bytes.Compare(a, b)
+	}
+
+	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
+	s1, err := NewStoreEx(f1, StoreCallbacks{
+		KeyCompareForCollection: func(collName string) KeyCompare {
+			return myKeyCompare
+		},
+	})
+	if err != nil {
+		t.Errorf("expected NewStoreEx with non-nil KeyCompareForCollection to work")
+	}
+	x1 := s1.GetCollection("x")
+	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil)
+	x1.Get([]byte("a"))
+	x1.Get([]byte("b"))
+
+	if comparisons == 0 {
+		t.Errorf("expected invocations of myKeyCompare")
+	}
+}
