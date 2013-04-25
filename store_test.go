@@ -1456,12 +1456,34 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 	if err != nil || s == nil {
 		t.Errorf("expected memory-only NewStore to work")
 	}
+	testDeleteEveryItem(t, s, 10000, 100, func() {})
+}
+
+func TestPersistDeleteEveryItem(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	defer f.Close()
+	defer os.Remove(fname)
+	s, _ := NewStore(f)
+	testDeleteEveryItem(t, s, 10000, 100, func() {
+		err := s.Flush()
+		if err != nil {
+			t.Errorf("expected Flush to work, err: %v", err)
+		}
+	})
+}
+
+func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
+	cb func()) {
 	x := s.SetCollection("x", bytes.Compare)
-	n := 10000
 	for i := 0; i < n; i++ {
-		err = x.Set([]byte(fmt.Sprintf("%d", i)), []byte{})
+		err := x.Set([]byte(fmt.Sprintf("%d", i)), []byte{})
 		if err != nil {
 			t.Errorf("expected SetItem to work, %v", i)
+		}
+		if i%every == 0 {
+			cb()
 		}
 	}
 	m := 0
@@ -1479,6 +1501,9 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 		}
 		if !wasDeleted {
 			t.Errorf("expected Delete to actually delete")
+		}
+		if i%every == 0 {
+			cb()
 		}
 	}
 	m = 0
