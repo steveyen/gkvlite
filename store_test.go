@@ -1487,6 +1487,6 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 		return true
 	})
 	if m != 0 {
-		t.Errorf("expected %v items, got: %v", n, m)
+		t.Errorf("expected 0 items, got: %v", m)
 	}
 }
