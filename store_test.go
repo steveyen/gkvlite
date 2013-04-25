@@ -1466,12 +1466,17 @@ func TestPersistDeleteEveryItem(t *testing.T) {
 	defer f.Close()
 	defer os.Remove(fname)
 	s, _ := NewStore(f)
+	c := 0
 	testDeleteEveryItem(t, s, 10000, 100, func() {
+		c++
 		err := s.Flush()
 		if err != nil {
 			t.Errorf("expected Flush to work, err: %v", err)
 		}
 	})
+	if c == 0 {
+		t.Errorf("expected cb to get invoked")
+	}
 }
 
 func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
