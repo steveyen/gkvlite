@@ -1450,3 +1450,43 @@ func TestKeyCompareForCollectionCallback(t *testing.T) {
 		t.Errorf("expected invocations of myKeyCompare")
 	}
 }
+
+func TestMemoryDeleteEveryItem(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	n := 10000
+	for i := 0; i < n; i++ {
+		err = x.Set([]byte(fmt.Sprintf("%d", i)), []byte{})
+		if err != nil {
+			t.Errorf("expected SetItem to work, %v", i)
+		}
+	}
+	m := 0
+	x.VisitItemsAscend(nil, true, func(i *Item) bool {
+		m++
+		return true
+	})
+	if m != n {
+		t.Errorf("expected %v items, got: %v", n, m)
+	}
+	for i := 0; i < n; i++ {
+		wasDeleted, err := x.Delete([]byte(fmt.Sprintf("%d", i)))
+		if err != nil {
+			t.Errorf("expected Delete to work, %v", i)
+		}
+		if !wasDeleted {
+			t.Errorf("expected Delete to actually delete")
+		}
+	}
+	m = 0
+	x.VisitItemsAscend(nil, true, func(i *Item) bool {
+		m++
+		return true
+	})
+	if m != 0 {
+		t.Errorf("expected %v items, got: %v", n, m)
+	}
+}
