@@ -1462,9 +1462,8 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 func TestPersistDeleteEveryItem(t *testing.T) {
 	fname := "tmp.test"
 	os.Remove(fname)
-	f, _ := os.Create(fname)
-	defer f.Close()
 	defer os.Remove(fname)
+	f, _ := os.Create(fname)
 	s, _ := NewStore(f)
 	c := 0
 	testDeleteEveryItem(t, s, 10000, 100, func() {
@@ -1477,6 +1476,36 @@ func TestPersistDeleteEveryItem(t *testing.T) {
 	if c == 0 {
 		t.Errorf("expected cb to get invoked")
 	}
+	err := s.Flush()
+	if err != nil {
+		t.Errorf("expected last Flush to work, err: %v", err)
+	}
+	f.Close()
+
+	f2, err := os.Open(fname)
+	if err != nil {
+		t.Errorf("expected re-Open() to work, err: %v", err)
+	}
+	s2, err := NewStore(f2)
+	if err != nil {
+		t.Errorf("expected NewStore to work, err: %v", err)
+	}
+	x := s2.SetCollection("x", bytes.Compare)
+	if x == nil {
+		t.Errorf("expected x to be there")
+	}
+	m := 0
+	err = x.VisitItemsAscend(nil, true, func(i *Item) bool {
+		m++
+		return true
+	})
+	if err != nil {
+		t.Errorf("expected Visit to work, err: %v", err)
+	}
+	if m != 0 {
+		t.Errorf("expected 0 items, got: %v", m)
+	}
+	f2.Close()
 }
 
 func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
