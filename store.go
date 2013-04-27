@@ -39,6 +39,7 @@ type StoreCallbacks struct {
 	BeforeItemWrite, AfterItemRead ItemCallback
 
 	ItemValLength func(i *Item) int
+	ItemValWrite func(i *Item, w io.WriterAt, offset int64) error
 
 	// Invoked when a Store is reloaded (during NewStoreEx()) from
 	// disk, this callback allows the user to optionally supply a key
@@ -440,11 +441,12 @@ func (i *itemLoc) write(o *Store) (err error) {
 			}
 		}
 		offset := atomic.LoadInt64(&o.size)
+		hlength := 4 + 2 + 4 + 4 + len(iItem.Key)
 		vlength := iItem.NumValBytes(o)
-		length := 4 + 2 + 4 + 4 + len(iItem.Key) + vlength
-		b := make([]byte, length)
+		ilength := hlength + vlength
+		b := make([]byte, hlength)
 		pos := 0
-		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(length))
+		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(ilength))
 		pos += 4
 		binary.BigEndian.PutUint16(b[pos:pos+2], uint16(len(iItem.Key)))
 		pos += 2
@@ -453,17 +455,27 @@ func (i *itemLoc) write(o *Store) (err error) {
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(iItem.Priority))
 		pos += 4
 		pos += copy(b[pos:], iItem.Key)
-		pos += copy(b[pos:], iItem.Val) // TODO: handle large values better.
-		if pos != length {
-			return fmt.Errorf("itemLoc.write() pos: %v didn't match length: %v",
-				pos, length)
+		if pos != hlength {
+			return fmt.Errorf("itemLoc.write() pos: %v didn't match hlength: %v",
+				pos, hlength)
 		}
 		if _, err := o.file.WriteAt(b, offset); err != nil {
 			return err
 		}
-		atomic.StoreInt64(&o.size, offset+int64(length))
+		if o.callbacks.ItemValWrite != nil {
+			err := o.callbacks.ItemValWrite(iItem, o.file, offset + int64(pos))
+			if err != nil {
+				return err
+			}
+		} else {
+			_, err := o.file.WriteAt(iItem.Val, offset + int64(pos))
+			if err != nil {
+				return err
+			}
+		}
+		atomic.StoreInt64(&o.size, offset+int64(ilength))
 		atomic.StorePointer(&i.loc,
-			unsafe.Pointer(&ploc{Offset: offset, Length: uint32(length)}))
+			unsafe.Pointer(&ploc{Offset: offset, Length: uint32(ilength)}))
 	}
 	return nil
 }
