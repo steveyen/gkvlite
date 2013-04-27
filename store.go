@@ -40,6 +40,7 @@ type StoreCallbacks struct {
 
 	ItemValLength func(i *Item) int
 	ItemValWrite func(i *Item, w io.WriterAt, offset int64) error
+	ItemValRead func(i *Item, r io.ReaderAt, offset int64, valLength uint32) error
 
 	// Invoked when a Store is reloaded (during NewStoreEx()) from
 	// disk, this callback allows the user to optionally supply a key
@@ -519,10 +520,18 @@ func (iloc *itemLoc) read(o *Store, withValue bool) (i *Item, err error) {
 			return nil, err
 		}
 		if withValue {
-			i.Val = make([]byte, valLength)
-			if _, err := o.file.ReadAt(i.Val,
-				loc.Offset + int64(hdrLength) + int64(keyLength)); err != nil {
-				return nil, err
+			if o.callbacks.ItemValRead != nil {
+				err := o.callbacks.ItemValRead(i, o.file,
+					loc.Offset + int64(hdrLength) + int64(keyLength), valLength)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				i.Val = make([]byte, valLength)
+				if _, err := o.file.ReadAt(i.Val,
+					loc.Offset + int64(hdrLength) + int64(keyLength)); err != nil {
+					return nil, err
+				}
 			}
 		}
 		if o.callbacks.AfterItemRead != nil {
