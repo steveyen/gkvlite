@@ -39,8 +39,8 @@ type StoreCallbacks struct {
 	BeforeItemWrite, AfterItemRead ItemCallback
 
 	ItemValLength func(i *Item) int
-	ItemValWrite func(i *Item, w io.WriterAt, offset int64) error
-	ItemValRead func(i *Item, r io.ReaderAt, offset int64, valLength uint32) error
+	ItemValWrite  func(i *Item, w io.WriterAt, offset int64) error
+	ItemValRead   func(i *Item, r io.ReaderAt, offset int64, valLength uint32) error
 
 	// Invoked when a Store is reloaded (during NewStoreEx()) from
 	// disk, this callback allows the user to optionally supply a key
@@ -340,9 +340,9 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 	if loc.isEmpty() {
 		return nil, nil
 	}
-	if loc.Length != uint32(ploc_length + ploc_length + ploc_length + 8 + 8) {
+	if loc.Length != uint32(ploc_length+ploc_length+ploc_length+8+8) {
 		return nil, fmt.Errorf("unexpected node loc.Length: %v != %v",
-			loc.Length, ploc_length + ploc_length + ploc_length + 8 + 8)
+			loc.Length, ploc_length+ploc_length+ploc_length+8+8)
 	}
 	b := make([]byte, loc.Length)
 	if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
@@ -361,9 +361,9 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 	p = &ploc{}
 	p, pos = p.read(b, pos)
 	n.right.loc = unsafe.Pointer(p)
-	n.numNodes = binary.BigEndian.Uint64(b[pos:pos+8])
+	n.numNodes = binary.BigEndian.Uint64(b[pos : pos+8])
 	pos += 8
-	n.numBytes = binary.BigEndian.Uint64(b[pos:pos+8])
+	n.numBytes = binary.BigEndian.Uint64(b[pos : pos+8])
 	pos += 8
 	if pos != len(b) {
 		return nil, fmt.Errorf("nodeLoc.read() pos: %v didn't match length: %v",
@@ -462,12 +462,12 @@ func (i *itemLoc) write(o *Store) (err error) {
 			return err
 		}
 		if o.callbacks.ItemValWrite != nil {
-			err := o.callbacks.ItemValWrite(iItem, o.file, offset + int64(pos))
+			err := o.callbacks.ItemValWrite(iItem, o.file, offset+int64(pos))
 			if err != nil {
 				return err
 			}
 		} else {
-			_, err := o.file.WriteAt(iItem.Val, offset + int64(pos))
+			_, err := o.file.WriteAt(iItem.Val, offset+int64(pos))
 			if err != nil {
 				return err
 			}
@@ -500,13 +500,13 @@ func (iloc *itemLoc) read(o *Store, withValue bool) (i *Item, err error) {
 		}
 		i = &Item{}
 		pos := 0
-		length := binary.BigEndian.Uint32(b[pos:pos+4])
+		length := binary.BigEndian.Uint32(b[pos : pos+4])
 		pos += 4
-		keyLength := binary.BigEndian.Uint16(b[pos:pos+2])
+		keyLength := binary.BigEndian.Uint16(b[pos : pos+2])
 		pos += 2
-		valLength := binary.BigEndian.Uint32(b[pos:pos+4])
+		valLength := binary.BigEndian.Uint32(b[pos : pos+4])
 		pos += 4
-		i.Priority = int32(binary.BigEndian.Uint32(b[pos:pos+4]))
+		i.Priority = int32(binary.BigEndian.Uint32(b[pos : pos+4]))
 		pos += 4
 		if length != uint32(hdrLength)+uint32(keyLength)+valLength {
 			return nil, errors.New("mismatched itemLoc lengths")
@@ -516,20 +516,20 @@ func (iloc *itemLoc) read(o *Store, withValue bool) (i *Item, err error) {
 		}
 		i.Key = make([]byte, keyLength)
 		if _, err := o.file.ReadAt(i.Key,
-			loc.Offset + int64(hdrLength)); err != nil {
+			loc.Offset+int64(hdrLength)); err != nil {
 			return nil, err
 		}
 		if withValue {
 			if o.callbacks.ItemValRead != nil {
 				err := o.callbacks.ItemValRead(i, o.file,
-					loc.Offset + int64(hdrLength) + int64(keyLength), valLength)
+					loc.Offset+int64(hdrLength)+int64(keyLength), valLength)
 				if err != nil {
 					return nil, err
 				}
 			} else {
 				i.Val = make([]byte, valLength)
 				if _, err := o.file.ReadAt(i.Val,
-					loc.Offset + int64(hdrLength) + int64(keyLength)); err != nil {
+					loc.Offset+int64(hdrLength)+int64(keyLength)); err != nil {
 					return nil, err
 				}
 			}
@@ -571,9 +571,9 @@ func (p *ploc) write(b []byte, pos int) int {
 }
 
 func (p *ploc) read(b []byte, pos int) (*ploc, int) {
-	p.Offset = int64(binary.BigEndian.Uint64(b[pos:pos+8]))
+	p.Offset = int64(binary.BigEndian.Uint64(b[pos : pos+8]))
 	pos += 8
-	p.Length = binary.BigEndian.Uint32(b[pos:pos+4])
+	p.Length = binary.BigEndian.Uint32(b[pos : pos+4])
 	pos += 4
 	if p.isEmpty() {
 		return nil, pos
