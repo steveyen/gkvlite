@@ -38,6 +38,8 @@ type StoreFile interface {
 type StoreCallbacks struct {
 	BeforeItemWrite, AfterItemRead ItemCallback
 
+	ItemValLength func(i *Item) int
+
 	// Invoked when a Store is reloaded (during NewStoreEx()) from
 	// disk, this callback allows the user to optionally supply a key
 	// comparison func for each collection.  Otherwise, the default is
@@ -403,8 +405,15 @@ type Item struct {
 }
 
 // Number of Key bytes plus number of Val bytes.
-func (i *Item) NumBytes() uint64 {
-	return uint64(len(i.Key)) + uint64(len(i.Val))
+func (i *Item) NumBytes(o *Store) int {
+	return len(i.Key) + i.NumValBytes(o)
+}
+
+func (i *Item) NumValBytes(o *Store) int {
+	if o.callbacks.ItemValLength != nil {
+		return o.callbacks.ItemValLength(i)
+	}
+	return len(i.Val)
 }
 
 // A persistable item and its persistence location.
@@ -434,11 +443,12 @@ func (i *itemLoc) write(o *Store) (err error) {
 			}
 		}
 		offset := atomic.LoadInt64(&o.size)
-		length := 4 + 2 + 4 + 4 + len(iItem.Key) + len(iItem.Val)
+		vlength := iItem.NumValBytes(o)
+		length := 4 + 2 + 4 + 4 + len(iItem.Key) + vlength
 		b := bytes.NewBuffer(make([]byte, length)[:0])
 		binary.Write(b, binary.BigEndian, uint32(length))
 		binary.Write(b, binary.BigEndian, uint16(len(iItem.Key)))
-		binary.Write(b, binary.BigEndian, uint32(len(iItem.Val)))
+		binary.Write(b, binary.BigEndian, uint32(vlength))
 		binary.Write(b, binary.BigEndian, int32(iItem.Priority))
 		b.Write(iItem.Key)
 		b.Write(iItem.Val) // TODO: handle large values more efficiently.
@@ -609,7 +619,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 			Priority: item.Priority,
 		})},
 			numNodes: 1,
-			numBytes: uint64(len(item.Key)) + uint64(len(item.Val)),
+			numBytes: uint64(len(item.Key)) + uint64(item.NumValBytes(t.store)),
 		})})
 	if err != nil {
 		return err
@@ -840,7 +850,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 				left:     *newLeft,
 				right:    *newRight,
 				numNodes: leftNum + rightNum + 1,
-				numBytes: leftBytes + rightBytes + thisItem.NumBytes(),
+				numBytes: leftBytes + rightBytes + uint64(thisItem.NumBytes(o)),
 			})}, nil
 		}
 		middleNode, err := middle.read(o)
@@ -857,7 +867,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 			left:     *newLeft,
 			right:    *newRight,
 			numNodes: leftNum + rightNum + 1,
-			numBytes: leftBytes + rightBytes + middleItem.NumBytes(),
+			numBytes: leftBytes + rightBytes + uint64(middleItem.NumBytes(o)),
 		})}, nil
 	}
 	// We don't use middle because the "that" node has precedence.
@@ -883,7 +893,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		left:     *newLeft,
 		right:    *newRight,
 		numNodes: leftNum + rightNum + 1,
-		numBytes: leftBytes + rightBytes + thatItem.NumBytes(),
+		numBytes: leftBytes + rightBytes + uint64(thatItem.NumBytes(o)),
 	})}, nil
 }
 
@@ -925,7 +935,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 			left:     *right,
 			right:    nNode.right,
 			numNodes: leftNum + rightNum + 1,
-			numBytes: leftBytes + rightBytes + nItem.NumBytes(),
+			numBytes: leftBytes + rightBytes + uint64(nItem.NumBytes(o)),
 		})}, nil
 	}
 
@@ -943,7 +953,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		left:     nNode.left,
 		right:    *left,
 		numNodes: leftNum + rightNum + 1,
-		numBytes: leftBytes + rightBytes + nItem.NumBytes(),
+		numBytes: leftBytes + rightBytes + uint64(nItem.NumBytes(o)),
 	})}, middle, right, nil
 }
 
@@ -988,7 +998,7 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 			left:     thisNode.left,
 			right:    *newRight,
 			numNodes: leftNum + rightNum + 1,
-			numBytes: leftBytes + rightBytes + thisItem.NumBytes(),
+			numBytes: leftBytes + rightBytes + uint64(thisItem.NumBytes(o)),
 		})}, nil
 	}
 	newLeft, err := o.join(this, &thatNode.left)
@@ -1005,7 +1015,7 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 		left:     *newLeft,
 		right:    thatNode.right,
 		numNodes: leftNum + rightNum + 1,
-		numBytes: leftBytes + rightBytes + thatItem.NumBytes(),
+		numBytes: leftBytes + rightBytes + uint64(thatItem.NumBytes(o)),
 	})}, nil
 }
 
