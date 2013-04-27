@@ -12,6 +12,8 @@ var keyFormat = flag.String("key-format", "string",
 	"format item key as string, bytes, raw, or none")
 var valFormat = flag.String("val-format", "string",
 	"format item val as string, bytes, raw, or none")
+var indent = flag.Bool("indent", false,
+	"show tree depth using indentation")
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "gkvlite file view/inspect tool\n")
@@ -76,7 +78,7 @@ func mainDo(args []string) error {
 		if coll == nil {
 			return fmt.Errorf("could not find collection: %v", collName)
 		}
-		return coll.VisitItemsAscend(nil, true, emitItem)
+		return coll.VisitItemsAscendEx(nil, true, emitItem)
 	default:
 		return fmt.Errorf("unknown command: %v", cmd)
 	}
@@ -84,7 +86,12 @@ func mainDo(args []string) error {
 	return nil
 }
 
-func emitItem(i *gkvlite.Item) bool {
+func emitItem(i *gkvlite.Item, depth uint64) bool {
+	if *indent {
+		for i := 0; i < int(depth); i++ {
+			fmt.Printf(" ")
+		}
+	}
 	emit(i.Key, *keyFormat)
 	if *keyFormat != "none" && *valFormat != "none" {
 		fmt.Printf("=")
