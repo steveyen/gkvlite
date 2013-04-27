@@ -339,37 +339,35 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 	if loc.isEmpty() {
 		return nil, nil
 	}
+	if loc.Length != uint32(ploc_length + ploc_length + ploc_length + 8 + 8) {
+		return nil, fmt.Errorf("unexpected loc.Length: %v != %v",
+			loc.Length, ploc_length + ploc_length + ploc_length + 8 + 8)
+	}
 	b := make([]byte, loc.Length)
 	if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
 		return nil, err
 	}
-	buf := bytes.NewBuffer(b)
+	pos := 0
 	atomic.AddUint64(&o.nodeAllocs, 1)
 	n = &node{}
-	p := &ploc{}
-	if p, err = p.read(buf); err != nil {
-		return nil, err
-	}
-	atomic.StorePointer(&n.item.loc, unsafe.Pointer(p))
+	var p *ploc
 	p = &ploc{}
-	if p, err = p.read(buf); err != nil {
-		return nil, err
-	}
-	atomic.StorePointer(&n.left.loc, unsafe.Pointer(p))
+	p, pos = p.read(b, pos)
+	n.item.loc = unsafe.Pointer(p)
 	p = &ploc{}
-	if p, err = p.read(buf); err != nil {
-		return nil, err
+	p, pos = p.read(b, pos)
+	n.left.loc = unsafe.Pointer(p)
+	p = &ploc{}
+	p, pos = p.read(b, pos)
+	n.right.loc = unsafe.Pointer(p)
+	n.numNodes = binary.BigEndian.Uint64(b[pos:pos+8])
+	pos += 8
+	n.numBytes = binary.BigEndian.Uint64(b[pos:pos+8])
+	pos += 8
+	if pos != len(b) {
+		return nil, fmt.Errorf("nodeLoc.read() pos: %v didn't match length: %v",
+			pos, len(b))
 	}
-	atomic.StorePointer(&n.right.loc, unsafe.Pointer(p))
-	var num uint64
-	if err = binary.Read(buf, binary.BigEndian, &num); err != nil {
-		return nil, err
-	}
-	n.numNodes = num
-	if err = binary.Read(buf, binary.BigEndian, &num); err != nil {
-		return nil, err
-	}
-	n.numBytes = num
 	atomic.StorePointer(&nloc.node, unsafe.Pointer(n))
 	return n, nil
 }
@@ -554,17 +552,15 @@ func (p *ploc) write(b []byte, pos int) int {
 	return pos
 }
 
-func (p *ploc) read(b *bytes.Buffer) (res *ploc, err error) {
-	if err := binary.Read(b, binary.BigEndian, &p.Offset); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(b, binary.BigEndian, &p.Length); err != nil {
-		return nil, err
-	}
+func (p *ploc) read(b []byte, pos int) (*ploc, int) {
+	p.Offset = int64(binary.BigEndian.Uint64(b[pos:pos+8]))
+	pos += 8
+	p.Length = binary.BigEndian.Uint32(b[pos:pos+4])
+	pos += 4
 	if p.isEmpty() {
-		return nil, nil
+		return nil, pos
 	}
-	return p, nil
+	return p, pos
 }
 
 // Retrieve an item by its key.  Use withValue of false if you don't
