@@ -488,37 +488,42 @@ func (iloc *itemLoc) read(o *Store, withValue bool) (i *Item, err error) {
 		if loc.isEmpty() {
 			return nil, nil
 		}
-		if loc.Length < uint32(4 + 2 + 4 + 4) {
+		hdrLength := 4 + 2 + 4 + 4
+		if loc.Length < uint32(hdrLength) {
 			return nil, fmt.Errorf("unexpected item loc.Length: %v < %v",
-				loc.Length, 4 + 2 + 4 + 4)
+				loc.Length, hdrLength)
 		}
-		b := make([]byte, loc.Length) // TODO: Read less when not withValue.
+		b := make([]byte, hdrLength)
 		if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
 			return nil, err
 		}
-		buf := bytes.NewBuffer(b)
 		i = &Item{}
-		var keyLength uint16
-		var length, valLength uint32
-		if err = binary.Read(buf, binary.BigEndian, &length); err != nil {
-			return nil, err
-		}
-		if err = binary.Read(buf, binary.BigEndian, &keyLength); err != nil {
-			return nil, err
-		}
-		if err = binary.Read(buf, binary.BigEndian, &valLength); err != nil {
-			return nil, err
-		}
-		if err = binary.Read(buf, binary.BigEndian, &i.Priority); err != nil {
-			return nil, err
-		}
-		hdrLength := 4 + 2 + 4 + 4
+		pos := 0
+		length := binary.BigEndian.Uint32(b[pos:pos+4])
+		pos += 4
+		keyLength := binary.BigEndian.Uint16(b[pos:pos+2])
+		pos += 2
+		valLength := binary.BigEndian.Uint32(b[pos:pos+4])
+		pos += 4
+		i.Priority = int32(binary.BigEndian.Uint32(b[pos:pos+4]))
+		pos += 4
 		if length != uint32(hdrLength)+uint32(keyLength)+valLength {
 			return nil, errors.New("mismatched itemLoc lengths")
 		}
-		i.Key = b[hdrLength : hdrLength+int(keyLength)]
+		if pos != hdrLength {
+			return nil, fmt.Errorf("read pos != hdrLength, %v != %v", pos, hdrLength)
+		}
+		i.Key = make([]byte, keyLength)
+		if _, err := o.file.ReadAt(i.Key,
+			loc.Offset + int64(hdrLength)); err != nil {
+			return nil, err
+		}
 		if withValue {
-			i.Val = b[hdrLength+int(keyLength) : hdrLength+int(keyLength)+int(valLength)]
+			i.Val = make([]byte, valLength)
+			if _, err := o.file.ReadAt(i.Val,
+				loc.Offset + int64(hdrLength) + int64(keyLength)); err != nil {
+				return nil, err
+			}
 		}
 		if o.callbacks.AfterItemRead != nil {
 			i, err = o.callbacks.AfterItemRead(i)
