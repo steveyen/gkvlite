@@ -303,23 +303,20 @@ func (nloc *nodeLoc) write(o *Store) error {
 		}
 		offset := atomic.LoadInt64(&o.size)
 		length := ploc_length + ploc_length + ploc_length + 8 + 8
-		b := bytes.NewBuffer(make([]byte, 0, length))
-		if err := node.item.Loc().write(b); err != nil {
-			return err
+		b := make([]byte, length)
+		pos := 0
+		pos = node.item.Loc().write(b, pos)
+		pos = node.left.Loc().write(b, pos)
+		pos = node.right.Loc().write(b, pos)
+		binary.BigEndian.PutUint64(b[pos:pos+8], node.numNodes)
+		pos += 8
+		binary.BigEndian.PutUint64(b[pos:pos+8], node.numBytes)
+		pos += 8
+		if pos != length {
+			return fmt.Errorf("nodeLoc.write() pos: %v didn't match length: %v",
+				pos, length)
 		}
-		if err := node.left.Loc().write(b); err != nil {
-			return err
-		}
-		if err := node.right.Loc().write(b); err != nil {
-			return err
-		}
-		if err := binary.Write(b, binary.BigEndian, node.numNodes); err != nil {
-			return err
-		}
-		if err := binary.Write(b, binary.BigEndian, node.numBytes); err != nil {
-			return err
-		}
-		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
+		if _, err := o.file.WriteAt(b, offset); err != nil {
 			return err
 		}
 		atomic.StoreInt64(&o.size, offset+int64(length))
@@ -525,17 +522,15 @@ func (p *ploc) isEmpty() bool {
 	return p == nil || (p.Offset == int64(0) && p.Length == uint32(0))
 }
 
-func (p *ploc) write(b *bytes.Buffer) (err error) {
-	if p != nil {
-		if err := binary.Write(b, binary.BigEndian, p.Offset); err != nil {
-			return err
-		}
-		if err := binary.Write(b, binary.BigEndian, p.Length); err != nil {
-			return err
-		}
-		return nil
+func (p *ploc) write(b []byte, pos int) int {
+	if p == nil {
+		return ploc_empty.write(b, pos)
 	}
-	return ploc_empty.write(b)
+	binary.BigEndian.PutUint64(b[pos:pos+8], uint64(p.Offset))
+	pos += 8
+	binary.BigEndian.PutUint32(b[pos:pos+4], p.Length)
+	pos += 4
+	return pos
 }
 
 func (p *ploc) read(b *bytes.Buffer) (res *ploc, err error) {
