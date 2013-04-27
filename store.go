@@ -442,14 +442,23 @@ func (i *itemLoc) write(o *Store) (err error) {
 		offset := atomic.LoadInt64(&o.size)
 		vlength := iItem.NumValBytes(o)
 		length := 4 + 2 + 4 + 4 + len(iItem.Key) + vlength
-		b := bytes.NewBuffer(make([]byte, length)[:0])
-		binary.Write(b, binary.BigEndian, uint32(length))
-		binary.Write(b, binary.BigEndian, uint16(len(iItem.Key)))
-		binary.Write(b, binary.BigEndian, uint32(vlength))
-		binary.Write(b, binary.BigEndian, int32(iItem.Priority))
-		b.Write(iItem.Key)
-		b.Write(iItem.Val) // TODO: handle large values more efficiently.
-		if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
+		b := make([]byte, length)
+		pos := 0
+		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(length))
+		pos += 4
+		binary.BigEndian.PutUint16(b[pos:pos+2], uint16(len(iItem.Key)))
+		pos += 2
+		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(vlength))
+		pos += 4
+		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(iItem.Priority))
+		pos += 4
+		pos += copy(b[pos:], iItem.Key)
+		pos += copy(b[pos:], iItem.Val) // TODO: handle large values better.
+		if pos != length {
+			return fmt.Errorf("itemLoc.write() pos: %v didn't match length: %v",
+				pos, length)
+		}
+		if _, err := o.file.WriteAt(b, offset); err != nil {
 			return err
 		}
 		atomic.StoreInt64(&o.size, offset+int64(length))
@@ -604,6 +613,9 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	if item.Key == nil || len(item.Key) > 0xffff || len(item.Key) == 0 ||
 		item.Val == nil {
 		return errors.New("Item.Key/Val missing or too long")
+	}
+	if item.Priority < 0 {
+		return errors.New("Item.Priority must be non-negative")
 	}
 	root := atomic.LoadPointer(&t.root)
 	atomic.AddUint64(&t.store.nodeAllocs, 1)
