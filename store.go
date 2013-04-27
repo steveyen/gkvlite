@@ -340,7 +340,7 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 		return nil, nil
 	}
 	if loc.Length != uint32(ploc_length + ploc_length + ploc_length + 8 + 8) {
-		return nil, fmt.Errorf("unexpected loc.Length: %v != %v",
+		return nil, fmt.Errorf("unexpected node loc.Length: %v != %v",
 			loc.Length, ploc_length + ploc_length + ploc_length + 8 + 8)
 	}
 	b := make([]byte, loc.Length)
@@ -487,6 +487,10 @@ func (iloc *itemLoc) read(o *Store, withValue bool) (i *Item, err error) {
 		loc := iloc.Loc()
 		if loc.isEmpty() {
 			return nil, nil
+		}
+		if loc.Length < uint32(4 + 2 + 4 + 4) {
+			return nil, fmt.Errorf("unexpected item loc.Length: %v < %v",
+				loc.Length, 4 + 2 + 4 + 4)
 		}
 		b := make([]byte, loc.Length) // TODO: Read less when not withValue.
 		if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
