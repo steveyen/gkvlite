@@ -279,8 +279,9 @@ type node struct {
 
 // A persistable node and its persistence location.
 type nodeLoc struct {
-	loc  unsafe.Pointer // *ploc - can be nil if node is dirty (not yet persisted).
-	node unsafe.Pointer // *node - can be nil if node is not fetched into memory yet.
+	loc     unsafe.Pointer // *ploc - can be nil if node is dirty (not yet persisted).
+	node    unsafe.Pointer // *node - can be nil if node is not fetched into memory yet.
+	touched int            // Unpersisted, to track garbage.
 }
 
 var empty = &nodeLoc{} // Sentinel.
@@ -646,14 +647,16 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	root := atomic.LoadPointer(&t.root)
 	atomic.AddUint64(&t.store.nodeAllocs, 1)
 	r, err := t.store.union(t, (*nodeLoc)(root),
-		&nodeLoc{node: unsafe.Pointer(&node{item: itemLoc{item: unsafe.Pointer(&Item{
-			Key:      item.Key,
-			Val:      item.Val,
-			Priority: item.Priority,
-		})},
+		t.mkNodeLoc(node{
+			item: itemLoc{
+				item: unsafe.Pointer(&Item{
+					Key:      item.Key,
+					Val:      item.Val,
+					Priority: item.Priority,
+				})},
 			numNodes: 1,
 			numBytes: uint64(len(item.Key)) + uint64(item.NumValBytes(t.store)),
-		})})
+		}))
 	if err != nil {
 		return err
 	}
@@ -675,7 +678,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if err != nil || middle.isEmpty() {
 		return false, err
 	}
-	r, err := t.store.join(left, right)
+	r, err := t.store.join(t, left, right)
 	if err != nil {
 		return false, err
 	}
@@ -800,6 +803,16 @@ func (t *Collection) Write() (err error) {
 	return nil
 }
 
+func (t *Collection) mkNodeLoc(n node) *nodeLoc {
+	return &nodeLoc{node: unsafe.Pointer(&node{
+		item:     n.item,
+		left:     n.left,
+		right:    n.right,
+		numNodes: n.numNodes,
+		numBytes: n.numBytes,
+	}), touched: 1}
+}
+
 func (o *Store) flushItems(nloc *nodeLoc) (err error) {
 	if nloc == nil || !nloc.Loc().isEmpty() {
 		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
@@ -878,13 +891,13 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		}
 		if middle.isEmpty() {
 			atomic.AddUint64(&o.nodeAllocs, 1)
-			return &nodeLoc{node: unsafe.Pointer(&node{
+			return t.mkNodeLoc(node{
 				item:     *thisItemLoc,
 				left:     *newLeft,
 				right:    *newRight,
 				numNodes: leftNum + rightNum + 1,
 				numBytes: leftBytes + rightBytes + uint64(thisItem.NumBytes(o)),
-			})}, nil
+			}), nil
 		}
 		middleNode, err := middle.read(o)
 		if err != nil {
@@ -895,13 +908,13 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 			return empty, err
 		}
 		atomic.AddUint64(&o.nodeAllocs, 1)
-		return &nodeLoc{node: unsafe.Pointer(&node{
+		return t.mkNodeLoc(node{
 			item:     middleNode.item,
 			left:     *newLeft,
 			right:    *newRight,
 			numNodes: leftNum + rightNum + 1,
 			numBytes: leftBytes + rightBytes + uint64(middleItem.NumBytes(o)),
-		})}, nil
+		}), nil
 	}
 	// We don't use middle because the "that" node has precedence.
 	left, _, right, err := o.split(t, this, thatItem.Key)
@@ -921,13 +934,13 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		return empty, err
 	}
 	atomic.AddUint64(&o.nodeAllocs, 1)
-	return &nodeLoc{node: unsafe.Pointer(&node{
+	return t.mkNodeLoc(node{
 		item:     *thatItemLoc,
 		left:     *newLeft,
 		right:    *newRight,
 		numNodes: leftNum + rightNum + 1,
 		numBytes: leftBytes + rightBytes + uint64(thatItem.NumBytes(o)),
-	})}, nil
+	}), nil
 }
 
 // Splits a treap into two treaps based on a split key "s".  The
@@ -963,13 +976,13 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 			return empty, empty, empty, err
 		}
 		atomic.AddUint64(&o.nodeAllocs, 1)
-		return left, middle, &nodeLoc{node: unsafe.Pointer(&node{
+		return left, middle, t.mkNodeLoc(node{
 			item:     *nItemLoc,
 			left:     *right,
 			right:    nNode.right,
 			numNodes: leftNum + rightNum + 1,
 			numBytes: leftBytes + rightBytes + uint64(nItem.NumBytes(o)),
-		})}, nil
+		}), nil
 	}
 
 	left, middle, right, err := o.split(t, &nNode.right, s)
@@ -981,17 +994,18 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		return empty, empty, empty, err
 	}
 	atomic.AddUint64(&o.nodeAllocs, 1)
-	return &nodeLoc{node: unsafe.Pointer(&node{
+	return t.mkNodeLoc(node{
 		item:     *nItemLoc,
 		left:     nNode.left,
 		right:    *left,
 		numNodes: leftNum + rightNum + 1,
 		numBytes: leftBytes + rightBytes + uint64(nItem.NumBytes(o)),
-	})}, middle, right, nil
+	}), middle, right, nil
 }
 
 // All the keys from this should be < keys from that.
-func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
+func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
+	res *nodeLoc, err error) {
 	thisNode, err := this.read(o)
 	if err != nil {
 		return empty, err
@@ -1017,7 +1031,7 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 		return empty, err
 	}
 	if thisItem.Priority > thatItem.Priority {
-		newRight, err := o.join(&thisNode.right, that)
+		newRight, err := o.join(t, &thisNode.right, that)
 		if err != nil {
 			return empty, err
 		}
@@ -1026,15 +1040,15 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 			return empty, err
 		}
 		atomic.AddUint64(&o.nodeAllocs, 1)
-		return &nodeLoc{node: unsafe.Pointer(&node{
+		return t.mkNodeLoc(node{
 			item:     *thisItemLoc,
 			left:     thisNode.left,
 			right:    *newRight,
 			numNodes: leftNum + rightNum + 1,
 			numBytes: leftBytes + rightBytes + uint64(thisItem.NumBytes(o)),
-		})}, nil
+		}), nil
 	}
-	newLeft, err := o.join(this, &thatNode.left)
+	newLeft, err := o.join(t, this, &thatNode.left)
 	if err != nil {
 		return empty, err
 	}
@@ -1043,13 +1057,13 @@ func (o *Store) join(this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
 		return empty, err
 	}
 	atomic.AddUint64(&o.nodeAllocs, 1)
-	return &nodeLoc{node: unsafe.Pointer(&node{
+	return t.mkNodeLoc(node{
 		item:     *thatItemLoc,
 		left:     *newLeft,
 		right:    thatNode.right,
 		numNodes: leftNum + rightNum + 1,
 		numBytes: leftBytes + rightBytes + uint64(thatItem.NumBytes(o)),
-	})}, nil
+	}), nil
 }
 
 func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, bool)) (

@@ -1257,7 +1257,7 @@ func TestJoinWithFileErrors(t *testing.T) {
 	errAfter = 0x10000000 // Attempt with no errors.
 	numReads = 0
 
-	res, err = s2.join(root, empty)
+	res, err = s2.join(x2, root, empty)
 	if err != nil {
 		t.Errorf("expected no error")
 	}
@@ -1311,7 +1311,7 @@ func TestJoinWithFileErrors(t *testing.T) {
 		errAfter = i
 		numReads = 0
 
-		res, err = s2.join(root2, root3)
+		res, err = s2.join(x2, root2, root3)
 		if err == nil {
 			t.Errorf("expected error due to mockfile errorAfter %v, got nil", errAfter)
 		}
