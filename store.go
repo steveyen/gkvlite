@@ -268,6 +268,7 @@ type Collection struct {
 	store   *Store
 	compare KeyCompare
 	root    unsafe.Pointer // Value is *nodeLoc type.
+	free    *nodeLoc // Only a single mutator should access the free nodeLoc list.
 }
 
 // A persistable node.
@@ -281,7 +282,8 @@ type node struct {
 type nodeLoc struct {
 	loc     unsafe.Pointer // *ploc - can be nil if node is dirty (not yet persisted).
 	node    unsafe.Pointer // *node - can be nil if node is not fetched into memory yet.
-	touched int            // Unpersisted, to track garbage.
+	next    *nodeLoc       // Used for the free nodeLoc list.
+	touched int            // Used for garbage determination.
 }
 
 var empty = &nodeLoc{} // Sentinel.
@@ -802,15 +804,26 @@ func (t *Collection) Write() (err error) {
 	return nil
 }
 
-func (t *Collection) mkNodeLoc(n node) *nodeLoc {
-	atomic.AddUint64(&t.store.nodeAllocs, 1)
-	return &nodeLoc{node: unsafe.Pointer(&node{
-		item:     n.item,
-		left:     n.left,
-		right:    n.right,
-		numNodes: n.numNodes,
-		numBytes: n.numBytes,
-	}), touched: 1}
+func (t *Collection) mkNodeLoc(nodeIn node) *nodeLoc {
+	res := t.free
+	if res == nil {
+		atomic.AddUint64(&t.store.nodeAllocs, 1)
+		res = &nodeLoc{node: unsafe.Pointer(&node{}), touched: 1}
+	}
+	t.free = res.next
+	res.loc = unsafe.Pointer(nil)
+	n := res.Node()
+	if n == nil {
+		n = &node{}
+		res.node = unsafe.Pointer(n)
+	}
+	n.item = nodeIn.item
+	n.left = nodeIn.left
+	n.right = nodeIn.right
+	n.numNodes = nodeIn.numNodes
+	n.numBytes = nodeIn.numBytes
+	res.touched = 1
+	return res
 }
 
 func (o *Store) flushItems(nloc *nodeLoc) (err error) {
