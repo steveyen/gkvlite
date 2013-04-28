@@ -645,7 +645,6 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		return errors.New("Item.Priority must be non-negative")
 	}
 	root := atomic.LoadPointer(&t.root)
-	atomic.AddUint64(&t.store.nodeAllocs, 1)
 	r, err := t.store.union(t, (*nodeLoc)(root),
 		t.mkNodeLoc(node{
 			item: itemLoc{
@@ -804,6 +803,7 @@ func (t *Collection) Write() (err error) {
 }
 
 func (t *Collection) mkNodeLoc(n node) *nodeLoc {
+	atomic.AddUint64(&t.store.nodeAllocs, 1)
 	return &nodeLoc{node: unsafe.Pointer(&node{
 		item:     n.item,
 		left:     n.left,
@@ -890,7 +890,6 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 			return empty, err
 		}
 		if middle.isEmpty() {
-			atomic.AddUint64(&o.nodeAllocs, 1)
 			return t.mkNodeLoc(node{
 				item:     *thisItemLoc,
 				left:     *newLeft,
@@ -907,7 +906,6 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		if err != nil {
 			return empty, err
 		}
-		atomic.AddUint64(&o.nodeAllocs, 1)
 		return t.mkNodeLoc(node{
 			item:     middleNode.item,
 			left:     *newLeft,
@@ -933,7 +931,6 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 	if err != nil {
 		return empty, err
 	}
-	atomic.AddUint64(&o.nodeAllocs, 1)
 	return t.mkNodeLoc(node{
 		item:     *thatItemLoc,
 		left:     *newLeft,
@@ -975,7 +972,6 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		if err != nil {
 			return empty, empty, empty, err
 		}
-		atomic.AddUint64(&o.nodeAllocs, 1)
 		return left, middle, t.mkNodeLoc(node{
 			item:     *nItemLoc,
 			left:     *right,
@@ -993,7 +989,6 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	if err != nil {
 		return empty, empty, empty, err
 	}
-	atomic.AddUint64(&o.nodeAllocs, 1)
 	return t.mkNodeLoc(node{
 		item:     *nItemLoc,
 		left:     nNode.left,
@@ -1039,7 +1034,6 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 		if err != nil {
 			return empty, err
 		}
-		atomic.AddUint64(&o.nodeAllocs, 1)
 		return t.mkNodeLoc(node{
 			item:     *thisItemLoc,
 			left:     thisNode.left,
@@ -1056,7 +1050,6 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 	if err != nil {
 		return empty, err
 	}
-	atomic.AddUint64(&o.nodeAllocs, 1)
 	return t.mkNodeLoc(node{
 		item:     *thatItemLoc,
 		left:     *newLeft,
