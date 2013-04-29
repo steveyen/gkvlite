@@ -846,6 +846,24 @@ func (t *Collection) mkNodeLoc(itemIn *itemLoc,
 	return res
 }
 
+func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
+	if nloc.isEmpty() {
+		return
+	}
+	nloc.loc = unsafe.Pointer(nil)
+	n := nloc.Node()
+	if n != nil {
+		n.item = *empty_itemLoc
+		n.left = *empty_nodeLoc
+		n.right = *empty_nodeLoc
+		n.numNodes = 0
+		n.numBytes = 0
+	}
+	nloc.next = t.free
+	nloc.touched = 0
+	t.free = nloc
+}
+
 func (o *Store) flushItems(nloc *nodeLoc) (err error) {
 	if nloc == nil || !nloc.Loc().isEmpty() {
 		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
