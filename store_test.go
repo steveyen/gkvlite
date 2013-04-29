@@ -1257,7 +1257,7 @@ func TestJoinWithFileErrors(t *testing.T) {
 	errAfter = 0x10000000 // Attempt with no errors.
 	numReads = 0
 
-	res, err = s2.join(x2, root, empty)
+	res, err = s2.join(x2, root, empty_nodeLoc)
 	if err != nil {
 		t.Errorf("expected no error")
 	}
