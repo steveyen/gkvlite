@@ -47,9 +47,15 @@ func TestStoreMem(t *testing.T) {
 	if x == nil {
 		t.Errorf("expected SetColl/GetColl to work")
 	}
+	if x.Name() != "x" {
+		t.Errorf("expected name to be same")
+	}
 	x2 := s.GetCollection("x")
 	if x2 != x {
 		t.Errorf("expected 2nd GetColl to work")
+	}
+	if x2.Name() != "x" {
+		t.Errorf("expected name to be same")
 	}
 	numItems, numBytes, err := x2.GetTotals()
 	if err != nil || numItems != 0 || numBytes != 0 {
@@ -1448,6 +1454,9 @@ func TestKeyCompareForCollectionCallback(t *testing.T) {
 
 	if comparisons == 0 {
 		t.Errorf("expected invocations of myKeyCompare")
+	}
+	if x1.Name() != "x" {
+		t.Errorf("expected same name after reload")
 	}
 }
 

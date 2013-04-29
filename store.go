@@ -87,6 +87,7 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 		orig := atomic.LoadPointer(&s.coll)
 		coll := copyColl(*(*map[string]*Collection)(orig))
 		cnew := s.MakePrivateCollection(compare)
+		cnew.name = name
 		if coll[name] != nil {
 			cnew.root = unsafe.Pointer(atomic.LoadPointer(&coll[name].root))
 		}
@@ -265,6 +266,7 @@ type KeyCompare func(a, b []byte) int
 
 // A persistable collection of ordered key-values (Item's).
 type Collection struct {
+	name    string // May be "" for a private collection.
 	store   *Store
 	compare KeyCompare
 	root    unsafe.Pointer // Value is *nodeLoc type.
@@ -272,6 +274,10 @@ type Collection struct {
 	// Only a single mutator should access the free lists.
 	freeNodes    *node
 	freeNodeLocs *nodeLoc
+}
+
+func (t *Collection) Name() string {
+	return t.name
 }
 
 // A persistable node.
@@ -1295,6 +1301,7 @@ func (o *Store) readRoots() error {
 					return err
 				}
 				for collName, t := range m {
+					t.name = collName
 					t.store = o
 					if o.callbacks.KeyCompareForCollection != nil {
 						t.compare = o.callbacks.KeyCompareForCollection(collName)
