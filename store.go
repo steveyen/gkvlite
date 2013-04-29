@@ -678,7 +678,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		Priority: item.Priority,
 	})} // Separate item initialization to avoid garbage.
 	nloc := t.mkNodeLoc(n)
-	r, err := t.store.union(t, (*nodeLoc)(root), nloc)
+	r, _, err := t.store.union(t, (*nodeLoc)(root), nloc)
 	if err != nil {
 		return err
 	}
@@ -916,97 +916,119 @@ func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
 	return nloc.write(o) // Write nodes in children-first order.
 }
 
-func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc, err error) {
+func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
+	res *nodeLoc, resIsNew bool, err error) {
 	thisNode, err := this.read(o)
 	if err != nil {
-		return empty_nodeLoc, err
+		return empty_nodeLoc, false, err
 	}
 	thatNode, err := that.read(o)
 	if err != nil {
-		return empty_nodeLoc, err
+		return empty_nodeLoc, false, err
 	}
 	if this.isEmpty() || thisNode == nil {
-		return that, nil
+		return that, false, nil
 	}
 	if that.isEmpty() || thatNode == nil {
-		return this, nil
+		return this, false, nil
 	}
 	thisItemLoc := &thisNode.item
 	thisItem, err := thisItemLoc.read(o, false)
 	if err != nil {
-		return empty_nodeLoc, err
+		return empty_nodeLoc, false, err
 	}
 	thatItemLoc := &thatNode.item
 	thatItem, err := thatItemLoc.read(o, false)
 	if err != nil {
-		return empty_nodeLoc, err
+		return empty_nodeLoc, false, err
 	}
 	if thisItem.Priority > thatItem.Priority {
 		left, middle, right, leftIsNew, rightIsNew, err := o.split(t, that, thisItem.Key)
 		if err != nil {
-			return empty_nodeLoc, err
+			return empty_nodeLoc, false, err
 		}
-		newLeft, err := o.union(t, &thisNode.left, left)
+		newLeft, newLeftIsNew, err := o.union(t, &thisNode.left, left)
 		if err != nil {
-			return empty_nodeLoc, err
+			return empty_nodeLoc, false, err
 		}
 		if leftIsNew && left != newLeft {
 			t.freeNodeLoc(left)
 		}
-		newRight, err := o.union(t, &thisNode.right, right)
+		newRight, newRightIsNew, err := o.union(t, &thisNode.right, right)
 		if err != nil {
-			return empty_nodeLoc, err
+			return empty_nodeLoc, false, err
 		}
 		if rightIsNew && right != newRight {
 			t.freeNodeLoc(right)
 		}
 		leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, newLeft, newRight)
 		if err != nil {
-			return empty_nodeLoc, err
+			return empty_nodeLoc, false, err
 		}
 		if middle.isEmpty() {
-			return t.mkNodeLoc(t.mkNode(thisItemLoc, newLeft, newRight,
+			res = t.mkNodeLoc(t.mkNode(thisItemLoc, newLeft, newRight,
 				leftNum + rightNum + 1,
-				leftBytes + rightBytes + uint64(thisItem.NumBytes(o)))), nil
+				leftBytes + rightBytes + uint64(thisItem.NumBytes(o))))
+			if newLeftIsNew {
+				t.freeNodeLoc(newLeft)
+			}
+			if newRightIsNew {
+				t.freeNodeLoc(newRight)
+			}
+			return res, true, nil
 		}
 		middleNode, err := middle.read(o)
 		if err != nil {
-			return empty_nodeLoc, err
+			return empty_nodeLoc, false, err
 		}
 		middleItem, err := middleNode.item.read(o, false)
 		if err != nil {
-			return empty_nodeLoc, err
+			return empty_nodeLoc, false, err
 		}
-		return t.mkNodeLoc(t.mkNode(&middleNode.item, newLeft, newRight,
+		res = t.mkNodeLoc(t.mkNode(&middleNode.item, newLeft, newRight,
 			leftNum + rightNum + 1,
-			leftBytes + rightBytes + uint64(middleItem.NumBytes(o)))), nil
+			leftBytes + rightBytes + uint64(middleItem.NumBytes(o))))
+		if newLeftIsNew {
+			t.freeNodeLoc(newLeft)
+		}
+		if newRightIsNew {
+			t.freeNodeLoc(newRight)
+		}
+		return res, true, nil
 	}
 	// We don't use middle because the "that" node has precedence.
 	left, _, right, leftIsNew, rightIsNew, err := o.split(t, this, thatItem.Key)
 	if err != nil {
-		return empty_nodeLoc, err
+		return empty_nodeLoc, false, err
 	}
-	newLeft, err := o.union(t, left, &thatNode.left)
+	newLeft, newLeftIsNew, err := o.union(t, left, &thatNode.left)
 	if err != nil {
-		return empty_nodeLoc, err
+		return empty_nodeLoc, false, err
 	}
 	if leftIsNew && left != newLeft {
 		t.freeNodeLoc(left)
 	}
-	newRight, err := o.union(t, right, &thatNode.right)
+	newRight, newRightIsNew, err := o.union(t, right, &thatNode.right)
 	if err != nil {
-		return empty_nodeLoc, err
+		return empty_nodeLoc, false, err
 	}
 	if rightIsNew && right != newRight {
 		t.freeNodeLoc(right)
 	}
 	leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, newLeft, newRight)
 	if err != nil {
-		return empty_nodeLoc, err
+		return empty_nodeLoc, false, err
 	}
-	return t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, newRight,
+	res = t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, newRight,
 		leftNum + rightNum + 1,
-		leftBytes + rightBytes + uint64(thatItem.NumBytes(o)))), nil
+		leftBytes + rightBytes + uint64(thatItem.NumBytes(o))))
+	if newLeftIsNew {
+		t.freeNodeLoc(newLeft)
+	}
+	if newRightIsNew {
+		t.freeNodeLoc(newRight)
+	}
+	return res, true, nil
 }
 
 // Splits a treap into two treaps based on a split key "s".  The
