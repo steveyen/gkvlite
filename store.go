@@ -38,7 +38,7 @@ type StoreFile interface {
 type StoreCallbacks struct {
 	BeforeItemWrite, AfterItemRead ItemCallback
 
-	ItemValLength func(i *Item) int
+	ItemValLength func(i *Item) int // On-disk size, in bytes, of an item's value.
 	ItemValWrite  func(i *Item, w io.WriterAt, offset int64) error
 	ItemValRead   func(i *Item, r io.ReaderAt, offset int64, valLength uint32) error
 
