@@ -677,9 +677,13 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		Val:      item.Val,
 		Priority: item.Priority,
 	})} // Separate item initialization to avoid garbage.
-	r, err := t.store.union(t, (*nodeLoc)(root), t.mkNodeLoc(n))
+	nloc := t.mkNodeLoc(n)
+	r, err := t.store.union(t, (*nodeLoc)(root), nloc)
 	if err != nil {
 		return err
+	}
+	if nloc != r {
+		t.freeNodeLoc(nloc)
 	}
 	if !atomic.CompareAndSwapPointer(&t.root, root, unsafe.Pointer(r)) {
 		return errors.New("concurrent mutation attempted")
