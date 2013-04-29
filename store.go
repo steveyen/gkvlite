@@ -942,7 +942,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		return empty_nodeLoc, err
 	}
 	if thisItem.Priority > thatItem.Priority {
-		left, middle, right, _, _, err := o.split(t, that, thisItem.Key)
+		left, middle, right, leftIsNew, rightIsNew, err := o.split(t, that, thisItem.Key)
 		if err != nil {
 			return empty_nodeLoc, err
 		}
@@ -950,9 +950,15 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		if err != nil {
 			return empty_nodeLoc, err
 		}
+		if leftIsNew && left != newLeft {
+			t.freeNodeLoc(left)
+		}
 		newRight, err := o.union(t, &thisNode.right, right)
 		if err != nil {
 			return empty_nodeLoc, err
+		}
+		if rightIsNew && right != newRight {
+			t.freeNodeLoc(right)
 		}
 		leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, newLeft, newRight)
 		if err != nil {
@@ -976,7 +982,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 			leftBytes + rightBytes + uint64(middleItem.NumBytes(o)))), nil
 	}
 	// We don't use middle because the "that" node has precedence.
-	left, _, right, _, _, err := o.split(t, this, thatItem.Key)
+	left, _, right, leftIsNew, rightIsNew, err := o.split(t, this, thatItem.Key)
 	if err != nil {
 		return empty_nodeLoc, err
 	}
@@ -984,9 +990,15 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 	if err != nil {
 		return empty_nodeLoc, err
 	}
+	if leftIsNew && left != newLeft {
+		t.freeNodeLoc(left)
+	}
 	newRight, err := o.union(t, right, &thatNode.right)
 	if err != nil {
 		return empty_nodeLoc, err
+	}
+	if rightIsNew && right != newRight {
+		t.freeNodeLoc(right)
 	}
 	leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, newLeft, newRight)
 	if err != nil {
