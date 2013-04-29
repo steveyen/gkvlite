@@ -695,7 +695,7 @@ func (t *Collection) Set(key []byte, val []byte) error {
 // Deletes an item of a given key.
 func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	root := atomic.LoadPointer(&t.root)
-	left, middle, right, err := t.store.split(t, (*nodeLoc)(root), key)
+	left, middle, right, _, _, err := t.store.split(t, (*nodeLoc)(root), key)
 	if err != nil || middle.isEmpty() {
 		return false, err
 	}
@@ -938,7 +938,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 		return empty_nodeLoc, err
 	}
 	if thisItem.Priority > thatItem.Priority {
-		left, middle, right, err := o.split(t, that, thisItem.Key)
+		left, middle, right, _, _, err := o.split(t, that, thisItem.Key)
 		if err != nil {
 			return empty_nodeLoc, err
 		}
@@ -972,7 +972,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 			leftBytes + rightBytes + uint64(middleItem.NumBytes(o)))), nil
 	}
 	// We don't use middle because the "that" node has precedence.
-	left, _, right, err := o.split(t, this, thatItem.Key)
+	left, _, right, _, _, err := o.split(t, this, thatItem.Key)
 	if err != nil {
 		return empty_nodeLoc, err
 	}
@@ -998,49 +998,58 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (res *nodeLoc
 // right treap has keys > s, and middle is either...
 // * empty/nil - meaning key s was not in the original treap.
 // * non-empty - returning the original nodeLoc/item that had key s.
+// The two bool's indicate whether the left/right returned nodeLoc's are new.
 func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
-	*nodeLoc, *nodeLoc, *nodeLoc, error) {
+	*nodeLoc, *nodeLoc, *nodeLoc, bool, bool, error) {
 	nNode, err := n.read(o)
 	if err != nil || n.isEmpty() || nNode == nil {
-		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
+		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 	}
 
 	nItemLoc := &nNode.item
 	nItem, err := nItemLoc.read(o, false)
 	if err != nil {
-		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
+		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 	}
 
 	c := t.compare(s, nItem.Key)
 	if c == 0 {
-		return &nNode.left, n, &nNode.right, nil
+		return &nNode.left, n, &nNode.right, false, false, nil
 	}
 
 	if c < 0 {
-		left, middle, right, err := o.split(t, &nNode.left, s)
+		left, middle, right, leftIsNew, rightIsNew, err := o.split(t, &nNode.left, s)
 		if err != nil {
-			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
+			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 		}
 		leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, right, &nNode.right)
 		if err != nil {
-			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
+			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 		}
-		return left, middle, t.mkNodeLoc(t.mkNode(nItemLoc, right, &nNode.right,
+		newRight := t.mkNodeLoc(t.mkNode(nItemLoc, right, &nNode.right,
 			leftNum + rightNum + 1,
-			leftBytes + rightBytes + uint64(nItem.NumBytes(o)))), nil
+			leftBytes + rightBytes + uint64(nItem.NumBytes(o))))
+		if rightIsNew {
+			t.freeNodeLoc(right)
+		}
+		return left, middle, newRight, leftIsNew, true, nil
 	}
 
-	left, middle, right, err := o.split(t, &nNode.right, s)
+	left, middle, right, leftIsNew, rightIsNew, err := o.split(t, &nNode.right, s)
 	if err != nil {
-		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
+		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 	}
 	leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, &nNode.left, left)
 	if err != nil {
-		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
+		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 	}
-	return t.mkNodeLoc(t.mkNode(nItemLoc, &nNode.left, left,
+	newLeft := t.mkNodeLoc(t.mkNode(nItemLoc, &nNode.left, left,
 		leftNum + rightNum + 1,
-		leftBytes + rightBytes + uint64(nItem.NumBytes(o)))), middle, right, nil
+		leftBytes + rightBytes + uint64(nItem.NumBytes(o))))
+	if leftIsNew {
+		t.freeNodeLoc(left)
+	}
+	return newLeft, middle, right, true, rightIsNew, nil
 }
 
 // All the keys from this should be < keys from that.
