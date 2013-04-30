@@ -679,9 +679,10 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	n := t.mkNode(nil, nil, nil,
 		1, uint64(len(item.Key))+uint64(item.NumValBytes(t.store)))
 	n.item = itemLoc{item: unsafe.Pointer(&Item{
-		Key:      item.Key,
-		Val:      item.Val,
-		Priority: item.Priority,
+		Key:       item.Key,
+		Val:       item.Val,
+		Priority:  item.Priority,
+		Transient: item.Transient,
 	})} // Separate item initialization to avoid garbage.
 	nloc := t.mkNodeLoc(n)
 	r, _, err := t.store.union(t, (*nodeLoc)(root), nloc)
