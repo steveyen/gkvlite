@@ -677,7 +677,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	}
 	root := atomic.LoadPointer(&t.root)
 	n := t.mkNode(nil, nil, nil,
-		1, uint64(len(item.Key)) + uint64(item.NumValBytes(t.store)))
+		1, uint64(len(item.Key))+uint64(item.NumValBytes(t.store)))
 	n.item = itemLoc{item: unsafe.Pointer(&Item{
 		Key:      item.Key,
 		Val:      item.Val,
@@ -973,8 +973,8 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 		}
 		if middle.isEmpty() {
 			res = t.mkNodeLoc(t.mkNode(thisItemLoc, newLeft, newRight,
-				leftNum + rightNum + 1,
-				leftBytes + rightBytes + uint64(thisItem.NumBytes(o))))
+				leftNum+rightNum+1,
+				leftBytes+rightBytes+uint64(thisItem.NumBytes(o))))
 			if newLeftIsNew {
 				t.freeNodeLoc(newLeft)
 			}
@@ -992,8 +992,8 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 			return empty_nodeLoc, false, err
 		}
 		res = t.mkNodeLoc(t.mkNode(&middleNode.item, newLeft, newRight,
-			leftNum + rightNum + 1,
-			leftBytes + rightBytes + uint64(middleItem.NumBytes(o))))
+			leftNum+rightNum+1,
+			leftBytes+rightBytes+uint64(middleItem.NumBytes(o))))
 		if newLeftIsNew {
 			t.freeNodeLoc(newLeft)
 		}
@@ -1026,8 +1026,8 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 		return empty_nodeLoc, false, err
 	}
 	res = t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, newRight,
-		leftNum + rightNum + 1,
-		leftBytes + rightBytes + uint64(thatItem.NumBytes(o))))
+		leftNum+rightNum+1,
+		leftBytes+rightBytes+uint64(thatItem.NumBytes(o))))
 	if newLeftIsNew {
 		t.freeNodeLoc(newLeft)
 	}
@@ -1071,8 +1071,8 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 		}
 		newRight := t.mkNodeLoc(t.mkNode(nItemLoc, right, &nNode.right,
-			leftNum + rightNum + 1,
-			leftBytes + rightBytes + uint64(nItem.NumBytes(o))))
+			leftNum+rightNum+1,
+			leftBytes+rightBytes+uint64(nItem.NumBytes(o))))
 		if rightIsNew {
 			t.freeNodeLoc(right)
 		}
@@ -1088,8 +1088,8 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 	}
 	newLeft := t.mkNodeLoc(t.mkNode(nItemLoc, &nNode.left, left,
-		leftNum + rightNum + 1,
-		leftBytes + rightBytes + uint64(nItem.NumBytes(o))))
+		leftNum+rightNum+1,
+		leftBytes+rightBytes+uint64(nItem.NumBytes(o))))
 	if leftIsNew {
 		t.freeNodeLoc(left)
 	}
@@ -1133,8 +1133,8 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 			return empty_nodeLoc, err
 		}
 		return t.mkNodeLoc(t.mkNode(thisItemLoc, &thisNode.left, newRight,
-			leftNum + rightNum + 1,
-			leftBytes + rightBytes + uint64(thisItem.NumBytes(o)))), nil
+			leftNum+rightNum+1,
+			leftBytes+rightBytes+uint64(thisItem.NumBytes(o)))), nil
 	}
 	newLeft, err := o.join(t, this, &thatNode.left)
 	if err != nil {
@@ -1145,8 +1145,8 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 		return empty_nodeLoc, err
 	}
 	return t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, &thatNode.right,
-		leftNum + rightNum + 1,
-		leftBytes + rightBytes + uint64(thatItem.NumBytes(o)))), nil
+		leftNum+rightNum+1,
+		leftBytes+rightBytes+uint64(thatItem.NumBytes(o)))), nil
 }
 
 func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, bool)) (
