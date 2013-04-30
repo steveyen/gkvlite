@@ -419,7 +419,7 @@ func numInfo(o *Store, left *nodeLoc, right *nodeLoc) (
 type Item struct {
 	Transient unsafe.Pointer // For any ephemeral data; atomic CAS recommended.
 	Key, Val  []byte         // Val may be nil if not fetched into memory yet.
-	Priority  int32          // Use rand.Int() for probabilistic balancing.
+	Priority  int32          // Use rand.Int31() for probabilistic balancing.
 }
 
 // Number of Key bytes plus number of Val bytes.
@@ -664,7 +664,7 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 }
 
 // Replace or insert an item of a given key.
-// A random item Priority (e.g., rand.Int()) will usually work well,
+// A random item Priority (e.g., rand.Int31()) will usually work well,
 // but advanced users may consider using non-random item priorities
 // at the risk of unbalancing the lookup tree.
 func (t *Collection) SetItem(item *Item) (err error) {
@@ -700,7 +700,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 
 // Replace or insert an item of a given key.
 func (t *Collection) Set(key []byte, val []byte) error {
-	return t.SetItem(&Item{Key: key, Val: val, Priority: int32(rand.Int())})
+	return t.SetItem(&Item{Key: key, Val: val, Priority: rand.Int31()})
 }
 
 // Deletes an item of a given key.
