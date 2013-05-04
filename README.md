@@ -206,7 +206,7 @@ Examples
     s2, err := gkvlite.NewStore(f2)
     c2 := s.GetCollection("cars")
     
-    bmwPrice := c2.Get([]byte("bmw"))
+    bmwPrice, err := c2.Get([]byte("bmw"))
 
 Tips
 ====
