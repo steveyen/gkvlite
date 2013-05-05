@@ -112,7 +112,8 @@ Other features
   advanced testing or I/O interposing needs (e.g., compression,
   checksums, I/O statistics, caching, enabling concurrency, etc).
 * You can supply your own KeyCompare function to order items however
-  you want.  The default is bytes.Compare().
+  you want.  The default is bytes.Compare().  See also the
+  StoreCallbacks.KeyCompareForCollection() callback function.
 * Collections are written to file sorted by Collection name.  This
   allows users with advanced concurrency needs to reason about how
   concurrent flushes interact with concurrent mutations.  For example,
