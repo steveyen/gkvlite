@@ -207,8 +207,8 @@ func TestStoreMem(t *testing.T) {
 		t.Error("expected success on just perfect key length")
 	}
 	err = xx.SetItem(&Item{
-		Key: make([]byte, 0xffff),
-		Val: []byte{},
+		Key:      make([]byte, 0xffff),
+		Val:      []byte{},
 		Priority: -1})
 	if err == nil {
 		t.Error("expected error on -1 Priority")

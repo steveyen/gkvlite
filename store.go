@@ -38,9 +38,18 @@ type StoreFile interface {
 type StoreCallbacks struct {
 	BeforeItemWrite, AfterItemRead ItemCallback
 
-	ItemValLength func(i *Item) int // On-disk size, in bytes, of an item's value.
-	ItemValWrite  func(i *Item, w io.WriterAt, offset int64) error
-	ItemValRead   func(i *Item, r io.ReaderAt, offset int64, valLength uint32) error
+	// Optional callback to control on-disk size, in bytes, of an item's value.
+	ItemValLength func(c *Collection, i *Item) int
+
+	// Optional callback to allow write item bytes differently.
+	ItemValWrite func(c *Collection, i *Item,
+		w io.WriterAt, offset int64) error
+
+	// Optional callback to read item bytes differently.  For example,
+	// the app might have an optimization to just remember the reader
+	// & file offsets in the item.Transient field.
+	ItemValRead func(c *Collection, i *Item,
+		r io.ReaderAt, offset int64, valLength uint32) error
 
 	// Invoked when a Store is reloaded (during NewStoreEx()) from
 	// disk, this callback allows the user to optionally supply a key
@@ -49,7 +58,7 @@ type StoreCallbacks struct {
 	KeyCompareForCollection func(collName string) KeyCompare
 }
 
-type ItemCallback func(*Item) (*Item, error)
+type ItemCallback func(*Collection, *Item) (*Item, error)
 
 const VERSION = uint32(4)
 
@@ -423,13 +432,13 @@ type Item struct {
 }
 
 // Number of Key bytes plus number of Val bytes.
-func (i *Item) NumBytes(o *Store) int {
-	return len(i.Key) + i.NumValBytes(o)
+func (i *Item) NumBytes(c *Collection) int {
+	return len(i.Key) + i.NumValBytes(c)
 }
 
-func (i *Item) NumValBytes(o *Store) int {
-	if o.callbacks.ItemValLength != nil {
-		return o.callbacks.ItemValLength(i)
+func (i *Item) NumValBytes(c *Collection) int {
+	if c.store.callbacks.ItemValLength != nil {
+		return c.store.callbacks.ItemValLength(c, i)
 	}
 	return len(i.Val)
 }
@@ -459,21 +468,21 @@ func (i *itemLoc) Copy(src *itemLoc) {
 	atomic.StorePointer(&i.item, unsafe.Pointer(src.Item()))
 }
 
-func (i *itemLoc) write(o *Store) (err error) {
+func (i *itemLoc) write(c *Collection) (err error) {
 	if i.Loc().isEmpty() {
 		iItem := i.Item()
 		if iItem == nil {
 			return errors.New("itemLoc.write with nil item")
 		}
-		if o.callbacks.BeforeItemWrite != nil {
-			iItem, err = o.callbacks.BeforeItemWrite(iItem)
+		if c.store.callbacks.BeforeItemWrite != nil {
+			iItem, err = c.store.callbacks.BeforeItemWrite(c, iItem)
 			if err != nil {
 				return err
 			}
 		}
-		offset := atomic.LoadInt64(&o.size)
+		offset := atomic.LoadInt64(&c.store.size)
 		hlength := 4 + 2 + 4 + 4 + len(iItem.Key)
-		vlength := iItem.NumValBytes(o)
+		vlength := iItem.NumValBytes(c)
 		ilength := hlength + vlength
 		b := make([]byte, hlength)
 		pos := 0
@@ -490,28 +499,29 @@ func (i *itemLoc) write(o *Store) (err error) {
 			return fmt.Errorf("itemLoc.write() pos: %v didn't match hlength: %v",
 				pos, hlength)
 		}
-		if _, err := o.file.WriteAt(b, offset); err != nil {
+		if _, err := c.store.file.WriteAt(b, offset); err != nil {
 			return err
 		}
-		if o.callbacks.ItemValWrite != nil {
-			err := o.callbacks.ItemValWrite(iItem, o.file, offset+int64(pos))
+		if c.store.callbacks.ItemValWrite != nil {
+			err := c.store.callbacks.ItemValWrite(c, iItem, c.store.file,
+				offset+int64(pos))
 			if err != nil {
 				return err
 			}
 		} else {
-			_, err := o.file.WriteAt(iItem.Val, offset+int64(pos))
+			_, err := c.store.file.WriteAt(iItem.Val, offset+int64(pos))
 			if err != nil {
 				return err
 			}
 		}
-		atomic.StoreInt64(&o.size, offset+int64(ilength))
+		atomic.StoreInt64(&c.store.size, offset+int64(ilength))
 		atomic.StorePointer(&i.loc,
 			unsafe.Pointer(&ploc{Offset: offset, Length: uint32(ilength)}))
 	}
 	return nil
 }
 
-func (iloc *itemLoc) read(o *Store, withValue bool) (i *Item, err error) {
+func (iloc *itemLoc) read(c *Collection, withValue bool) (i *Item, err error) {
 	if iloc == nil {
 		return nil, nil
 	}
@@ -527,7 +537,7 @@ func (iloc *itemLoc) read(o *Store, withValue bool) (i *Item, err error) {
 				loc.Length, hdrLength)
 		}
 		b := make([]byte, hdrLength)
-		if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
+		if _, err := c.store.file.ReadAt(b, loc.Offset); err != nil {
 			return nil, err
 		}
 		i = &Item{}
@@ -547,27 +557,27 @@ func (iloc *itemLoc) read(o *Store, withValue bool) (i *Item, err error) {
 			return nil, fmt.Errorf("read pos != hdrLength, %v != %v", pos, hdrLength)
 		}
 		i.Key = make([]byte, keyLength)
-		if _, err := o.file.ReadAt(i.Key,
+		if _, err := c.store.file.ReadAt(i.Key,
 			loc.Offset+int64(hdrLength)); err != nil {
 			return nil, err
 		}
 		if withValue {
-			if o.callbacks.ItemValRead != nil {
-				err := o.callbacks.ItemValRead(i, o.file,
+			if c.store.callbacks.ItemValRead != nil {
+				err := c.store.callbacks.ItemValRead(c, i, c.store.file,
 					loc.Offset+int64(hdrLength)+int64(keyLength), valLength)
 				if err != nil {
 					return nil, err
 				}
 			} else {
 				i.Val = make([]byte, valLength)
-				if _, err := o.file.ReadAt(i.Val,
+				if _, err := c.store.file.ReadAt(i.Val,
 					loc.Offset+int64(hdrLength)+int64(keyLength)); err != nil {
 					return nil, err
 				}
 			}
 		}
-		if o.callbacks.AfterItemRead != nil {
-			i, err = o.callbacks.AfterItemRead(i)
+		if c.store.callbacks.AfterItemRead != nil {
+			i, err = c.store.callbacks.AfterItemRead(c, i)
 			if err != nil {
 				return nil, err
 			}
@@ -625,7 +635,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 			return nil, err
 		}
 		i := &nNode.item
-		iItem, err := i.read(t.store, false)
+		iItem, err := i.read(t, false)
 		if err != nil {
 			return nil, err
 		}
@@ -639,7 +649,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 			n = &nNode.right
 		} else {
 			if withValue {
-				iItem, err = i.read(t.store, withValue)
+				iItem, err = i.read(t, withValue)
 				if err != nil {
 					return nil, err
 				}
@@ -677,7 +687,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	}
 	root := atomic.LoadPointer(&t.root)
 	n := t.mkNode(nil, nil, nil,
-		1, uint64(len(item.Key))+uint64(item.NumValBytes(t.store)))
+		1, uint64(len(item.Key))+uint64(item.NumValBytes(t)))
 	n.item = itemLoc{item: unsafe.Pointer(&Item{
 		Key:       item.Key,
 		Val:       item.Val,
@@ -826,7 +836,7 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 // make these writes visible to the next file re-opening/re-loading.
 func (t *Collection) Write() (err error) {
 	root := (*nodeLoc)(atomic.LoadPointer(&t.root))
-	if err = t.store.flushItems(root); err != nil {
+	if err = t.flushItems(root); err != nil {
 		return err
 	}
 	if err = t.store.flushNodes(root); err != nil {
@@ -889,7 +899,7 @@ func (t *Collection) freeNode(n *node) {
 	t.freeNodes = n
 }
 
-func (o *Store) flushItems(nloc *nodeLoc) (err error) {
+func (t *Collection) flushItems(nloc *nodeLoc) (err error) {
 	if nloc == nil || !nloc.Loc().isEmpty() {
 		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
 	}
@@ -897,13 +907,13 @@ func (o *Store) flushItems(nloc *nodeLoc) (err error) {
 	if node == nil {
 		return nil
 	}
-	if err = o.flushItems(&node.left); err != nil {
+	if err = t.flushItems(&node.left); err != nil {
 		return err
 	}
-	if err = node.item.write(o); err != nil { // Write items in key order.
+	if err = node.item.write(t); err != nil { // Write items in key order.
 		return err
 	}
-	return o.flushItems(&node.right)
+	return t.flushItems(&node.right)
 }
 
 func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
@@ -940,12 +950,12 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 		return this, false, nil
 	}
 	thisItemLoc := &thisNode.item
-	thisItem, err := thisItemLoc.read(o, false)
+	thisItem, err := thisItemLoc.read(t, false)
 	if err != nil {
 		return empty_nodeLoc, false, err
 	}
 	thatItemLoc := &thatNode.item
-	thatItem, err := thatItemLoc.read(o, false)
+	thatItem, err := thatItemLoc.read(t, false)
 	if err != nil {
 		return empty_nodeLoc, false, err
 	}
@@ -975,7 +985,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 		if middle.isEmpty() {
 			res = t.mkNodeLoc(t.mkNode(thisItemLoc, newLeft, newRight,
 				leftNum+rightNum+1,
-				leftBytes+rightBytes+uint64(thisItem.NumBytes(o))))
+				leftBytes+rightBytes+uint64(thisItem.NumBytes(t))))
 			if newLeftIsNew {
 				t.freeNodeLoc(newLeft)
 			}
@@ -988,13 +998,13 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 		if err != nil {
 			return empty_nodeLoc, false, err
 		}
-		middleItem, err := middleNode.item.read(o, false)
+		middleItem, err := middleNode.item.read(t, false)
 		if err != nil {
 			return empty_nodeLoc, false, err
 		}
 		res = t.mkNodeLoc(t.mkNode(&middleNode.item, newLeft, newRight,
 			leftNum+rightNum+1,
-			leftBytes+rightBytes+uint64(middleItem.NumBytes(o))))
+			leftBytes+rightBytes+uint64(middleItem.NumBytes(t))))
 		if newLeftIsNew {
 			t.freeNodeLoc(newLeft)
 		}
@@ -1028,7 +1038,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 	}
 	res = t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, newRight,
 		leftNum+rightNum+1,
-		leftBytes+rightBytes+uint64(thatItem.NumBytes(o))))
+		leftBytes+rightBytes+uint64(thatItem.NumBytes(t))))
 	if newLeftIsNew {
 		t.freeNodeLoc(newLeft)
 	}
@@ -1052,7 +1062,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	}
 
 	nItemLoc := &nNode.item
-	nItem, err := nItemLoc.read(o, false)
+	nItem, err := nItemLoc.read(t, false)
 	if err != nil {
 		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 	}
@@ -1073,7 +1083,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		}
 		newRight := t.mkNodeLoc(t.mkNode(nItemLoc, right, &nNode.right,
 			leftNum+rightNum+1,
-			leftBytes+rightBytes+uint64(nItem.NumBytes(o))))
+			leftBytes+rightBytes+uint64(nItem.NumBytes(t))))
 		if rightIsNew {
 			t.freeNodeLoc(right)
 		}
@@ -1090,7 +1100,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	}
 	newLeft := t.mkNodeLoc(t.mkNode(nItemLoc, &nNode.left, left,
 		leftNum+rightNum+1,
-		leftBytes+rightBytes+uint64(nItem.NumBytes(o))))
+		leftBytes+rightBytes+uint64(nItem.NumBytes(t))))
 	if leftIsNew {
 		t.freeNodeLoc(left)
 	}
@@ -1115,12 +1125,12 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 		return this, nil
 	}
 	thisItemLoc := &thisNode.item
-	thisItem, err := thisItemLoc.read(o, false)
+	thisItem, err := thisItemLoc.read(t, false)
 	if err != nil {
 		return empty_nodeLoc, err
 	}
 	thatItemLoc := &thatNode.item
-	thatItem, err := thatItemLoc.read(o, false)
+	thatItem, err := thatItemLoc.read(t, false)
 	if err != nil {
 		return empty_nodeLoc, err
 	}
@@ -1135,7 +1145,7 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 		}
 		return t.mkNodeLoc(t.mkNode(thisItemLoc, &thisNode.left, newRight,
 			leftNum+rightNum+1,
-			leftBytes+rightBytes+uint64(thisItem.NumBytes(o)))), nil
+			leftBytes+rightBytes+uint64(thisItem.NumBytes(t)))), nil
 	}
 	newLeft, err := o.join(t, this, &thatNode.left)
 	if err != nil {
@@ -1147,7 +1157,7 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 	}
 	return t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, &thatNode.right,
 		leftNum+rightNum+1,
-		leftBytes+rightBytes+uint64(thatItem.NumBytes(o)))), nil
+		leftBytes+rightBytes+uint64(thatItem.NumBytes(t)))), nil
 }
 
 func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, bool)) (
@@ -1167,7 +1177,7 @@ func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, b
 			return nil, err
 		}
 		if child.isEmpty() || childNode == nil {
-			i, err := nNode.item.read(o, withValue)
+			i, err := nNode.item.read(t, withValue)
 			if err != nil {
 				return nil, err
 			}
@@ -1189,7 +1199,7 @@ func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,
 		return true, nil
 	}
 	nItemLoc := &nNode.item
-	nItem, err := nItemLoc.read(o, false)
+	nItem, err := nItemLoc.read(t, false)
 	if err != nil {
 		return false, err
 	}
@@ -1200,7 +1210,7 @@ func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,
 		if err != nil || !keepGoing {
 			return false, err
 		}
-		nItem, err := nItemLoc.read(o, withValue)
+		nItem, err := nItemLoc.read(t, withValue)
 		if err != nil {
 			return false, err
 		}
