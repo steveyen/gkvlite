@@ -140,6 +140,12 @@ const ploc_length int = 8 + 4
 
 var ploc_empty *ploc = &ploc{} // Sentinel.
 
+// During copy-on-write operations, track structs that are free'able.
+type reclaimable struct {
+	nodes    *node
+	nodeLocs *nodeLoc
+}
+
 // Provide a nil StoreFile for in-memory-only (non-persistent) usage.
 func NewStore(file StoreFile) (*Store, error) {
 	return NewStoreEx(file, StoreCallbacks{})
