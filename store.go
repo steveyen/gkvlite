@@ -280,9 +280,17 @@ type Collection struct {
 	compare KeyCompare
 	root    unsafe.Pointer // Value is *nodeLoc type.
 
+	stats CollectionStats
+
 	// Only a single mutator should access the free lists.
 	freeNodes    *node
 	freeNodeLocs *nodeLoc
+}
+
+type CollectionStats struct {
+	MkNodeLocs    int64
+	FreeNodeLocs  int64
+	AllocNodeLocs int64
 }
 
 func (t *Collection) Name() string {
@@ -845,10 +853,17 @@ func (t *Collection) Write() (err error) {
 	return nil
 }
 
+// Assumes that the caller serializes invocations w.r.t. mutations.
+func (t *Collection) Stats() CollectionStats {
+	return t.stats
+}
+
 // Assumes that the caller serializes invocations.
 func (t *Collection) mkNodeLoc(n *node) *nodeLoc {
+	t.stats.MkNodeLocs++
 	nloc := t.freeNodeLocs
 	if nloc == nil {
+		t.stats.AllocNodeLocs++
 		nloc = &nodeLoc{}
 	}
 	t.freeNodeLocs = nloc.next
@@ -858,10 +873,12 @@ func (t *Collection) mkNodeLoc(n *node) *nodeLoc {
 	return nloc
 }
 
+// Assumes that the caller serializes invocations.
 func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
 	if nloc == nil {
 		return
 	}
+	t.stats.FreeNodeLocs++
 	nloc.loc = unsafe.Pointer(nil)
 	nloc.node = unsafe.Pointer(nil)
 	nloc.next = t.freeNodeLocs
