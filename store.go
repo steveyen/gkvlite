@@ -743,6 +743,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		unsafe.Pointer(&rootNodeLoc{refs: 1, root: r})) {
 		return errors.New("concurrent mutation attempted")
 	}
+	t.rootDecRef(rnl)
 	return nil
 }
 
@@ -768,6 +769,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 		unsafe.Pointer(&rootNodeLoc{refs: 1, root: r})) {
 		return false, errors.New("concurrent mutation attempted")
 	}
+	t.rootDecRef(rnl)
 	return true, nil
 }
 
