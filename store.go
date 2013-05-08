@@ -34,7 +34,7 @@ type StoreFile interface {
 	Stat() (os.FileInfo, error)
 }
 
-// Allows applications to interpose before/after certain events.
+// Allows applications to override or interpose before/after events.
 type StoreCallbacks struct {
 	BeforeItemWrite, AfterItemRead ItemCallback
 
@@ -64,6 +64,76 @@ const VERSION = uint32(4)
 
 var MAGIC_BEG []byte = []byte("0g1t2r")
 var MAGIC_END []byte = []byte("3e4a5p")
+
+// User-supplied key comparison func should return 0 if a == b,
+// -1 if a < b, and +1 if a > b.  For example: bytes.Compare()
+type KeyCompare func(a, b []byte) int
+
+// A persistable collection of ordered key-values (Item's).
+type Collection struct {
+	name    string // May be "" for a private collection.
+	store   *Store
+	compare KeyCompare
+	root    unsafe.Pointer // Value is *nodeLoc type.
+
+	stats CollectionStats
+
+	// Only a single mutator should access the free lists.
+	freeNodes    *node
+	freeNodeLocs *nodeLoc
+}
+
+type CollectionStats struct {
+	MkNodeLocs    int64
+	FreeNodeLocs  int64
+	AllocNodeLocs int64
+
+	MkNodes    int64
+	FreeNodes  int64
+	AllocNodes int64
+}
+
+// A persistable node.
+type node struct {
+	numNodes, numBytes uint64
+	item               itemLoc
+	left, right        nodeLoc
+	next               *node // For free-list tracking.
+}
+
+// A persistable node and its persistence location.
+type nodeLoc struct {
+	loc  unsafe.Pointer // *ploc - can be nil if node is dirty (not yet persisted).
+	node unsafe.Pointer // *node - can be nil if node is not fetched into memory yet.
+	next *nodeLoc       // For free-list tracking.
+}
+
+var empty_nodeLoc = &nodeLoc{} // Sentinel.
+
+// A persistable item.
+type Item struct {
+	Transient unsafe.Pointer // For any ephemeral data; atomic CAS recommended.
+	Key, Val  []byte         // Val may be nil if not fetched into memory yet.
+	Priority  int32          // Use rand.Int31() for probabilistic balancing.
+}
+
+// A persistable item and its persistence location.
+type itemLoc struct {
+	loc  unsafe.Pointer // *ploc - can be nil if item is dirty (not yet persisted).
+	item unsafe.Pointer // *Item - can be nil if item is not fetched into memory yet.
+}
+
+var empty_itemLoc = &itemLoc{}
+
+// Offset/location of a persisted range of bytes.
+type ploc struct {
+	Offset int64  `json:"o"` // Usable for os.ReadAt/WriteAt() at file offset 0.
+	Length uint32 `json:"l"` // Number of bytes.
+}
+
+const ploc_length int = 8 + 4
+
+var ploc_empty *ploc = &ploc{} // Sentinel.
 
 // Provide a nil StoreFile for in-memory-only (non-persistent) usage.
 func NewStore(file StoreFile) (*Store, error) {
@@ -269,54 +339,9 @@ func (s *Store) Stats(out map[string]uint64) {
 	out["nodeAllocs"] = atomic.LoadUint64(&s.nodeAllocs)
 }
 
-// User-supplied key comparison func should return 0 if a == b,
-// -1 if a < b, and +1 if a > b.  For example: bytes.Compare()
-type KeyCompare func(a, b []byte) int
-
-// A persistable collection of ordered key-values (Item's).
-type Collection struct {
-	name    string // May be "" for a private collection.
-	store   *Store
-	compare KeyCompare
-	root    unsafe.Pointer // Value is *nodeLoc type.
-
-	stats CollectionStats
-
-	// Only a single mutator should access the free lists.
-	freeNodes    *node
-	freeNodeLocs *nodeLoc
-}
-
-type CollectionStats struct {
-	MkNodeLocs    int64
-	FreeNodeLocs  int64
-	AllocNodeLocs int64
-
-	MkNodes    int64
-	FreeNodes  int64
-	AllocNodes int64
-}
-
 func (t *Collection) Name() string {
 	return t.name
 }
-
-// A persistable node.
-type node struct {
-	numNodes, numBytes uint64
-	item               itemLoc
-	left, right        nodeLoc
-	next               *node // For free-list tracking.
-}
-
-// A persistable node and its persistence location.
-type nodeLoc struct {
-	loc  unsafe.Pointer // *ploc - can be nil if node is dirty (not yet persisted).
-	node unsafe.Pointer // *node - can be nil if node is not fetched into memory yet.
-	next *nodeLoc       // For free-list tracking.
-}
-
-var empty_nodeLoc = &nodeLoc{} // Sentinel.
 
 func (nloc *nodeLoc) Loc() *ploc {
 	return (*ploc)(atomic.LoadPointer(&nloc.loc))
@@ -436,13 +461,6 @@ func numInfo(o *Store, left *nodeLoc, right *nodeLoc) (
 	return leftNum, leftBytes, rightNum, rightBytes, nil
 }
 
-// A persistable item.
-type Item struct {
-	Transient unsafe.Pointer // For any ephemeral data; atomic CAS recommended.
-	Key, Val  []byte         // Val may be nil if not fetched into memory yet.
-	Priority  int32          // Use rand.Int31() for probabilistic balancing.
-}
-
 // Number of Key bytes plus number of Val bytes.
 func (i *Item) NumBytes(c *Collection) int {
 	return len(i.Key) + i.NumValBytes(c)
@@ -454,14 +472,6 @@ func (i *Item) NumValBytes(c *Collection) int {
 	}
 	return len(i.Val)
 }
-
-// A persistable item and its persistence location.
-type itemLoc struct {
-	loc  unsafe.Pointer // *ploc - can be nil if item is dirty (not yet persisted).
-	item unsafe.Pointer // *Item - can be nil if item is not fetched into memory yet.
-}
-
-var empty_itemLoc = &itemLoc{}
 
 func (i *itemLoc) Loc() *ploc {
 	return (*ploc)(atomic.LoadPointer(&i.loc))
@@ -598,16 +608,6 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (i *Item, err error) {
 	}
 	return i, nil
 }
-
-// Offset/location of a persisted range of bytes.
-type ploc struct {
-	Offset int64  `json:"o"` // Usable for os.ReadAt/WriteAt() at file offset 0.
-	Length uint32 `json:"l"` // Number of bytes.
-}
-
-const ploc_length int = 8 + 4
-
-var ploc_empty *ploc = &ploc{} // Sentinel.
 
 func (p *ploc) isEmpty() bool {
 	return p == nil || (p.Offset == int64(0) && p.Length == uint32(0))
