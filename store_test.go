@@ -1256,7 +1256,11 @@ func TestJoinWithFileErrors(t *testing.T) {
 	s2, _ := NewStore(m)
 	x2 := s2.GetCollection("x")
 
-	root := (*nodeLoc)(atomic.LoadPointer(&x2.root))
+	rnl := (*rootNodeLoc)(atomic.LoadPointer(&x2.root))
+	if rnl == nil {
+		t.Errorf("expected rnl")
+	}
+	root := rnl.root
 	if root == nil || root.isEmpty() {
 		t.Errorf("expected an x2 root")
 	}
@@ -1299,7 +1303,8 @@ func TestJoinWithFileErrors(t *testing.T) {
 		x2 = s2.GetCollection("x")
 		x3 := s3.GetCollection("x")
 
-		root2 := (*nodeLoc)(atomic.LoadPointer(&x2.root))
+		rnl2 := (*rootNodeLoc)(atomic.LoadPointer(&x2.root))
+		root2 := rnl2.root
 		if root2 == nil || root2.isEmpty() {
 			t.Errorf("expected an x2 root")
 		}
@@ -1310,7 +1315,8 @@ func TestJoinWithFileErrors(t *testing.T) {
 			t.Errorf("expected an x2 root to not be loaded into memory yet")
 		}
 
-		root3 := (*nodeLoc)(atomic.LoadPointer(&x3.root))
+		rnl3 := (*rootNodeLoc)(atomic.LoadPointer(&x3.root))
+		root3 := rnl3.root
 		if root3 == nil || root3.isEmpty() {
 			t.Errorf("expected an x3 root")
 		}

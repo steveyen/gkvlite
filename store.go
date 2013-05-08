@@ -74,7 +74,7 @@ type Collection struct {
 	name    string // May be "" for a private collection.
 	store   *Store
 	compare KeyCompare
-	root    unsafe.Pointer // Value is *nodeLoc type.
+	root    unsafe.Pointer // Value is *rootNodeLoc type.
 
 	stats CollectionStats
 
@@ -91,6 +91,11 @@ type CollectionStats struct {
 	MkNodes    int64
 	FreeNodes  int64
 	AllocNodes int64
+}
+
+type rootNodeLoc struct {
+	refs int64 // Atomic reference counter.
+	root *nodeLoc
 }
 
 // A persistable node.
@@ -168,7 +173,7 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 		cnew := s.MakePrivateCollection(compare)
 		cnew.name = name
 		if coll[name] != nil {
-			cnew.root = unsafe.Pointer(atomic.LoadPointer(&coll[name].root))
+			cnew.root = unsafe.Pointer(coll[name].rootAddRef())
 		}
 		coll[name] = cnew
 		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
@@ -187,7 +192,7 @@ func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 	return &Collection{
 		store:   s,
 		compare: compare,
-		root:    unsafe.Pointer(empty_nodeLoc),
+		root:    unsafe.Pointer(&rootNodeLoc{refs: 1, root: empty_nodeLoc}),
 	}
 }
 
@@ -277,7 +282,7 @@ func (s *Store) Snapshot() (snapshot *Store) {
 		coll[name] = &Collection{
 			store:   res,
 			compare: coll[name].compare,
-			root:    unsafe.Pointer(atomic.LoadPointer(&coll[name].root)),
+			root:    unsafe.Pointer(coll[name].rootAddRef()),
 		}
 	}
 	return res
@@ -337,10 +342,6 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 func (s *Store) Stats(out map[string]uint64) {
 	out["fileSize"] = uint64(atomic.LoadInt64(&s.size))
 	out["nodeAllocs"] = atomic.LoadUint64(&s.nodeAllocs)
-}
-
-func (t *Collection) Name() string {
-	return t.name
 }
 
 func (nloc *nodeLoc) Loc() *ploc {
@@ -635,12 +636,34 @@ func (p *ploc) read(b []byte, pos int) (*ploc, int) {
 	return p, pos
 }
 
+func (t *Collection) Name() string {
+	return t.name
+}
+
+func (t *Collection) rootAddRef() *rootNodeLoc {
+	for true {
+		rnl := (*rootNodeLoc)(atomic.LoadPointer(&t.root))
+		if atomic.AddInt64(&rnl.refs, 1) > 1 {
+			return rnl
+		}
+	}
+	return nil // Never reached.
+}
+
+func (t *Collection) rootDecRef(r *rootNodeLoc) {
+	if atomic.AddInt64(&r.refs, -1) <= 0 {
+		// TODO: Reclaim any garbage nodes.
+	}
+}
+
 // Retrieve an item by its key.  Use withValue of false if you don't
 // need the item's value (Item.Val may be nil), which might be able
 // to save on I/O and memory resources, especially for large values.
 // The returned Item should be treated as immutable.
 func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
-	n := (*nodeLoc)(atomic.LoadPointer(&t.root))
+	rnl := t.rootAddRef()
+	defer t.rootDecRef(rnl)
+	n := rnl.root
 	for {
 		nNode, err := n.read(t.store)
 		if err != nil || n.isEmpty() || nNode == nil {
@@ -697,7 +720,9 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	if item.Priority < 0 {
 		return errors.New("Item.Priority must be non-negative")
 	}
-	root := atomic.LoadPointer(&t.root)
+	rnl := t.rootAddRef()
+	defer t.rootDecRef(rnl)
+	root := rnl.root
 	n := t.mkNode(nil, nil, nil,
 		1, uint64(len(item.Key))+uint64(item.NumValBytes(t)))
 	n.item = itemLoc{item: unsafe.Pointer(&Item{
@@ -714,7 +739,8 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	if nloc != r {
 		t.freeNodeLoc(nloc)
 	}
-	if !atomic.CompareAndSwapPointer(&t.root, root, unsafe.Pointer(r)) {
+	if !atomic.CompareAndSwapPointer(&t.root, unsafe.Pointer(rnl),
+		unsafe.Pointer(&rootNodeLoc{refs: 1, root: r})) {
 		return errors.New("concurrent mutation attempted")
 	}
 	return nil
@@ -727,7 +753,9 @@ func (t *Collection) Set(key []byte, val []byte) error {
 
 // Deletes an item of a given key.
 func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
-	root := atomic.LoadPointer(&t.root)
+	rnl := t.rootAddRef()
+	defer t.rootDecRef(rnl)
+	root := rnl.root
 	left, middle, right, _, _, err := t.store.split(t, (*nodeLoc)(root), key)
 	if err != nil || middle.isEmpty() {
 		return false, err
@@ -736,7 +764,8 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	if !atomic.CompareAndSwapPointer(&t.root, root, unsafe.Pointer(r)) {
+	if !atomic.CompareAndSwapPointer(&t.root, unsafe.Pointer(rnl),
+		unsafe.Pointer(&rootNodeLoc{refs: 1, root: r})) {
 		return false, errors.New("concurrent mutation attempted")
 	}
 	return true, nil
@@ -793,7 +822,9 @@ func (t *Collection) VisitItemsDescend(target []byte, withValue bool, v ItemVisi
 // Visit items greater-than-or-equal to the target key in ascending order; with depth info.
 func (t *Collection) VisitItemsAscendEx(target []byte, withValue bool,
 	visitor ItemVisitorEx) error {
-	_, err := t.store.visitNodes(t, (*nodeLoc)(atomic.LoadPointer(&t.root)),
+	rnl := t.rootAddRef()
+	defer t.rootDecRef(rnl)
+	_, err := t.store.visitNodes(t, rnl.root,
 		target, withValue, visitor, 0, ascendChoice)
 	return err
 }
@@ -801,7 +832,9 @@ func (t *Collection) VisitItemsAscendEx(target []byte, withValue bool,
 // Visit items less-than the target key in descending order; with depth info.
 func (t *Collection) VisitItemsDescendEx(target []byte, withValue bool,
 	visitor ItemVisitorEx) error {
-	_, err := t.store.visitNodes(t, (*nodeLoc)(atomic.LoadPointer(&t.root)),
+	rnl := t.rootAddRef()
+	defer t.rootDecRef(rnl)
+	_, err := t.store.visitNodes(t, rnl.root,
 		target, withValue, visitor, 0, descendChoice)
 	return err
 }
@@ -816,7 +849,9 @@ func descendChoice(cmp int, n *node) (bool, *nodeLoc, *nodeLoc) {
 
 // Returns total number of items and total key bytes plus value bytes.
 func (t *Collection) GetTotals() (numItems uint64, numBytes uint64, err error) {
-	n := (*nodeLoc)(atomic.LoadPointer(&t.root))
+	rnl := t.rootAddRef()
+	defer t.rootDecRef(rnl)
+	n := rnl.root
 	nNode, err := n.read(t.store)
 	if err != nil || n.isEmpty() || nNode == nil {
 		return 0, 0, err
@@ -826,7 +861,9 @@ func (t *Collection) GetTotals() (numItems uint64, numBytes uint64, err error) {
 
 // Returns JSON representation of root node file location.
 func (t *Collection) MarshalJSON() ([]byte, error) {
-	loc := ((*nodeLoc)(atomic.LoadPointer(&t.root))).Loc()
+	rnl := t.rootAddRef()
+	defer t.rootDecRef(rnl)
+	loc := rnl.root.Loc()
 	if loc.isEmpty() {
 		return json.Marshal(ploc_empty)
 	}
@@ -839,7 +876,10 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 	if err := json.Unmarshal(d, &p); err != nil {
 		return err
 	}
-	atomic.StorePointer(&t.root, unsafe.Pointer(&nodeLoc{loc: unsafe.Pointer(&p)}))
+	atomic.StorePointer(&t.root, unsafe.Pointer(&rootNodeLoc{
+		refs: 1,
+		root: &nodeLoc{loc: unsafe.Pointer(&p)},
+	}))
 	return nil
 }
 
@@ -847,7 +887,9 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 // root records.  Use Store.Flush() to write root records, which would
 // make these writes visible to the next file re-opening/re-loading.
 func (t *Collection) Write() (err error) {
-	root := (*nodeLoc)(atomic.LoadPointer(&t.root))
+	rnl := t.rootAddRef()
+	defer t.rootDecRef(rnl)
+	root := rnl.root
 	if err = t.flushItems(root); err != nil {
 		return err
 	}
@@ -1186,7 +1228,9 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 
 func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, bool)) (
 	res *Item, err error) {
-	n := (*nodeLoc)(atomic.LoadPointer(&t.root))
+	rnl := t.rootAddRef()
+	defer t.rootDecRef(rnl)
+	n := rnl.root
 	nNode, err := n.read(o)
 	if err != nil || n.isEmpty() || nNode == nil {
 		return nil, err
