@@ -291,6 +291,10 @@ type CollectionStats struct {
 	MkNodeLocs    int64
 	FreeNodeLocs  int64
 	AllocNodeLocs int64
+
+	MkNodes    int64
+	FreeNodes  int64
+	AllocNodes int64
 }
 
 func (t *Collection) Name() string {
@@ -888,9 +892,11 @@ func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
 // Assumes that the caller serializes invocations.
 func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 	numNodesIn uint64, numBytesIn uint64) *node {
+	t.stats.MkNodes++
 	n := t.freeNodes
 	if n == nil {
 		atomic.AddUint64(&t.store.nodeAllocs, 1)
+		t.stats.AllocNodes++
 		n = &node{}
 	}
 	t.freeNodes = n.next
@@ -907,6 +913,7 @@ func (t *Collection) freeNode(n *node) {
 	if n == nil {
 		return
 	}
+	t.stats.FreeNodes++
 	n.item = *empty_itemLoc
 	n.left = *empty_nodeLoc
 	n.right = *empty_nodeLoc
