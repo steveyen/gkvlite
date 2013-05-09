@@ -107,6 +107,8 @@ type node struct {
 	next               *node // For free-list tracking.
 }
 
+var reclaimable_node = &node{} // Sentinel.
+
 // A persistable node and its persistence location.
 type nodeLoc struct {
 	loc  unsafe.Pointer // *ploc - can be nil if node is dirty (not yet persisted).
@@ -649,9 +651,28 @@ func (t *Collection) rootAddRef() *rootNodeLoc {
 }
 
 func (t *Collection) rootDecRef(r *rootNodeLoc) {
-	if atomic.AddInt64(&r.refs, -1) <= 0 {
-		// TODO: Reclaim any garbage nodes.
+	if atomic.AddInt64(&r.refs, -1) > 0 {
+		return
 	}
+	t.reclaimNodes(r.root)
+}
+
+func (t *Collection) reclaimNodes(nloc *nodeLoc) {
+	if nloc.isEmpty() {
+		return
+	}
+	n := nloc.Node()
+	if n == nil {
+		return
+	}
+	if n.next != reclaimable_node {
+		return
+	}
+	left := n.left
+	right := n.right
+	t.freeNode(n)
+	t.reclaimNodes(&left)
+	t.reclaimNodes(&right)
 }
 
 // Retrieve an item by its key.  Use withValue of false if you don't
@@ -730,8 +751,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		Transient: item.Transient,
 	})} // Separate item initialization to avoid garbage.
 	nloc := t.mkNodeLoc(n)
-	var reclaimable *node
-	r, _, err := t.store.union(t, (*nodeLoc)(root), nloc, &reclaimable)
+	r, _, err := t.store.union(t, (*nodeLoc)(root), nloc)
 	if err != nil {
 		return err
 	}
@@ -756,13 +776,12 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
 	root := rnl.root
-	var reclaimable *node
 	left, middle, right, _, _, err :=
-		t.store.split(t, (*nodeLoc)(root), key, &reclaimable)
+		t.store.split(t, (*nodeLoc)(root), key)
 	if err != nil || middle.isEmpty() {
 		return false, err
 	}
-	r, err := t.store.join(t, left, right, &reclaimable)
+	r, err := t.store.join(t, left, right)
 	if err != nil {
 		return false, err
 	}
@@ -969,10 +988,17 @@ func (t *Collection) freeNode(n *node) {
 	n.numBytes = 0
 
 	t.freeLock.Lock()
-	t.freeNodes = n
 	n.next = t.freeNodes
+	t.freeNodes = n
 	t.stats.FreeNodes++
 	t.freeLock.Unlock()
+}
+
+func (t *Collection) markReclaimable(n *node) {
+	if n == nil || n.next != nil {
+		return
+	}
+	n.next = reclaimable_node // Use next pointer as sentinel.
 }
 
 func (t *Collection) flushItems(nloc *nodeLoc) (err error) {
@@ -1009,8 +1035,7 @@ func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
 	return nloc.write(o) // Write nodes in children-first order.
 }
 
-func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
-	reclaimable **node) (
+func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 	res *nodeLoc, resIsNew bool, err error) {
 	thisNode, err := this.read(o)
 	if err != nil {
@@ -1038,18 +1063,18 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
 	}
 	if thisItem.Priority > thatItem.Priority {
 		left, middle, right, leftIsNew, rightIsNew, err :=
-			o.split(t, that, thisItem.Key, reclaimable)
+			o.split(t, that, thisItem.Key)
 		if err != nil {
 			return empty_nodeLoc, false, err
 		}
-		newLeft, newLeftIsNew, err := o.union(t, &thisNode.left, left, reclaimable)
+		newLeft, newLeftIsNew, err := o.union(t, &thisNode.left, left)
 		if err != nil {
 			return empty_nodeLoc, false, err
 		}
 		if leftIsNew && left != newLeft {
 			t.freeNodeLoc(left)
 		}
-		newRight, newRightIsNew, err := o.union(t, &thisNode.right, right, reclaimable)
+		newRight, newRightIsNew, err := o.union(t, &thisNode.right, right)
 		if err != nil {
 			return empty_nodeLoc, false, err
 		}
@@ -1070,7 +1095,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
 			if newRightIsNew {
 				t.freeNodeLoc(newRight)
 			}
-			t.markReclaimable(thisNode, reclaimable)
+			// t.markReclaimable(thisNode)
 			return res, true, nil
 		}
 		middleNode, err := middle.read(o)
@@ -1090,23 +1115,23 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
 		if newRightIsNew {
 			t.freeNodeLoc(newRight)
 		}
-		t.markReclaimable(thisNode, reclaimable)
+		// t.markReclaimable(thisNode)
 		return res, true, nil
 	}
 	// We don't use middle because the "that" node has precedence.
-	left, _, right, leftIsNew, rightIsNew, err :=
-		o.split(t, this, thatItem.Key, reclaimable)
+	left, middle, right, leftIsNew, rightIsNew, err :=
+		o.split(t, this, thatItem.Key)
 	if err != nil {
 		return empty_nodeLoc, false, err
 	}
-	newLeft, newLeftIsNew, err := o.union(t, left, &thatNode.left, reclaimable)
+	newLeft, newLeftIsNew, err := o.union(t, left, &thatNode.left)
 	if err != nil {
 		return empty_nodeLoc, false, err
 	}
 	if leftIsNew && left != newLeft {
 		t.freeNodeLoc(left)
 	}
-	newRight, newRightIsNew, err := o.union(t, right, &thatNode.right, reclaimable)
+	newRight, newRightIsNew, err := o.union(t, right, &thatNode.right)
 	if err != nil {
 		return empty_nodeLoc, false, err
 	}
@@ -1126,16 +1151,10 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
 	if newRightIsNew {
 		t.freeNodeLoc(newRight)
 	}
-	t.markReclaimable(thatNode, reclaimable)
-	return res, true, nil
-}
-
-func (t *Collection) markReclaimable(n *node, reclaimable **node) {
-	if reclaimable == nil || n == nil || n.next != nil {
-		return
+	if !middle.isEmpty() {
+		t.markReclaimable(middle.Node())
 	}
-	n.next = *reclaimable
-	*reclaimable = n
+	return res, true, nil
 }
 
 // Splits a treap into two treaps based on a split key "s".  The
@@ -1144,7 +1163,7 @@ func (t *Collection) markReclaimable(n *node, reclaimable **node) {
 // * empty/nil - meaning key s was not in the original treap.
 // * non-empty - returning the original nodeLoc/item that had key s.
 // The two bool's indicate whether the left/right returned nodeLoc's are new.
-func (o *Store) split(t *Collection, n *nodeLoc, s []byte, reclaimable **node) (
+func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	*nodeLoc, *nodeLoc, *nodeLoc, bool, bool, error) {
 	nNode, err := n.read(o)
 	if err != nil || n.isEmpty() || nNode == nil {
@@ -1164,7 +1183,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte, reclaimable **node) (
 
 	if c < 0 {
 		left, middle, right, leftIsNew, rightIsNew, err :=
-			o.split(t, &nNode.left, s, reclaimable)
+			o.split(t, &nNode.left, s)
 		if err != nil {
 			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 		}
@@ -1178,13 +1197,13 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte, reclaimable **node) (
 		if rightIsNew {
 			t.freeNodeLoc(right)
 		}
-		t.markReclaimable(nNode, reclaimable)
-		t.markReclaimable(nNode.left.Node(), reclaimable)
+		// TODO: t.markReclaimable(nNode)
+		t.markReclaimable(nNode.left.Node())
 		return left, middle, newRight, leftIsNew, true, nil
 	}
 
 	left, middle, right, leftIsNew, rightIsNew, err :=
-		o.split(t, &nNode.right, s, reclaimable)
+		o.split(t, &nNode.right, s)
 	if err != nil {
 		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
 	}
@@ -1198,14 +1217,13 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte, reclaimable **node) (
 	if leftIsNew {
 		t.freeNodeLoc(left)
 	}
-	t.markReclaimable(nNode, reclaimable)
-	t.markReclaimable(nNode.right.Node(), reclaimable)
+	// TODO: t.markReclaimable(nNode)
+	t.markReclaimable(nNode.right.Node())
 	return newLeft, middle, right, true, rightIsNew, nil
 }
 
 // All the keys from this should be < keys from that.
-func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc,
-	reclaimable **node) (
+func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 	res *nodeLoc, err error) {
 	thisNode, err := this.read(o)
 	if err != nil {
@@ -1232,7 +1250,7 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc,
 		return empty_nodeLoc, err
 	}
 	if thisItem.Priority > thatItem.Priority {
-		newRight, err := o.join(t, &thisNode.right, that, reclaimable)
+		newRight, err := o.join(t, &thisNode.right, that)
 		if err != nil {
 			return empty_nodeLoc, err
 		}
@@ -1240,12 +1258,12 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc,
 		if err != nil {
 			return empty_nodeLoc, err
 		}
-		t.markReclaimable(thisNode, reclaimable)
+		t.markReclaimable(thisNode)
 		return t.mkNodeLoc(t.mkNode(thisItemLoc, &thisNode.left, newRight,
 			leftNum+rightNum+1,
 			leftBytes+rightBytes+uint64(thisItem.NumBytes(t)))), nil
 	}
-	newLeft, err := o.join(t, this, &thatNode.left, reclaimable)
+	newLeft, err := o.join(t, this, &thatNode.left)
 	if err != nil {
 		return empty_nodeLoc, err
 	}
@@ -1253,7 +1271,7 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc,
 	if err != nil {
 		return empty_nodeLoc, err
 	}
-	t.markReclaimable(thatNode, reclaimable)
+	t.markReclaimable(thatNode)
 	return t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, &thatNode.right,
 		leftNum+rightNum+1,
 		leftBytes+rightBytes+uint64(thatItem.NumBytes(t)))), nil
