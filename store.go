@@ -79,9 +79,10 @@ type Collection struct {
 
 	stats CollectionStats
 
-	freeLock     sync.Mutex
-	freeNodes    *node    // Protected by freeLock.
-	freeNodeLocs *nodeLoc // Not protected by freeLock.
+	freeLock         sync.Mutex
+	freeNodes        *node        // Protected by freeLock.
+	freeNodeLocs     *nodeLoc     // Not protected by freeLock.
+	freeRootNodeLocs *rootNodeLoc // Protected by freeLock.
 }
 
 type CollectionStats struct {
@@ -97,6 +98,7 @@ type CollectionStats struct {
 type rootNodeLoc struct {
 	refs int64 // Atomic reference counter.
 	root *nodeLoc
+	next *rootNodeLoc // For free-list tracking.
 }
 
 // A persistable node.
@@ -658,6 +660,7 @@ func (t *Collection) rootDecRef(r *rootNodeLoc) {
 		return
 	}
 	t.reclaimNodes(r.root.Node())
+	t.freeRootNodeLoc(r)
 }
 
 func (t *Collection) reclaimNodes(n *node) {
@@ -762,7 +765,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	}
 	t.reclaimNodes(n)
 	if !atomic.CompareAndSwapPointer(&t.root, unsafe.Pointer(rnl),
-		unsafe.Pointer(&rootNodeLoc{refs: 1, root: r})) {
+		unsafe.Pointer(t.mkRootNodeLoc(r))) {
 		return errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
@@ -788,7 +791,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 		return false, err
 	}
 	if !atomic.CompareAndSwapPointer(&t.root, unsafe.Pointer(rnl),
-		unsafe.Pointer(&rootNodeLoc{refs: 1, root: r})) {
+		unsafe.Pointer(t.mkRootNodeLoc(r))) {
 		return false, errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
@@ -927,6 +930,35 @@ func (t *Collection) Write() (err error) {
 // Assumes that the caller serializes invocations w.r.t. mutations.
 func (t *Collection) Stats() CollectionStats {
 	return t.stats
+}
+
+func (t *Collection) mkRootNodeLoc(root *nodeLoc) *rootNodeLoc {
+	t.freeLock.Lock()
+	rnl := t.freeRootNodeLocs
+	if rnl == nil {
+		t.freeLock.Unlock()
+		rnl = &rootNodeLoc{}
+	} else {
+		t.freeRootNodeLocs = rnl.next
+		t.freeLock.Unlock()
+	}
+	rnl.refs = 1
+	rnl.root = root
+	rnl.next = nil
+	return rnl
+}
+
+func (t *Collection) freeRootNodeLoc(rnl *rootNodeLoc) {
+	if rnl == nil {
+		return
+	}
+	rnl.refs = 0
+	rnl.root = nil
+
+	t.freeLock.Lock()
+	rnl.next = t.freeRootNodeLocs
+	t.freeRootNodeLocs = rnl
+	t.freeLock.Unlock()
 }
 
 // Assumes that the caller serializes invocations.
