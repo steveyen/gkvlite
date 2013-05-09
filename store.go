@@ -735,7 +735,8 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 // Replace or insert an item of a given key.
 // A random item Priority (e.g., rand.Int31()) will usually work well,
 // but advanced users may consider using non-random item priorities
-// at the risk of unbalancing the lookup tree.
+// at the risk of unbalancing the lookup tree.  The input Item instance
+// should be considered immutable and owned by the Collection.
 func (t *Collection) SetItem(item *Item) (err error) {
 	if item.Key == nil || len(item.Key) > 0xffff || len(item.Key) == 0 ||
 		item.Val == nil {
@@ -749,12 +750,8 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	root := rnl.root
 	n := t.mkNode(nil, nil, nil,
 		1, uint64(len(item.Key))+uint64(item.NumValBytes(t)))
-	n.item = itemLoc{item: unsafe.Pointer(&Item{
-		Key:       item.Key,
-		Val:       item.Val,
-		Priority:  item.Priority,
-		Transient: item.Transient,
-	})} // Separate item initialization to avoid garbage.
+	// Separate item initialization to avoid garbage.
+	n.item = itemLoc{item: unsafe.Pointer(item)}
 	nloc := t.mkNodeLoc(n)
 	r, _, err := t.store.union(t, root, nloc)
 	if err != nil {
