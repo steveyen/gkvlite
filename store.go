@@ -756,7 +756,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		Transient: item.Transient,
 	})} // Separate item initialization to avoid garbage.
 	nloc := t.mkNodeLoc(n)
-	r, _, err := t.store.union(t, (*nodeLoc)(root), nloc)
+	r, _, err := t.store.union(t, root, nloc)
 	if err != nil {
 		return err
 	}
@@ -781,8 +781,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
 	root := rnl.root
-	left, middle, right, _, _, err :=
-		t.store.split(t, (*nodeLoc)(root), key)
+	left, middle, right, _, _, err := t.store.split(t, root, key)
 	if err != nil || middle.isEmpty() {
 		return false, err
 	}
@@ -795,6 +794,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 		return false, errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
+	// t.markReclaimable(middle.Node())
 	return true, nil
 }
 
@@ -1203,10 +1203,10 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		if rightIsNew {
 			t.freeNodeLoc(right)
 		}
-		// TODO: t.markReclaimable(nNode)
 		if !nNode.left.isEmpty() {
 			t.markReclaimable(nNode.left.Node())
 		}
+		// t.markReclaimable(nNode)
 		return left, middle, newRight, leftIsNew, true, nil
 	}
 
@@ -1225,10 +1225,10 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	if leftIsNew {
 		t.freeNodeLoc(left)
 	}
-	// TODO: t.markReclaimable(nNode)
 	if !nNode.right.isEmpty() {
 		t.markReclaimable(nNode.right.Node())
 	}
+	// t.markReclaimable(nNode)
 	return newLeft, middle, right, true, rightIsNew, nil
 }
 
