@@ -1062,6 +1062,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
 			if newRightIsNew {
 				t.freeNodeLoc(newRight)
 			}
+			t.markReclaimable(thisNode, reclaimable)
 			return res, true, nil
 		}
 		middleNode, err := middle.read(o)
@@ -1081,6 +1082,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
 		if newRightIsNew {
 			t.freeNodeLoc(newRight)
 		}
+		t.markReclaimable(thisNode, reclaimable)
 		return res, true, nil
 	}
 	// We don't use middle because the "that" node has precedence.
@@ -1116,13 +1118,13 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
 	if newRightIsNew {
 		t.freeNodeLoc(newRight)
 	}
+	t.markReclaimable(thatNode, reclaimable)
 	return res, true, nil
 }
 
 func (t *Collection) markReclaimable(n *node, reclaimable **node) {
-	if n.next != nil {
-		panic(fmt.Sprintf("markReclaimable() on reclaimable node: %#v, coll: %v",
-			n, t.Name()))
+	if reclaimable == nil || n == nil || n.next != nil {
+		return
 	}
 	n.next = *reclaimable
 	*reclaimable = n
@@ -1168,6 +1170,8 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte, reclaimable **node) (
 		if rightIsNew {
 			t.freeNodeLoc(right)
 		}
+		t.markReclaimable(nNode, reclaimable)
+		t.markReclaimable(nNode.left.Node(), reclaimable)
 		return left, middle, newRight, leftIsNew, true, nil
 	}
 
@@ -1186,6 +1190,8 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte, reclaimable **node) (
 	if leftIsNew {
 		t.freeNodeLoc(left)
 	}
+	t.markReclaimable(nNode, reclaimable)
+	t.markReclaimable(nNode.right.Node(), reclaimable)
 	return newLeft, middle, right, true, rightIsNew, nil
 }
 
@@ -1226,6 +1232,7 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc,
 		if err != nil {
 			return empty_nodeLoc, err
 		}
+		t.markReclaimable(thisNode, reclaimable)
 		return t.mkNodeLoc(t.mkNode(thisItemLoc, &thisNode.left, newRight,
 			leftNum+rightNum+1,
 			leftBytes+rightBytes+uint64(thisItem.NumBytes(t)))), nil
@@ -1238,6 +1245,7 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc,
 	if err != nil {
 		return empty_nodeLoc, err
 	}
+	t.markReclaimable(thatNode, reclaimable)
 	return t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, &thatNode.right,
 		leftNum+rightNum+1,
 		leftBytes+rightBytes+uint64(thatItem.NumBytes(t)))), nil
