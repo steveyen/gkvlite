@@ -11,6 +11,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -78,9 +79,9 @@ type Collection struct {
 
 	stats CollectionStats
 
-	// Only a single mutator should access the free lists.
-	freeNodes    *node
-	freeNodeLocs *nodeLoc
+	freeLock     sync.Mutex
+	freeNodes    *node    // Protected by freeLock.
+	freeNodeLocs *nodeLoc // Not protected by freeLock.
 }
 
 type CollectionStats struct {
@@ -937,13 +938,17 @@ func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
 func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 	numNodesIn uint64, numBytesIn uint64) *node {
 	t.stats.MkNodes++
+	t.freeLock.Lock()
 	n := t.freeNodes
 	if n == nil {
+		t.freeLock.Unlock()
 		atomic.AddUint64(&t.store.nodeAllocs, 1)
 		t.stats.AllocNodes++
 		n = &node{}
+	} else {
+		t.freeNodes = n.next
+		t.freeLock.Unlock()
 	}
-	t.freeNodes = n.next
 	n.item.Copy(itemIn)
 	n.left.Copy(leftIn)
 	n.right.Copy(rightIn)
@@ -957,14 +962,17 @@ func (t *Collection) freeNode(n *node) {
 	if n == nil {
 		return
 	}
-	t.stats.FreeNodes++
 	n.item = *empty_itemLoc
 	n.left = *empty_nodeLoc
 	n.right = *empty_nodeLoc
 	n.numNodes = 0
 	n.numBytes = 0
-	n.next = t.freeNodes
+
+	t.freeLock.Lock()
 	t.freeNodes = n
+	n.next = t.freeNodes
+	t.stats.FreeNodes++
+	t.freeLock.Unlock()
 }
 
 func (t *Collection) flushItems(nloc *nodeLoc) (err error) {
