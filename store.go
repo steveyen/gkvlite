@@ -654,25 +654,30 @@ func (t *Collection) rootDecRef(r *rootNodeLoc) {
 	if atomic.AddInt64(&r.refs, -1) > 0 {
 		return
 	}
-	t.reclaimNodes(r.root)
-}
-
-func (t *Collection) reclaimNodes(nloc *nodeLoc) {
-	if nloc.isEmpty() {
+	if r.root.isEmpty() {
 		return
 	}
-	n := nloc.Node()
+	t.reclaimNodes(r.root.Node())
+}
+
+func (t *Collection) reclaimNodes(n *node) {
 	if n == nil {
 		return
 	}
 	if n.next != reclaimable_node {
 		return
 	}
-	left := n.left
-	right := n.right
+	var left *node
+	var right *node
+	if !n.left.isEmpty() {
+		left = n.left.Node()
+	}
+	if !n.right.isEmpty() {
+		right = n.right.Node()
+	}
 	t.freeNode(n)
-	t.reclaimNodes(&left)
-	t.reclaimNodes(&right)
+	t.reclaimNodes(left)
+	t.reclaimNodes(right)
 }
 
 // Retrieve an item by its key.  Use withValue of false if you don't
