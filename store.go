@@ -1121,6 +1121,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 			t.freeNodeLoc(newRight)
 		}
 		// t.markReclaimable(thisNode)
+		// t.markReclaimable(middleNode)
 		return res, true, nil
 	}
 	// We don't use middle because the "that" node has precedence.
@@ -1203,7 +1204,9 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 			t.freeNodeLoc(right)
 		}
 		// TODO: t.markReclaimable(nNode)
-		t.markReclaimable(nNode.left.Node())
+		if !nNode.left.isEmpty() {
+			t.markReclaimable(nNode.left.Node())
+		}
 		return left, middle, newRight, leftIsNew, true, nil
 	}
 
@@ -1223,7 +1226,9 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		t.freeNodeLoc(left)
 	}
 	// TODO: t.markReclaimable(nNode)
-	t.markReclaimable(nNode.right.Node())
+	if !nNode.right.isEmpty() {
+		t.markReclaimable(nNode.right.Node())
+	}
 	return newLeft, middle, right, true, rightIsNew, nil
 }
 
