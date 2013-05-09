@@ -763,6 +763,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	if nloc != r {
 		t.freeNodeLoc(nloc)
 	}
+	t.reclaimNodes(n)
 	if !atomic.CompareAndSwapPointer(&t.root, unsafe.Pointer(rnl),
 		unsafe.Pointer(&rootNodeLoc{refs: 1, root: r})) {
 		return errors.New("concurrent mutation attempted")
@@ -1101,6 +1102,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 				t.freeNodeLoc(newRight)
 			}
 			// t.markReclaimable(thisNode)
+			t.markReclaimable(thatNode)
 			return res, true, nil
 		}
 		middleNode, err := middle.read(o)
@@ -1122,6 +1124,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 		}
 		// t.markReclaimable(thisNode)
 		// t.markReclaimable(middleNode)
+		t.markReclaimable(thatNode)
 		return res, true, nil
 	}
 	// We don't use middle because the "that" node has precedence.
@@ -1160,6 +1163,8 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 	if !middle.isEmpty() {
 		t.markReclaimable(middle.Node())
 	}
+	// t.markReclaimable(thisNode)
+	t.markReclaimable(thatNode)
 	return res, true, nil
 }
 
