@@ -186,7 +186,6 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 			return cnew
 		}
 	}
-	return nil // Never reached.
 }
 
 // Returns a new, unregistered (non-named) collection.  This allows
@@ -647,13 +646,12 @@ func (t *Collection) Name() string {
 }
 
 func (t *Collection) rootAddRef() *rootNodeLoc {
-	for true {
+	for {
 		rnl := (*rootNodeLoc)(atomic.LoadPointer(&t.root))
 		if atomic.AddInt64(&rnl.refs, 1) > 1 {
 			return rnl
 		}
 	}
-	return nil // Never reached.
 }
 
 func (t *Collection) rootDecRef(r *rootNodeLoc) {
