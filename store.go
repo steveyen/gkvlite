@@ -1248,9 +1248,9 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		if rightIsNew {
 			t.freeNodeLoc(right)
 		}
-		// if middle != &nNode.left {
-		// 	t.markReclaimable(nNode)
-		// }
+		if middle != &nNode.left {
+			t.markReclaimable(nNode)
+		}
 		return left, middle, newRight, leftIsNew, true, nil
 	}
 
@@ -1269,9 +1269,9 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	if leftIsNew {
 		t.freeNodeLoc(left)
 	}
-	// if middle != &nNode.right {
-	// 	t.markReclaimable(nNode)
-	// }
+	if middle != &nNode.right {
+		t.markReclaimable(nNode)
+	}
 	return newLeft, middle, right, true, rightIsNew, nil
 }
 
