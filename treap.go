@@ -1,5 +1,14 @@
 package gkvlite
 
+// The core algorithms for treaps are straightforward.  However, that
+// algorithmic simplicity is obscured by the additional useful
+// features of gkvlite, such as persistence, garbage-avoidance, stats
+// tracking, and error handling.  For a simple, memory-only
+// implementation of the union/split/join treap algorithms that may be
+// easier to understand, see:
+// https://github.com/steveyen/gtreap/blob/master/treap.go
+
+// Returns a treap that is the union of this treap and that treap.
 func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 	res *nodeLoc, resIsNew bool, err error) {
 	thisNode, err := this.read(o)
@@ -193,7 +202,9 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	return newLeft, middle, right, true, rightIsNew, nil
 }
 
-// All the keys from this should be < keys from that.
+// Joins this treap and that treap into one treap.  Unlike union(),
+// the join() function assumes all keys from this treap should be less
+// than keys from that treap.
 func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 	res *nodeLoc, err error) {
 	thisNode, err := this.read(o)
