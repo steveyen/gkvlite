@@ -790,12 +790,14 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if err != nil {
 		return false, err
 	}
+	if middle != root {
+		t.markReclaimable(middle.Node())
+	}
 	if !atomic.CompareAndSwapPointer(&t.root, unsafe.Pointer(rnl),
 		unsafe.Pointer(t.mkRootNodeLoc(r))) {
 		return false, errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
-	// t.markReclaimable(middle.Node())
 	return true, nil
 }
 
@@ -1131,7 +1133,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 				t.freeNodeLoc(newRight)
 			}
 			// t.markReclaimable(thisNode)
-			t.markReclaimable(thatNode)
+			// t.markReclaimable(thatNode)
 			return res, true, nil
 		}
 		middleNode, err := middle.read(o)
@@ -1152,8 +1154,8 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 			t.freeNodeLoc(newRight)
 		}
 		// t.markReclaimable(thisNode)
+		// t.markReclaimable(thatNode)
 		// t.markReclaimable(middleNode)
-		t.markReclaimable(thatNode)
 		return res, true, nil
 	}
 	// We don't use middle because the "that" node has precedence.
@@ -1189,11 +1191,11 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 	if newRightIsNew {
 		t.freeNodeLoc(newRight)
 	}
-	if !middle.isEmpty() {
+	// t.markReclaimable(thisNode)
+	// t.markReclaimable(thatNode)
+	if !middle.isEmpty() && middle != this {
 		t.markReclaimable(middle.Node())
 	}
-	// t.markReclaimable(thisNode)
-	t.markReclaimable(thatNode)
 	return res, true, nil
 }
 
@@ -1237,9 +1239,6 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		if rightIsNew {
 			t.freeNodeLoc(right)
 		}
-		if !nNode.left.isEmpty() {
-			t.markReclaimable(nNode.left.Node())
-		}
 		// t.markReclaimable(nNode)
 		return left, middle, newRight, leftIsNew, true, nil
 	}
@@ -1258,9 +1257,6 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		leftBytes+rightBytes+uint64(nItem.NumBytes(t))))
 	if leftIsNew {
 		t.freeNodeLoc(left)
-	}
-	if !nNode.right.isEmpty() {
-		t.markReclaimable(nNode.right.Node())
 	}
 	// t.markReclaimable(nNode)
 	return newLeft, middle, right, true, rightIsNew, nil
