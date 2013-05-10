@@ -1141,8 +1141,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 			if newRightIsNew {
 				t.freeNodeLoc(newRight)
 			}
-			// t.markReclaimable(thisNode)
-			// t.markReclaimable(thatNode)
+			t.markReclaimable(thisNode)
 			return res, true, nil
 		}
 		middleNode, err := middle.read(o)
@@ -1162,9 +1161,10 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 		if newRightIsNew {
 			t.freeNodeLoc(newRight)
 		}
-		// t.markReclaimable(thisNode)
-		// t.markReclaimable(thatNode)
-		// t.markReclaimable(middleNode)
+		if middle != that {
+			t.markReclaimable(middleNode)
+		}
+		t.markReclaimable(thisNode)
 		return res, true, nil
 	}
 	// We don't use middle because the "that" node has precedence.
@@ -1200,8 +1200,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 	if newRightIsNew {
 		t.freeNodeLoc(newRight)
 	}
-	// t.markReclaimable(thisNode)
-	// t.markReclaimable(thatNode)
+	t.markReclaimable(thatNode)
 	if !middle.isEmpty() && middle != this {
 		t.markReclaimable(middle.Node())
 	}
