@@ -477,6 +477,15 @@ func (i *Item) NumValBytes(c *Collection) int {
 	return len(i.Val)
 }
 
+func (i *Item) Copy() *Item {
+	return &Item{
+		Key:       i.Key,
+		Val:       i.Val,
+		Priority:  i.Priority,
+		Transient: i.Transient,
+	}
+}
+
 func (i *itemLoc) Loc() *ploc {
 	return (*ploc)(atomic.LoadPointer(&i.loc))
 }
@@ -1239,7 +1248,9 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		if rightIsNew {
 			t.freeNodeLoc(right)
 		}
-		// t.markReclaimable(nNode)
+		// if middle != &nNode.left {
+		// 	t.markReclaimable(nNode)
+		// }
 		return left, middle, newRight, leftIsNew, true, nil
 	}
 
@@ -1258,7 +1269,9 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	if leftIsNew {
 		t.freeNodeLoc(left)
 	}
-	// t.markReclaimable(nNode)
+	// if middle != &nNode.right {
+	// 	t.markReclaimable(nNode)
+	// }
 	return newLeft, middle, right, true, rightIsNew, nil
 }
 
