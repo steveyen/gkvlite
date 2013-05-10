@@ -17,7 +17,7 @@ gkvlite has the following features...
 * On-disk storage for a "Store" is a single file.
 * ACID properties are supported via a simple, append-only,
   copy-on-write storage design.
-* Concurrent application goroutines will not block each other.
+* Concurrent goroutine support (multiple readers, single mutator).
 
 Key concepts
 ============
@@ -25,8 +25,8 @@ Key concepts
 * A Store can have zero or more Collections.
 * A Collection can have zero or more Items.
 * An Item is a key and value.
-* A key is a []byte, max length 64KB (uint16).
-* A value is a []byte, max length 4GB (uint32).
+* A key is a []byte, max length 64KB (length is uint16).
+* A value is a []byte, max length 4GB (length is uint32).
 
 ACID properties
 ===============
@@ -35,22 +35,21 @@ ACID properties
   Store.Flush() will be persisted atomically.
 * Consistency - simple key-value level consistency is supported.
 * Isolation - mutations won't affect concurrent readers or snapshots.
-* Durability - you control when you want to Flush() to disk, so your
-  application can address its performance-vs-safety tradeoffs
+* Durability - you control when you want to Flush() & fsync
+  so your application can address its performance-vs-safety tradeoffs
   appropriately.
 
 Performance
 ===========
 
+* In general, performance is similar to probabilistic balanced
+  binary tree performance.
 * O(log N) performance for item retrieval, insert, update, delete.
 * O(log N) performance to find the smallest or largest items (by key).
 * Range iteration performance is same as binary tree traversal
   performance.
-* In general, performance is similar to probabilistic balanced
-  binary tree performance.
-* You can retrieve just keys only, to save I/O & memory resources,
-  especially when you have many large values and you just need to
-  retrieve only keys from disk for some requests.
+* You can optionally retrieve just keys only, to save I/O & memory
+  resources.
 
 Snapshots
 =========
@@ -59,44 +58,43 @@ Snapshots
   "scribble" on your snapshots with more (non-persistable)
   updates. These scribbles on snapshots won't affect (are isolated
   from) the original Store.
-* And, mutations on the original Store won't be seen by snapshots.
+* Mutations on the original Store won't be seen by snapshots.
 * Snapshot creation is a fast O(1) operation per Collection.
 
 Concurrency
 ===========
 
 The simplest way to use gkvlite is in single-threaded fashion, such as
-by using a go channel or other locking to serialize access to a Store.
+by using a go channel or other application-provided locking to
+serialize access to a Store.
 
 More advanced users may want to use gkvlite's support for concurrent
 goroutines.  The idea is that multiple read-only goroutines, a single
 read-write (mutation) goroutine, and a single persistence (flusher)
 goroutine do not need to block each other.
 
-In more detail, you should have only a single read-write (or mutation)
-goroutine per Store, and should have only a single persistence
-goroutine per Store (doing Flush()'s).  And, you may have multiple,
-concurrent read-only goroutines per Store (doing read-only operations
-like Get()'s, Visit()'s, Snapshot()'s, CopyTo()'s, etc).
+More specifically, you should have only a single read-write (or
+mutation) goroutine per Store, and should have only a single
+persistence goroutine per Store (doing Flush()'s).  And, you may have
+multiple, concurrent read-only goroutines per Store (doing read-only
+operations like Get()'s, Visit()'s, Snapshot()'s, CopyTo()'s, etc).
 
 A read-only goroutine that performs a long or slow read operation,
 like a Get() that must retrieve from disk or a range scan, will see a
 consistent, isolated view of the collection.  That is, mutations that
-happened after the Get() or the range scan has started will not be
-seen by the reader, even if the read operation is slow and takes a
-long time.
+happened after the slow read started will not be seen by the reader.
 
-In concurrent usage, the user must provide a StoreFile implementation
-that is concurrent safe.
+IMPORTANT: In concurrent usage, the user must provide a StoreFile
+implementation that is concurrent safe.
 
 Note that os.File is not a concurrent safe implementation of the
 StoreFile interface.  You will need to provide your own implementation
 of the StoreFile interface, such as by using a channel to serialize
 StoreFile method invocations.
 
-Finally, extra advanced users may wish to have a read-write (mutation)
-goroutine per Collection instead of per Store.  There should only be,
-though, only a single persistence (flusher) goroutine per Store.
+Finally, advanced users may also use a read-write (mutation) goroutine
+per Collection instead of per Store.  There should only be, though,
+only a single persistence (flusher) goroutine per Store.
 
 Other features
 ==============
@@ -111,8 +109,8 @@ Other features
   interface implementation instead of an actual os.File, for your own
   advanced testing or I/O interposing needs (e.g., compression,
   checksums, I/O statistics, caching, enabling concurrency, etc).
-* You can supply your own KeyCompare function to order items however
-  you want.  The default is bytes.Compare().  See also the
+* You can specify your own KeyCompare function.  The default is
+  bytes.Compare().  See also the
   StoreCallbacks.KeyCompareForCollection() callback function.
 * Collections are written to file sorted by Collection name.  This
   allows users with advanced concurrency needs to reason about how
