@@ -275,7 +275,6 @@ func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, b
 		}
 		nNode = childNode
 	}
-	return nil, nil
 }
 
 func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,

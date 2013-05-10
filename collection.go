@@ -84,7 +84,6 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 			return iItem, nil
 		}
 	}
-	return nil, err
 }
 
 // Retrieve a value by its key.  Returns nil if the item is not in the

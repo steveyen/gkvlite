@@ -389,5 +389,4 @@ func (o *Store) readRoots() error {
 		} // else, perhaps a gkvlite file was stored as a value.
 		atomic.AddInt64(&o.size, -1) // Roots were wrong, so keep scanning.
 	}
-	return nil
 }
