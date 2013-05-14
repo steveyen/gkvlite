@@ -167,6 +167,8 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 		return false, errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
+	t.reclaimNodes(left.Node())
+	t.reclaimNodes(right.Node())
 	t.freeNodeLoc(left)
 	t.freeNodeLoc(right)
 	return true, nil
