@@ -3,6 +3,7 @@ package gkvlite
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -142,16 +143,16 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
 	root := rnl.root
+	i, err := t.GetItem(key, false)
+	if err != nil || i == nil {
+		return false, err
+	}
 	left, middle, right, err := t.store.split(t, root, key)
 	if err != nil {
 		return false, err
 	}
 	if middle.isEmpty() {
-		t.freeNodeLoc(left)
-		t.freeNodeLoc(right)
-		// TODO: Need to markReclaimable() the left & right nodes, but
-		// unfortunately can't tell which parts of their trees are in-use.
-		return false, nil
+		return false, fmt.Errorf("concurrent delete, key: %v", key)
 	}
 	// TODO: Even though we markReclaimable() the middle node, there
 	// might not be a pathway to it during reclaimation.
