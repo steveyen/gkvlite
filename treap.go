@@ -12,7 +12,7 @@ package gkvlite
 // free their input nodeLoc's, but are responsible instead for
 // invoking markClaimable() on the directly pointed-at input nodes.
 // The union/split/join functions must copy the input nodeLoc's if
-// they wants to keep them.
+// they wish to keep the nodeLoc's data.
 //
 // The caller is responsible for freeing the returned nodeLoc's and
 // (if appropriate) the input nodeLoc's.  The caller also takes

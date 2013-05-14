@@ -1,7 +1,7 @@
 gkvlite
 -------
 
-gkvlite is a simple, ordered, ACID, key-value persistence library for Go
+gkvlite is a simple, ordered, ACID, key-value persistence library for Go.
 
 Overview
 ========
