@@ -10,7 +10,7 @@ package gkvlite
 
 // Memory management rules: the union/split/join functions will not
 // free their input nodeLoc's, but are responsible instead for
-// invoking markClaimable() on the directly pointed-at input nodes.
+// invoking markReclaimable() on the directly pointed-at input nodes.
 // The union/split/join functions must copy the input nodeLoc's if
 // they wish to keep the nodeLoc's data.
 //
