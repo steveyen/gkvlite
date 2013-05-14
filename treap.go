@@ -63,27 +63,31 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 		if err != nil {
 			return empty_nodeLoc, err
 		}
-		middleNode := thisNode
-		middleItem := thisItem
-		middleItemLoc := thisItemLoc
+		var middleNode *node
 		if !middle.isEmpty() {
 			middleNode, err = middle.read(o)
 			if err != nil {
 				return empty_nodeLoc, err
 			}
-			middleItemLoc = &middleNode.item
-			middleItem, err = middleItemLoc.read(t, false)
+			middleItemLoc := &middleNode.item
+			middleItem, err := middleItemLoc.read(t, false)
 			if err != nil {
 				return empty_nodeLoc, err
 			}
+			res = t.mkNodeLoc(t.mkNode(middleItemLoc, newLeft, newRight,
+				leftNum+rightNum+1,
+				leftBytes+rightBytes+uint64(middleItem.NumBytes(t))))
+		} else {
+			res = t.mkNodeLoc(t.mkNode(thisItemLoc, newLeft, newRight,
+				leftNum+rightNum+1,
+				leftBytes+rightBytes+uint64(thisItem.NumBytes(t))))
 		}
-		res = t.mkNodeLoc(t.mkNode(middleItemLoc, newLeft, newRight,
-			leftNum+rightNum+1,
-			leftBytes+rightBytes+uint64(middleItem.NumBytes(t))))
 		t.freeNodeLoc(left)
 		t.freeNodeLoc(right)
+		t.freeNodeLoc(middle)
 		t.freeNodeLoc(newLeft)
 		t.freeNodeLoc(newRight)
+		t.markReclaimable(thisNode)
 		t.markReclaimable(middleNode)
 		return res, nil
 	}
