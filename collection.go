@@ -115,24 +115,20 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
 	root := rnl.root
-	n := t.mkNode(nil, nil, nil,
-		1, uint64(len(item.Key))+uint64(item.NumValBytes(t)))
-	// Separate item initialization to avoid garbage.
-	n.item = itemLoc{item: unsafe.Pointer(item)}
+	n := t.mkNode(nil, nil, nil, 1, uint64(len(item.Key))+uint64(item.NumValBytes(t)))
+	n.item.item = unsafe.Pointer(item) // Avoid garbage via separate init.
 	nloc := t.mkNodeLoc(n)
-	r, _, err := t.store.union(t, root, nloc)
+	r, err := t.store.union(t, root, nloc)
 	if err != nil {
 		return err
 	}
-	if nloc != r {
-		t.freeNodeLoc(nloc)
-	}
-	t.reclaimNodes(n)
 	if !atomic.CompareAndSwapPointer(&t.root, unsafe.Pointer(rnl),
 		unsafe.Pointer(t.mkRootNodeLoc(r))) {
 		return errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
+	t.freeNodeLoc(nloc)
+	t.reclaimNodes(n)
 	return nil
 }
 
@@ -146,22 +142,32 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
 	root := rnl.root
-	left, middle, right, _, _, err := t.store.split(t, root, key)
-	if err != nil || middle.isEmpty() {
-		return false, err
-	}
-	r, err := t.store.join(t, left, right)
+	left, middle, right, err := t.store.split(t, root, key)
 	if err != nil {
 		return false, err
 	}
-	if middle != root {
-		t.markReclaimable(middle.Node())
+	if middle.isEmpty() {
+		t.freeNodeLoc(left)
+		t.freeNodeLoc(right)
+		// TODO: Need to markReclaimable() the left & right nodes, but
+		// unfortunately can't tell which parts of their trees are in-use.
+		return false, nil
+	}
+	// TODO: Even though we markReclaimable() the middle node, there
+	// might not be a pathway to it during reclaimation.
+	t.markReclaimable(middle.Node())
+	t.freeNodeLoc(middle)
+	r, err := t.store.join(t, left, right)
+	if err != nil {
+		return false, err
 	}
 	if !atomic.CompareAndSwapPointer(&t.root, unsafe.Pointer(rnl),
 		unsafe.Pointer(t.mkRootNodeLoc(r))) {
 		return false, errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
+	t.freeNodeLoc(left)
+	t.freeNodeLoc(right)
 	return true, nil
 }
 

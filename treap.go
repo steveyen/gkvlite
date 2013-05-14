@@ -8,131 +8,114 @@ package gkvlite
 // easier to understand, see:
 // https://github.com/steveyen/gtreap/blob/master/treap.go
 
+// Memory management rules: the union/split/join functions will not
+// free their input nodeLoc's, but are responsible instead for
+// invoking markClaimable() on the directly pointed-at input nodes.
+// The union/split/join functions must copy the input nodeLoc's if
+// they wants to keep them.
+//
+// The caller is responsible for freeing the returned nodeLoc's and
+// (if appropriate) the input nodeLoc's.  The caller also takes
+// responsibility for markReclaimable() on returned output nodes.
+
 // Returns a treap that is the union of this treap and that treap.
 func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
-	res *nodeLoc, resIsNew bool, err error) {
+	res *nodeLoc, err error) {
 	thisNode, err := this.read(o)
 	if err != nil {
-		return empty_nodeLoc, false, err
+		return empty_nodeLoc, err
 	}
 	thatNode, err := that.read(o)
 	if err != nil {
-		return empty_nodeLoc, false, err
+		return empty_nodeLoc, err
 	}
 	if this.isEmpty() || thisNode == nil {
-		return that, false, nil
+		return t.mkNodeLoc(nil).Copy(that), nil
 	}
 	if that.isEmpty() || thatNode == nil {
-		return this, false, nil
+		return t.mkNodeLoc(nil).Copy(this), nil
 	}
 	thisItemLoc := &thisNode.item
 	thisItem, err := thisItemLoc.read(t, false)
 	if err != nil {
-		return empty_nodeLoc, false, err
+		return empty_nodeLoc, err
 	}
 	thatItemLoc := &thatNode.item
 	thatItem, err := thatItemLoc.read(t, false)
 	if err != nil {
-		return empty_nodeLoc, false, err
+		return empty_nodeLoc, err
 	}
 	if thisItem.Priority > thatItem.Priority {
-		left, middle, right, leftIsNew, rightIsNew, err :=
-			o.split(t, that, thisItem.Key)
+		left, middle, right, err := o.split(t, that, thisItem.Key)
 		if err != nil {
-			return empty_nodeLoc, false, err
+			return empty_nodeLoc, err
 		}
-		newLeft, newLeftIsNew, err := o.union(t, &thisNode.left, left)
+		newLeft, err := o.union(t, &thisNode.left, left)
 		if err != nil {
-			return empty_nodeLoc, false, err
+			return empty_nodeLoc, err
 		}
-		if leftIsNew && left != newLeft {
-			t.freeNodeLoc(left)
-		}
-		newRight, newRightIsNew, err := o.union(t, &thisNode.right, right)
+		newRight, err := o.union(t, &thisNode.right, right)
 		if err != nil {
-			return empty_nodeLoc, false, err
+			return empty_nodeLoc, err
 		}
-		if rightIsNew && right != newRight {
-			t.freeNodeLoc(right)
-		}
-		leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, newLeft, newRight)
+		leftNum, leftBytes, rightNum, rightBytes, err :=
+			numInfo(o, newLeft, newRight)
 		if err != nil {
-			return empty_nodeLoc, false, err
+			return empty_nodeLoc, err
 		}
-		if middle.isEmpty() {
-			res = t.mkNodeLoc(t.mkNode(thisItemLoc, newLeft, newRight,
-				leftNum+rightNum+1,
-				leftBytes+rightBytes+uint64(thisItem.NumBytes(t))))
-			if newLeftIsNew {
-				t.freeNodeLoc(newLeft)
+		middleNode := thisNode
+		middleItem := thisItem
+		middleItemLoc := thisItemLoc
+		if !middle.isEmpty() {
+			middleNode, err = middle.read(o)
+			if err != nil {
+				return empty_nodeLoc, err
 			}
-			if newRightIsNew {
-				t.freeNodeLoc(newRight)
+			middleItemLoc = &middleNode.item
+			middleItem, err = middleItemLoc.read(t, false)
+			if err != nil {
+				return empty_nodeLoc, err
 			}
-			t.markReclaimable(thisNode)
-			return res, true, nil
 		}
-		middleNode, err := middle.read(o)
-		if err != nil {
-			return empty_nodeLoc, false, err
-		}
-		middleItem, err := middleNode.item.read(t, false)
-		if err != nil {
-			return empty_nodeLoc, false, err
-		}
-		res = t.mkNodeLoc(t.mkNode(&middleNode.item, newLeft, newRight,
+		res = t.mkNodeLoc(t.mkNode(middleItemLoc, newLeft, newRight,
 			leftNum+rightNum+1,
 			leftBytes+rightBytes+uint64(middleItem.NumBytes(t))))
-		if newLeftIsNew {
-			t.freeNodeLoc(newLeft)
-		}
-		if newRightIsNew {
-			t.freeNodeLoc(newRight)
-		}
-		if middle != that {
-			t.markReclaimable(middleNode)
-		}
-		t.markReclaimable(thisNode)
-		return res, true, nil
+		t.freeNodeLoc(left)
+		t.freeNodeLoc(right)
+		t.freeNodeLoc(newLeft)
+		t.freeNodeLoc(newRight)
+		t.markReclaimable(middleNode)
+		return res, nil
 	}
 	// We don't use middle because the "that" node has precedence.
-	left, middle, right, leftIsNew, rightIsNew, err :=
-		o.split(t, this, thatItem.Key)
+	left, middle, right, err := o.split(t, this, thatItem.Key)
 	if err != nil {
-		return empty_nodeLoc, false, err
+		return empty_nodeLoc, err
 	}
-	newLeft, newLeftIsNew, err := o.union(t, left, &thatNode.left)
+	newLeft, err := o.union(t, left, &thatNode.left)
 	if err != nil {
-		return empty_nodeLoc, false, err
+		return empty_nodeLoc, err
 	}
-	if leftIsNew && left != newLeft {
-		t.freeNodeLoc(left)
-	}
-	newRight, newRightIsNew, err := o.union(t, right, &thatNode.right)
+	newRight, err := o.union(t, right, &thatNode.right)
 	if err != nil {
-		return empty_nodeLoc, false, err
+		return empty_nodeLoc, err
 	}
-	if rightIsNew && right != newRight {
-		t.freeNodeLoc(right)
-	}
-	leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, newLeft, newRight)
+	leftNum, leftBytes, rightNum, rightBytes, err :=
+		numInfo(o, newLeft, newRight)
 	if err != nil {
-		return empty_nodeLoc, false, err
+		return empty_nodeLoc, err
 	}
 	res = t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, newRight,
 		leftNum+rightNum+1,
 		leftBytes+rightBytes+uint64(thatItem.NumBytes(t))))
-	if newLeftIsNew {
-		t.freeNodeLoc(newLeft)
-	}
-	if newRightIsNew {
-		t.freeNodeLoc(newRight)
-	}
+	t.freeNodeLoc(left)
+	t.freeNodeLoc(right)
+	t.freeNodeLoc(middle)
+	t.freeNodeLoc(newLeft)
+	t.freeNodeLoc(newRight)
 	t.markReclaimable(thatNode)
-	if !middle.isEmpty() && middle != this {
-		t.markReclaimable(middle.Node())
-	}
-	return res, true, nil
+	t.markReclaimable(middle.Node())
+	return res, nil
 }
 
 // Splits a treap into two treaps based on a split key "s".  The
@@ -140,66 +123,58 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 // right treap has keys > s, and middle is either...
 // * empty/nil - meaning key s was not in the original treap.
 // * non-empty - returning the original nodeLoc/item that had key s.
-// The two bool's indicate whether the left/right returned nodeLoc's are new.
 func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
-	*nodeLoc, *nodeLoc, *nodeLoc, bool, bool, error) {
+	*nodeLoc, *nodeLoc, *nodeLoc, error) {
 	nNode, err := n.read(o)
 	if err != nil || n.isEmpty() || nNode == nil {
-		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
+		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
 	}
 
 	nItemLoc := &nNode.item
 	nItem, err := nItemLoc.read(t, false)
 	if err != nil {
-		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
+		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
 	}
 
 	c := t.compare(s, nItem.Key)
 	if c == 0 {
-		return &nNode.left, n, &nNode.right, false, false, nil
+		left := t.mkNodeLoc(nil).Copy(&nNode.left)
+		right := t.mkNodeLoc(nil).Copy(&nNode.right)
+		middle := t.mkNodeLoc(nil).Copy(n)
+		return left, middle, right, nil
 	}
 
 	if c < 0 {
-		left, middle, right, leftIsNew, rightIsNew, err :=
-			o.split(t, &nNode.left, s)
+		left, middle, right, err := o.split(t, &nNode.left, s)
 		if err != nil {
-			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
+			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
 		}
 		leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, right, &nNode.right)
 		if err != nil {
-			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
+			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
 		}
 		newRight := t.mkNodeLoc(t.mkNode(nItemLoc, right, &nNode.right,
 			leftNum+rightNum+1,
 			leftBytes+rightBytes+uint64(nItem.NumBytes(t))))
-		if rightIsNew {
-			t.freeNodeLoc(right)
-		}
-		if middle != &nNode.left {
-			t.markReclaimable(nNode)
-		}
-		return left, middle, newRight, leftIsNew, true, nil
+		t.freeNodeLoc(right)
+		t.markReclaimable(nNode)
+		return left, middle, newRight, nil
 	}
 
-	left, middle, right, leftIsNew, rightIsNew, err :=
-		o.split(t, &nNode.right, s)
+	left, middle, right, err := o.split(t, &nNode.right, s)
 	if err != nil {
-		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
+		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
 	}
 	leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, &nNode.left, left)
 	if err != nil {
-		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, false, false, err
+		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
 	}
 	newLeft := t.mkNodeLoc(t.mkNode(nItemLoc, &nNode.left, left,
 		leftNum+rightNum+1,
 		leftBytes+rightBytes+uint64(nItem.NumBytes(t))))
-	if leftIsNew {
-		t.freeNodeLoc(left)
-	}
-	if middle != &nNode.right {
-		t.markReclaimable(nNode)
-	}
-	return newLeft, middle, right, true, rightIsNew, nil
+	t.freeNodeLoc(left)
+	t.markReclaimable(nNode)
+	return newLeft, middle, right, nil
 }
 
 // Joins this treap and that treap into one treap.  Unlike union(),
@@ -216,10 +191,10 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 		return empty_nodeLoc, err
 	}
 	if this.isEmpty() || thisNode == nil {
-		return that, nil
+		return t.mkNodeLoc(nil).Copy(that), nil
 	}
 	if that.isEmpty() || thatNode == nil {
-		return this, nil
+		return t.mkNodeLoc(nil).Copy(this), nil
 	}
 	thisItemLoc := &thisNode.item
 	thisItem, err := thisItemLoc.read(t, false)
@@ -240,10 +215,12 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 		if err != nil {
 			return empty_nodeLoc, err
 		}
-		t.markReclaimable(thisNode)
-		return t.mkNodeLoc(t.mkNode(thisItemLoc, &thisNode.left, newRight,
+		res = t.mkNodeLoc(t.mkNode(thisItemLoc, &thisNode.left, newRight,
 			leftNum+rightNum+1,
-			leftBytes+rightBytes+uint64(thisItem.NumBytes(t)))), nil
+			leftBytes+rightBytes+uint64(thisItem.NumBytes(t))))
+		t.markReclaimable(thisNode)
+		t.freeNodeLoc(newRight)
+		return res, nil
 	}
 	newLeft, err := o.join(t, this, &thatNode.left)
 	if err != nil {
@@ -253,10 +230,12 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 	if err != nil {
 		return empty_nodeLoc, err
 	}
-	t.markReclaimable(thatNode)
-	return t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, &thatNode.right,
+	res = t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, &thatNode.right,
 		leftNum+rightNum+1,
-		leftBytes+rightBytes+uint64(thatItem.NumBytes(t)))), nil
+		leftBytes+rightBytes+uint64(thatItem.NumBytes(t))))
+	t.markReclaimable(thatNode)
+	t.freeNodeLoc(newLeft)
+	return res, nil
 }
 
 func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, bool)) (

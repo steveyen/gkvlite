@@ -32,13 +32,14 @@ func (nloc *nodeLoc) Node() *node {
 	return (*node)(atomic.LoadPointer(&nloc.node))
 }
 
-func (nloc *nodeLoc) Copy(src *nodeLoc) {
+func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
 	if src == nil {
 		nloc.Copy(empty_nodeLoc)
-		return
+		return nloc
 	}
 	atomic.StorePointer(&nloc.loc, unsafe.Pointer(src.Loc()))
 	atomic.StorePointer(&nloc.node, unsafe.Pointer(src.Node()))
+	return nloc
 }
 
 func (nloc *nodeLoc) isEmpty() bool {
