@@ -338,5 +338,6 @@ func (t *Collection) rootDecRef(r *rootNodeLoc) {
 		return
 	}
 	t.reclaimNodes(r.root.Node())
+	t.freeNodeLoc(r.root)
 	t.freeRootNodeLoc(r)
 }
