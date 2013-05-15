@@ -59,6 +59,8 @@ func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 }
 
 func (t *Collection) freeNode(n *node) {
+	return
+
 	if n == nil || n == reclaimable_node {
 		return
 	}
@@ -95,6 +97,8 @@ func (t *Collection) mkNodeLoc(n *node) *nodeLoc {
 
 // Assumes that the caller serializes invocations.
 func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
+	return
+
 	if nloc == nil || nloc == empty_nodeLoc {
 		return
 	}
@@ -125,6 +129,8 @@ func (t *Collection) mkRootNodeLoc(root *nodeLoc) *rootNodeLoc {
 }
 
 func (t *Collection) freeRootNodeLoc(rnl *rootNodeLoc) {
+	return
+
 	if rnl == nil {
 		return
 	}
