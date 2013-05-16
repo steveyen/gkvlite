@@ -205,6 +205,8 @@ func (s *Store) Snapshot() (snapshot *Store) {
 			store:   res,
 			compare: coll[name].compare,
 			root:    unsafe.Pointer(coll[name].rootAddRef()),
+			// TODO: The snapshot's refcounts are never released.
+			// Perhaps need a Close() method?
 		}
 	}
 	return res

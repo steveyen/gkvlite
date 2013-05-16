@@ -330,6 +330,9 @@ func (t *Collection) rootAddRef() *rootNodeLoc {
 		if atomic.AddInt64(&rnl.refs, 1) > 1 {
 			return rnl
 		}
+		// TODO: Need to clean up our addref on the rnl, which
+		// concurrent goroutines might have freed and, even worse,
+		// already started reusing.  ABA problem?
 	}
 }
 
