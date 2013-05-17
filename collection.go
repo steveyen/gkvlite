@@ -349,12 +349,13 @@ func (t *Collection) rootAddRef() *rootNodeLoc {
 
 func (t *Collection) rootDecRef(r *rootNodeLoc) {
 	t.rootLock.Lock()
-	defer t.rootLock.Unlock()
-
 	r.refs--
 	if r.refs > 0 {
+		t.rootLock.Unlock()
 		return
 	}
+	t.rootLock.Unlock()
+
 	if r.root.isEmpty() {
 		return
 	}
