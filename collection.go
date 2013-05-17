@@ -20,7 +20,7 @@ type Collection struct {
 	store   *Store
 	compare KeyCompare
 
-	rootLock sync.Mutex
+	rootLock *sync.Mutex
 	root     *rootNodeLoc // Protected by rootLock.
 
 	stats CollectionStats
@@ -278,6 +278,9 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 	p := ploc{}
 	if err := json.Unmarshal(d, &p); err != nil {
 		return err
+	}
+	if t.rootLock == nil {
+		t.rootLock = &sync.Mutex{}
 	}
 	nloc := t.mkNodeLoc(nil)
 	nloc.loc = unsafe.Pointer(&p)

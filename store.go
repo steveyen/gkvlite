@@ -10,6 +10,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -113,9 +114,10 @@ func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 		compare = bytes.Compare
 	}
 	return &Collection{
-		store:   s,
-		compare: compare,
-		root:    &rootNodeLoc{refs: 1, root: empty_nodeLoc},
+		store:    s,
+		compare:  compare,
+		rootLock: &sync.Mutex{},
+		root:     &rootNodeLoc{refs: 1, root: empty_nodeLoc},
 	}
 }
 
@@ -202,9 +204,10 @@ func (s *Store) Snapshot() (snapshot *Store) {
 	}
 	for _, name := range collNames(coll) {
 		coll[name] = &Collection{
-			store:   res,
-			compare: coll[name].compare,
-			root:    coll[name].rootAddRef(),
+			store:    res,
+			compare:  coll[name].compare,
+			rootLock: coll[name].rootLock,
+			root:     coll[name].rootAddRef(),
 			// TODO: The snapshot's refcounts are never released.
 			// Perhaps need a Close() method?
 		}
