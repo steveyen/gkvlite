@@ -97,7 +97,7 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 		cnew := s.MakePrivateCollection(compare)
 		cnew.name = name
 		if coll[name] != nil {
-			cnew.root = unsafe.Pointer(coll[name].rootAddRef())
+			cnew.root = coll[name].rootAddRef()
 		}
 		coll[name] = cnew
 		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
@@ -115,7 +115,7 @@ func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 	return &Collection{
 		store:   s,
 		compare: compare,
-		root:    unsafe.Pointer(&rootNodeLoc{refs: 1, root: empty_nodeLoc}),
+		root:    &rootNodeLoc{refs: 1, root: empty_nodeLoc},
 	}
 }
 
@@ -204,7 +204,7 @@ func (s *Store) Snapshot() (snapshot *Store) {
 		coll[name] = &Collection{
 			store:   res,
 			compare: coll[name].compare,
-			root:    unsafe.Pointer(coll[name].rootAddRef()),
+			root:    coll[name].rootAddRef(),
 			// TODO: The snapshot's refcounts are never released.
 			// Perhaps need a Close() method?
 		}

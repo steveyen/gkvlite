@@ -19,7 +19,9 @@ type Collection struct {
 	name    string // May be "" for a private collection.
 	store   *Store
 	compare KeyCompare
-	root    unsafe.Pointer // Value is *rootNodeLoc type.
+
+	rootLock sync.Mutex
+	root     *rootNodeLoc // Protected by rootLock.
 
 	stats CollectionStats
 
@@ -123,8 +125,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	if err != nil {
 		return err
 	}
-	if !atomic.CompareAndSwapPointer(&t.root, unsafe.Pointer(rnl),
-		unsafe.Pointer(t.mkRootNodeLoc(r))) {
+	if !t.rootCAS(rnl, t.mkRootNodeLoc(r)) {
 		return errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
@@ -162,8 +163,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	if !atomic.CompareAndSwapPointer(&t.root, unsafe.Pointer(rnl),
-		unsafe.Pointer(t.mkRootNodeLoc(r))) {
+	if !t.rootCAS(rnl, t.mkRootNodeLoc(r)) {
 		return false, errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
@@ -279,10 +279,11 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 	if err := json.Unmarshal(d, &p); err != nil {
 		return err
 	}
-	atomic.StorePointer(&t.root, unsafe.Pointer(&rootNodeLoc{
-		refs: 1,
-		root: &nodeLoc{loc: unsafe.Pointer(&p)},
-	}))
+	nloc := t.mkNodeLoc(nil)
+	nloc.loc = unsafe.Pointer(&p)
+	if !t.rootCAS(nil, t.mkRootNodeLoc(nloc)) {
+		return errors.New("concurrent mutation during UnmarshalJSON().")
+	}
 	return nil
 }
 
@@ -324,20 +325,31 @@ func (t *Collection) flushItems(nloc *nodeLoc) (err error) {
 	return t.flushItems(&node.right)
 }
 
-func (t *Collection) rootAddRef() *rootNodeLoc {
-	for {
-		rnl := (*rootNodeLoc)(atomic.LoadPointer(&t.root))
-		if atomic.AddInt64(&rnl.refs, 1) > 1 {
-			return rnl
-		}
-		// TODO: Need to clean up our addref on the rnl, which
-		// concurrent goroutines might have freed and, even worse,
-		// already started reusing.  ABA problem?
+func (t *Collection) rootCAS(prev, next *rootNodeLoc) bool {
+	t.rootLock.Lock()
+	defer t.rootLock.Unlock()
+
+	if t.root != prev {
+		return false
 	}
+	t.root = next
+	return true
+}
+
+func (t *Collection) rootAddRef() *rootNodeLoc {
+	t.rootLock.Lock()
+	defer t.rootLock.Unlock()
+
+	t.root.refs++
+	return t.root
 }
 
 func (t *Collection) rootDecRef(r *rootNodeLoc) {
-	if atomic.AddInt64(&r.refs, -1) > 0 {
+	t.rootLock.Lock()
+	defer t.rootLock.Unlock()
+
+	r.refs--
+	if r.refs > 0 {
 		return
 	}
 	if r.root.isEmpty() {
