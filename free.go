@@ -127,6 +127,9 @@ func (t *Collection) mkRootNodeLoc(root *nodeLoc) *rootNodeLoc {
 }
 
 func (t *Collection) freeRootNodeLoc(rnl *rootNodeLoc) {
+	// No rootNodeLoc reclaimation for now to avoid ABA issue.
+	return
+
 	if rnl == nil {
 		return
 	}
