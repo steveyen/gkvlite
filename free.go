@@ -59,8 +59,6 @@ func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 }
 
 func (t *Collection) freeNode(n *node) {
-	return
-
 	if n == nil || n == reclaimable_node {
 		return
 	}
@@ -101,7 +99,7 @@ func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
 		return
 	}
 	if nloc.next != nil {
-		panic("double free nloc")
+		panic("double free nodeLoc")
 	}
 	t.stats.FreeNodeLocs++
 	nloc.loc = unsafe.Pointer(nil)
@@ -129,6 +127,9 @@ func (t *Collection) mkRootNodeLoc(root *nodeLoc) *rootNodeLoc {
 func (t *Collection) freeRootNodeLoc(rnl *rootNodeLoc) {
 	if rnl == nil {
 		return
+	}
+	if rnl.next != nil {
+		panic("double free rootNodeLoc")
 	}
 	rnl.refs = 0
 	rnl.root = nil

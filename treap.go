@@ -87,7 +87,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 		t.freeNodeLoc(middle)
 		t.freeNodeLoc(newLeft)
 		t.freeNodeLoc(newRight)
-		t.markReclaimable(thisNode)
+		// t.markReclaimable(thisNode)
 		t.markReclaimable(middleNode)
 		return res, nil
 	}
@@ -117,7 +117,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 	t.freeNodeLoc(middle)
 	t.freeNodeLoc(newLeft)
 	t.freeNodeLoc(newRight)
-	t.markReclaimable(thatNode)
+	// t.markReclaimable(thatNode)
 	t.markReclaimable(middle.Node())
 	return res, nil
 }
@@ -161,7 +161,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 			leftNum+rightNum+1,
 			leftBytes+rightBytes+uint64(nItem.NumBytes(t))))
 		t.freeNodeLoc(right)
-		t.markReclaimable(nNode)
+		// t.markReclaimable(nNode)
 		return left, middle, newRight, nil
 	}
 
@@ -177,7 +177,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		leftNum+rightNum+1,
 		leftBytes+rightBytes+uint64(nItem.NumBytes(t))))
 	t.freeNodeLoc(left)
-	t.markReclaimable(nNode)
+	// t.markReclaimable(nNode)
 	return newLeft, middle, right, nil
 }
 
@@ -215,7 +215,8 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 		if err != nil {
 			return empty_nodeLoc, err
 		}
-		leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, &thisNode.left, newRight)
+		leftNum, leftBytes, rightNum, rightBytes, err :=
+			numInfo(o, &thisNode.left, newRight)
 		if err != nil {
 			return empty_nodeLoc, err
 		}
@@ -230,7 +231,8 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc) (
 	if err != nil {
 		return empty_nodeLoc, err
 	}
-	leftNum, leftBytes, rightNum, rightBytes, err := numInfo(o, newLeft, &thatNode.right)
+	leftNum, leftBytes, rightNum, rightBytes, err :=
+		numInfo(o, newLeft, &thatNode.right)
 	if err != nil {
 		return empty_nodeLoc, err
 	}

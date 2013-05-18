@@ -130,7 +130,8 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	}
 	t.rootDecRef(rnl)
 	t.freeNodeLoc(nloc)
-	t.reclaimNodes(n)
+	// Can't reclaim n right now because r might point to n.
+	// NO: t.reclaimNodes(n)
 	return nil
 }
 
@@ -167,8 +168,9 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 		return false, errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
-	t.reclaimNodes(left.Node())
-	t.reclaimNodes(right.Node())
+	// Can't reclaim left/right right now due to readers.
+	// NO: t.reclaimNodes(left.Node())
+	// NO: t.reclaimNodes(right.Node())
 	t.freeNodeLoc(left)
 	t.freeNodeLoc(right)
 	return true, nil
