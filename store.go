@@ -203,11 +203,12 @@ func (s *Store) Snapshot() (snapshot *Store) {
 		callbacks: s.callbacks,
 	}
 	for _, name := range collNames(coll) {
+		collOrig := coll[name]
 		coll[name] = &Collection{
 			store:    res,
-			compare:  coll[name].compare,
-			rootLock: coll[name].rootLock,
-			root:     coll[name].rootAddRef(),
+			compare:  collOrig.compare,
+			rootLock: collOrig.rootLock,
+			root:     collOrig.rootAddRef(),
 			// TODO: The snapshot's refcounts are never released.
 			// Perhaps need a Close() method?
 		}
