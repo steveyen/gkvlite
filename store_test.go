@@ -1368,7 +1368,7 @@ func TestStoreStats(t *testing.T) {
 	if n["fileSize"] != m["fileSize"] {
 		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
 	}
-	if n["nodeAllocs"] != m["nodeAllocs"] + 1 {
+	if n["nodeAllocs"] != m["nodeAllocs"]+1 {
 		t.Errorf("expected 1 nodeAllocs, got: %#v, %#v", n, m)
 	}
 
@@ -1377,7 +1377,7 @@ func TestStoreStats(t *testing.T) {
 	if n["fileSize"] != m["fileSize"] {
 		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
 	}
-	if n["nodeAllocs"] != m["nodeAllocs"] + 3 {
+	if n["nodeAllocs"] != m["nodeAllocs"]+3 {
 		t.Errorf("expected 3 nodeAllocs, got: %#v, %#v", n, m)
 	}
 
@@ -1386,7 +1386,7 @@ func TestStoreStats(t *testing.T) {
 	if n["fileSize"] != m["fileSize"] {
 		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
 	}
-	if n["nodeAllocs"] != m["nodeAllocs"] + 3 {
+	if n["nodeAllocs"] != m["nodeAllocs"]+3 {
 		t.Errorf("expected 3 nodeAllocs, got: %#v, %#v", n, m)
 	}
 }
