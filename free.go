@@ -40,12 +40,19 @@ func (t *Collection) markReclaimable(n *node) {
 	n.next = reclaimable_node // Use next pointer as sentinel.
 }
 
-func (t *Collection) reclaimNodes_unlocked(n *node) {
+func (t *Collection) reclaimNodes_unlocked(n *node, reclaimLater *[2]*node) {
 	if n == nil {
 		return
 	}
 	if n.next != reclaimable_node {
 		return
+	}
+	if reclaimLater != nil {
+		for i := 0; i < len(reclaimLater); i++ {
+			if reclaimLater[i] == n {
+				reclaimLater[i] = nil
+			}
+		}
 	}
 	var left *node
 	var right *node
@@ -56,8 +63,8 @@ func (t *Collection) reclaimNodes_unlocked(n *node) {
 		right = n.right.Node()
 	}
 	t.freeNode_unlocked(n)
-	t.reclaimNodes_unlocked(left)
-	t.reclaimNodes_unlocked(right)
+	t.reclaimNodes_unlocked(left, reclaimLater)
+	t.reclaimNodes_unlocked(right, reclaimLater)
 }
 
 // Assumes that the caller serializes invocations.
@@ -164,6 +171,9 @@ func (t *Collection) mkRootNodeLoc(root *nodeLoc) *rootNodeLoc {
 	rnl.next = nil
 	rnl.chainedCollection = nil
 	rnl.chainedRootNodeLoc = nil
+	for i := 0; i < len(rnl.reclaimLater); i++ {
+		rnl.reclaimLater[i] = nil
+	}
 	return rnl
 }
 
@@ -178,7 +188,9 @@ func (t *Collection) freeRootNodeLoc(rnl *rootNodeLoc) {
 	rnl.root = nil
 	rnl.chainedCollection = nil
 	rnl.chainedRootNodeLoc = nil
-
+	for i := 0; i < len(rnl.reclaimLater); i++ {
+		rnl.reclaimLater[i] = nil
+	}
 	freeRootNodeLocLock.Lock()
 	rnl.next = freeRootNodeLocs
 	freeRootNodeLocs = rnl

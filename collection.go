@@ -37,6 +37,10 @@ type rootNodeLoc struct {
 	// our reference count on the next guy in the chain.
 	chainedCollection  *Collection
 	chainedRootNodeLoc *rootNodeLoc
+
+	// More nodes to maybe reclaim when our reference count goes to 0.
+	// But they might be repeated, so we scan for them during reclaimation.
+	reclaimLater [2]*node
 }
 
 func (t *Collection) Name() string {
@@ -117,13 +121,13 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	if err != nil {
 		return err
 	}
-	if !t.rootCAS(rnl, t.mkRootNodeLoc(r)) {
+	rnlNew := t.mkRootNodeLoc(r)
+	rnlNew.reclaimLater[0] = n // Can't reclaim n right now because r might point to n.
+	if !t.rootCAS(rnl, rnlNew) {
 		return errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
 	t.freeNodeLoc(nloc)
-	// Can't reclaim n right now because r might point to n.
-	// NO: t.reclaimNodes(n)
 	return nil
 }
 
@@ -156,13 +160,17 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	if !t.rootCAS(rnl, t.mkRootNodeLoc(r)) {
+	rnlNew := t.mkRootNodeLoc(r)
+	if !left.isEmpty() { // Can't reclaim left right now due to readers.
+		rnlNew.reclaimLater[0] = left.Node()
+	}
+	if !right.isEmpty() { // Can't reclaim right right now due to readers.
+		rnlNew.reclaimLater[1] = right.Node()
+	}
+	if !t.rootCAS(rnl, rnlNew) {
 		return false, errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
-	// Can't reclaim left/right right now due to readers.
-	// NO: t.reclaimNodes(left.Node())
-	// NO: t.reclaimNodes(right.Node())
 	t.freeNodeLoc(left)
 	t.freeNodeLoc(right)
 	return true, nil
@@ -369,7 +377,12 @@ func (t *Collection) rootDecRef_unlocked(r *rootNodeLoc) {
 	if r.chainedCollection != nil && r.chainedRootNodeLoc != nil {
 		r.chainedCollection.rootDecRef_unlocked(r.chainedRootNodeLoc)
 	}
-	t.reclaimNodes_unlocked(r.root.Node())
+	t.reclaimNodes_unlocked(r.root.Node(), &r.reclaimLater)
+	for i := 0; i < len(r.reclaimLater); i++ {
+		if r.reclaimLater[i] != nil {
+			t.reclaimNodes_unlocked(r.reclaimLater[i], nil)
+		}
+	}
 	t.freeNodeLoc(r.root)
 	t.freeRootNodeLoc(r)
 }
