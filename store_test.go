@@ -1345,12 +1345,16 @@ func TestJoinWithFileErrors(t *testing.T) {
 }
 
 func TestStoreStats(t *testing.T) {
+	freeNodes = nil
+
+	m := map[string]uint64{}
+	n := map[string]uint64{}
+
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
 		t.Errorf("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	m := map[string]uint64{}
 	s.Stats(m)
 	if m["fileSize"] != 0 {
 		t.Errorf("expected 0 fileSize, got: %v", m["fileSize"])
@@ -1360,30 +1364,30 @@ func TestStoreStats(t *testing.T) {
 	}
 
 	x.Set([]byte("hello"), []byte("world"))
-	s.Stats(m)
-	if m["fileSize"] != 0 {
-		t.Errorf("expected 0 fileSize, got: %v", m["fileSize"])
+	s.Stats(n)
+	if n["fileSize"] != m["fileSize"] {
+		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
 	}
-	if m["nodeAllocs"] != 1 {
-		t.Errorf("expected 1 nodeAllocs, got: %v", m["nodeAllocs"])
+	if n["nodeAllocs"] != m["nodeAllocs"] + 1 {
+		t.Errorf("expected 1 nodeAllocs, got: %#v, %#v", n, m)
 	}
 
 	x.Set([]byte("hello"), []byte("there"))
-	s.Stats(m)
-	if m["fileSize"] != 0 {
-		t.Errorf("expected 0 fileSize, got: %v", m["fileSize"])
+	s.Stats(n)
+	if n["fileSize"] != m["fileSize"] {
+		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
 	}
-	if m["nodeAllocs"] != 3 {
-		t.Errorf("expected 3 nodeAllocs, got: %v", m["nodeAllocs"])
+	if n["nodeAllocs"] != m["nodeAllocs"] + 3 {
+		t.Errorf("expected 3 nodeAllocs, got: %#v, %#v", n, m)
 	}
 
 	x.Delete([]byte("hello"))
-	s.Stats(m)
-	if m["fileSize"] != 0 {
-		t.Errorf("expected 0 fileSize, got: %v", m["fileSize"])
+	s.Stats(n)
+	if n["fileSize"] != m["fileSize"] {
+		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
 	}
-	if m["nodeAllocs"] != 3 {
-		t.Errorf("expected 3 nodeAllocs, got: %v", m["nodeAllocs"])
+	if n["nodeAllocs"] != m["nodeAllocs"] + 3 {
+		t.Errorf("expected 3 nodeAllocs, got: %#v, %#v", n, m)
 	}
 }
 

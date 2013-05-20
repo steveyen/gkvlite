@@ -1,11 +1,37 @@
 package gkvlite
 
 import (
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
 
 var reclaimable_node = &node{} // Sentinel.
+
+var freeNodeLock sync.Mutex
+var freeNodes *node
+
+var freeNodeLocLock sync.Mutex
+var freeNodeLocs *nodeLoc
+
+var freeRootNodeLocLock sync.Mutex
+var freeRootNodeLocs *rootNodeLoc
+
+var freeStats FreeStats
+
+type FreeStats struct {
+	MkNodes    int64
+	FreeNodes  int64
+	AllocNodes int64
+
+	MkNodeLocs    int64
+	FreeNodeLocs  int64
+	AllocNodeLocs int64
+
+	MkRootNodeLocs    int64
+	FreeRootNodeLocs  int64
+	AllocRootNodeLocs int64
+}
 
 func (t *Collection) markReclaimable(n *node) {
 	if n == nil || n.next != nil || n == reclaimable_node {
@@ -14,7 +40,7 @@ func (t *Collection) markReclaimable(n *node) {
 	n.next = reclaimable_node // Use next pointer as sentinel.
 }
 
-func (t *Collection) reclaimNodes(n *node) {
+func (t *Collection) reclaimNodes_unlocked(n *node) {
 	if n == nil {
 		return
 	}
@@ -29,25 +55,27 @@ func (t *Collection) reclaimNodes(n *node) {
 	if !n.right.isEmpty() {
 		right = n.right.Node()
 	}
-	t.freeNode(n)
-	t.reclaimNodes(left)
-	t.reclaimNodes(right)
+	t.freeNode_unlocked(n)
+	t.reclaimNodes_unlocked(left)
+	t.reclaimNodes_unlocked(right)
 }
 
 // Assumes that the caller serializes invocations.
 func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 	numNodesIn uint64, numBytesIn uint64) *node {
+	freeNodeLock.Lock()
+	freeStats.MkNodes++
 	t.stats.MkNodes++
-	t.freeLock.Lock()
-	n := t.freeNodes
+	n := freeNodes
 	if n == nil {
-		t.freeLock.Unlock()
-		atomic.AddUint64(&t.store.nodeAllocs, 1)
+		freeStats.AllocNodes++
 		t.stats.AllocNodes++
+		freeNodeLock.Unlock()
+		atomic.AddUint64(&t.store.nodeAllocs, 1)
 		n = &node{}
 	} else {
-		t.freeNodes = n.next
-		t.freeLock.Unlock()
+		freeNodes = n.next
+		freeNodeLock.Unlock()
 	}
 	n.item.Copy(itemIn)
 	n.left.Copy(leftIn)
@@ -58,7 +86,7 @@ func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 	return n
 }
 
-func (t *Collection) freeNode(n *node) {
+func (t *Collection) freeNode_unlocked(n *node) {
 	if n == nil || n == reclaimable_node {
 		return
 	}
@@ -71,22 +99,27 @@ func (t *Collection) freeNode(n *node) {
 	n.numNodes = 0
 	n.numBytes = 0
 
-	t.freeLock.Lock()
-	n.next = t.freeNodes
-	t.freeNodes = n
+	n.next = freeNodes
+	freeNodes = n
+	freeStats.FreeNodes++
 	t.stats.FreeNodes++
-	t.freeLock.Unlock()
 }
 
 // Assumes that the caller serializes invocations.
 func (t *Collection) mkNodeLoc(n *node) *nodeLoc {
+	freeNodeLocLock.Lock()
+	freeStats.MkNodeLocs++
 	t.stats.MkNodeLocs++
-	nloc := t.freeNodeLocs
+	nloc := freeNodeLocs
 	if nloc == nil {
+		freeStats.AllocNodeLocs++
 		t.stats.AllocNodeLocs++
+		freeNodeLocLock.Unlock()
 		nloc = &nodeLoc{}
+	} else {
+		freeNodeLocs = nloc.next
+		freeNodeLocLock.Unlock()
 	}
-	t.freeNodeLocs = nloc.next
 	nloc.loc = unsafe.Pointer(nil)
 	nloc.node = unsafe.Pointer(n)
 	nloc.next = nil
@@ -101,26 +134,36 @@ func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
 	if nloc.next != nil {
 		panic("double free nodeLoc")
 	}
-	t.stats.FreeNodeLocs++
 	nloc.loc = unsafe.Pointer(nil)
 	nloc.node = unsafe.Pointer(nil)
-	nloc.next = t.freeNodeLocs
-	t.freeNodeLocs = nloc
+
+	freeNodeLocLock.Lock()
+	nloc.next = freeNodeLocs
+	freeNodeLocs = nloc
+	freeStats.FreeNodeLocs++
+	t.stats.FreeNodeLocs++
+	freeNodeLocLock.Unlock()
 }
 
 func (t *Collection) mkRootNodeLoc(root *nodeLoc) *rootNodeLoc {
-	t.freeLock.Lock()
-	rnl := t.freeRootNodeLocs
+	freeRootNodeLocLock.Lock()
+	freeStats.MkRootNodeLocs++
+	t.stats.MkRootNodeLocs++
+	rnl := freeRootNodeLocs
 	if rnl == nil {
-		t.freeLock.Unlock()
+		freeStats.AllocRootNodeLocs++
+		t.stats.AllocRootNodeLocs++
+		freeRootNodeLocLock.Unlock()
 		rnl = &rootNodeLoc{}
 	} else {
-		t.freeRootNodeLocs = rnl.next
-		t.freeLock.Unlock()
+		freeRootNodeLocs = rnl.next
+		freeRootNodeLocLock.Unlock()
 	}
 	rnl.refs = 1
 	rnl.root = root
 	rnl.next = nil
+	rnl.chainedCollection = nil
+	rnl.chainedRootNodeLoc = nil
 	return rnl
 }
 
@@ -133,9 +176,13 @@ func (t *Collection) freeRootNodeLoc(rnl *rootNodeLoc) {
 	}
 	rnl.refs = 0
 	rnl.root = nil
+	rnl.chainedCollection = nil
+	rnl.chainedRootNodeLoc = nil
 
-	t.freeLock.Lock()
-	rnl.next = t.freeRootNodeLocs
-	t.freeRootNodeLocs = rnl
-	t.freeLock.Unlock()
+	freeRootNodeLocLock.Lock()
+	rnl.next = freeRootNodeLocs
+	freeRootNodeLocs = rnl
+	freeStats.FreeRootNodeLocs++
+	t.stats.FreeRootNodeLocs++
+	freeRootNodeLocLock.Unlock()
 }

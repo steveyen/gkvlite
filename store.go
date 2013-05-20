@@ -209,11 +209,28 @@ func (s *Store) Snapshot() (snapshot *Store) {
 			compare:  collOrig.compare,
 			rootLock: collOrig.rootLock,
 			root:     collOrig.rootAddRef(),
-			// TODO: The snapshot's refcounts are never released.
-			// Perhaps need a Close() method?
 		}
 	}
 	return res
+}
+
+func (s *Store) Close() {
+	s.file = nil
+	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
+	if coll == nil {
+		return
+	}
+	atomic.StorePointer(&s.coll, unsafe.Pointer(nil))
+	for _, name := range collNames(coll) {
+		c := coll[name]
+		c.rootLock.Lock()
+		r := c.root
+		c.root = nil
+		c.rootLock.Unlock()
+		if r != nil {
+			c.rootDecRef(r)
+		}
+	}
 }
 
 // Copy all active collections and their items to a different file.

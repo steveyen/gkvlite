@@ -23,28 +23,20 @@ type Collection struct {
 	rootLock *sync.Mutex
 	root     *rootNodeLoc // Protected by rootLock.
 
-	stats CollectionStats
-
-	freeLock         sync.Mutex
-	freeNodes        *node        // Protected by freeLock.
-	freeNodeLocs     *nodeLoc     // Not protected by freeLock.
-	freeRootNodeLocs *rootNodeLoc // Protected by freeLock.
-}
-
-type CollectionStats struct {
-	MkNodeLocs    int64
-	FreeNodeLocs  int64
-	AllocNodeLocs int64
-
-	MkNodes    int64
-	FreeNodes  int64
-	AllocNodes int64
+	stats FreeStats
 }
 
 type rootNodeLoc struct {
-	refs int64 // Atomic reference counter.
+	// The rootNodeLoc fields are protected by Collection.rootLock.
+	refs int64 // Reference counter.
 	root *nodeLoc
 	next *rootNodeLoc // For free-list tracking.
+
+	// We might own a reference count on another Collection/rootNodeLoc.
+	// When our reference drops to 0 and we're free'd, then also release
+	// our reference count on the next guy in the chain.
+	chainedCollection  *Collection
+	chainedRootNodeLoc *rootNodeLoc
 }
 
 func (t *Collection) Name() string {
@@ -309,7 +301,7 @@ func (t *Collection) Write() (err error) {
 }
 
 // Assumes that the caller serializes invocations w.r.t. mutations.
-func (t *Collection) Stats() CollectionStats {
+func (t *Collection) Stats() FreeStats {
 	return t.stats
 }
 
@@ -335,9 +327,22 @@ func (t *Collection) rootCAS(prev, next *rootNodeLoc) bool {
 	defer t.rootLock.Unlock()
 
 	if t.root != prev {
-		return false
+		return false // TODO: Callers need to release resources.
 	}
 	t.root = next
+
+	if prev != nil && prev.refs > 2 {
+		// Since the prev is in-use, hook up its chain to disallow
+		// next's nodes from being reclaimed until prev is done.
+		if prev.chainedCollection != nil ||
+			prev.chainedRootNodeLoc != nil {
+			panic(fmt.Sprintf("chain already taken, coll: %v", t.Name()))
+		}
+		prev.chainedCollection = t
+		prev.chainedRootNodeLoc = t.root
+		t.root.refs++ // This ref is owned by prev.
+	}
+
 	return true
 }
 
@@ -351,17 +356,23 @@ func (t *Collection) rootAddRef() *rootNodeLoc {
 
 func (t *Collection) rootDecRef(r *rootNodeLoc) {
 	t.rootLock.Lock()
+	freeNodeLock.Lock()
+	t.rootDecRef_unlocked(r)
+	freeNodeLock.Unlock()
+	t.rootLock.Unlock()
+}
+
+func (t *Collection) rootDecRef_unlocked(r *rootNodeLoc) {
 	r.refs--
 	if r.refs > 0 {
-		t.rootLock.Unlock()
 		return
 	}
-	t.rootLock.Unlock()
 
-	if r.root.isEmpty() {
-		return
+	if r.chainedCollection != nil && r.chainedRootNodeLoc != nil {
+		r.chainedCollection.rootDecRef_unlocked(r.chainedRootNodeLoc)
 	}
-	t.reclaimNodes(r.root.Node())
+	t.reclaimNodes_unlocked(r.root.Node())
+
 	t.freeNodeLoc(r.root)
 	t.freeRootNodeLoc(r)
 }
