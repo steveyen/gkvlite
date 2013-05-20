@@ -1127,9 +1127,14 @@ func TestWasDeleted(t *testing.T) {
 func BenchmarkSets(b *testing.B) {
 	s, _ := NewStore(nil)
 	x := s.SetCollection("x", nil)
+	keys := make([][]byte, 1000)
+	for i := 0; i < len(keys); i++ {
+		keys[i] = []byte(strconv.Itoa(i % 1000))
+	}
 	v := []byte("")
+	b.ResetTimer() // Ignore time from above.
 	for i := 0; i < b.N; i++ {
-		x.Set([]byte(strconv.Itoa(i)), v)
+		x.Set(keys[i%len(keys)], v)
 	}
 }
 
