@@ -34,6 +34,8 @@ type FreeStats struct {
 }
 
 func (t *Collection) markReclaimable(n *node) {
+	t.rootLock.Lock()
+	defer t.rootLock.Unlock()
 	if n == nil || n.next != nil || n == reclaimable_node {
 		return
 	}
