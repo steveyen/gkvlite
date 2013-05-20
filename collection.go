@@ -349,7 +349,6 @@ func (t *Collection) rootCAS(prev, next *rootNodeLoc) bool {
 func (t *Collection) rootAddRef() *rootNodeLoc {
 	t.rootLock.Lock()
 	defer t.rootLock.Unlock()
-
 	t.root.refs++
 	return t.root
 }
@@ -367,12 +366,10 @@ func (t *Collection) rootDecRef_unlocked(r *rootNodeLoc) {
 	if r.refs > 0 {
 		return
 	}
-
 	if r.chainedCollection != nil && r.chainedRootNodeLoc != nil {
 		r.chainedCollection.rootDecRef_unlocked(r.chainedRootNodeLoc)
 	}
 	t.reclaimNodes_unlocked(r.root.Node())
-
 	t.freeNodeLoc(r.root)
 	t.freeRootNodeLoc(r)
 }
