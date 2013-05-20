@@ -112,13 +112,14 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc) (
 	res = t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, newRight,
 		leftNum+rightNum+1,
 		leftBytes+rightBytes+uint64(thatItem.NumBytes(t))))
+	middleNode := middle.Node()
 	t.freeNodeLoc(left)
 	t.freeNodeLoc(right)
 	t.freeNodeLoc(middle)
 	t.freeNodeLoc(newLeft)
 	t.freeNodeLoc(newRight)
 	t.markReclaimable(thatNode)
-	t.markReclaimable(middle.Node())
+	t.markReclaimable(middleNode)
 	return res, nil
 }
 

@@ -42,12 +42,9 @@ func (t *Collection) markReclaimable(n *node) {
 	n.next = reclaimable_node // Use next pointer as sentinel.
 }
 
-func (t *Collection) reclaimNodes_unlocked(n *node, reclaimLater *[2]*node) {
+func (t *Collection) reclaimNodes_unlocked(n *node, reclaimLater *[2]*node) int64 {
 	if n == nil {
-		return
-	}
-	if n.next != reclaimable_node {
-		return
+		return 0
 	}
 	if reclaimLater != nil {
 		for i := 0; i < len(reclaimLater); i++ {
@@ -55,6 +52,9 @@ func (t *Collection) reclaimNodes_unlocked(n *node, reclaimLater *[2]*node) {
 				reclaimLater[i] = nil
 			}
 		}
+	}
+	if n.next != reclaimable_node {
+		return 0
 	}
 	var left *node
 	var right *node
@@ -65,8 +65,9 @@ func (t *Collection) reclaimNodes_unlocked(n *node, reclaimLater *[2]*node) {
 		right = n.right.Node()
 	}
 	t.freeNode_unlocked(n)
-	t.reclaimNodes_unlocked(left, reclaimLater)
-	t.reclaimNodes_unlocked(right, reclaimLater)
+	numLeft := t.reclaimNodes_unlocked(left, reclaimLater)
+	numRight := t.reclaimNodes_unlocked(right, reclaimLater)
+	return 1 + numLeft + numRight
 }
 
 // Assumes that the caller serializes invocations.

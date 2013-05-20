@@ -34,8 +34,7 @@ func (nloc *nodeLoc) Node() *node {
 
 func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
 	if src == nil {
-		nloc.Copy(empty_nodeLoc)
-		return nloc
+		return nloc.Copy(empty_nodeLoc)
 	}
 	atomic.StorePointer(&nloc.loc, unsafe.Pointer(src.Loc()))
 	atomic.StorePointer(&nloc.node, unsafe.Pointer(src.Node()))
