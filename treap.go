@@ -150,6 +150,9 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 	}
 
 	if c < 0 {
+		if nNode.left.isEmpty() {
+			return empty_nodeLoc, empty_nodeLoc, t.mkNodeLoc(nil).Copy(n), nil
+		}
 		left, middle, right, err := o.split(t, &nNode.left, s)
 		if err != nil {
 			return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
@@ -166,6 +169,9 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte) (
 		return left, middle, newRight, nil
 	}
 
+	if nNode.right.isEmpty() {
+		return t.mkNodeLoc(nil).Copy(n), empty_nodeLoc, empty_nodeLoc, nil
+	}
 	left, middle, right, err := o.split(t, &nNode.right, s)
 	if err != nil {
 		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
