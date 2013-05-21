@@ -141,3 +141,20 @@ func numInfo(o *Store, left *nodeLoc, right *nodeLoc) (
 	}
 	return leftNum, leftBytes, rightNum, rightBytes, nil
 }
+
+func dump(o *Store, n *nodeLoc, level int) {
+	if n.isEmpty() {
+		return
+	}
+	nNode, _ := n.read(o)
+	dump(o, &nNode.left, level + 1)
+	dumpIndent(level)
+	fmt.Printf("%p - %v\n", nNode, string(nNode.item.Item().Key))
+	dump(o, &nNode.right, level + 1)
+}
+
+func dumpIndent(level int) {
+	for i := 0; i < level; i++ {
+		fmt.Print(" ")
+	}
+}
