@@ -20,17 +20,20 @@ var freeRootNodeLocs *rootNodeLoc
 var freeStats FreeStats
 
 type FreeStats struct {
-	MkNodes    int64
-	FreeNodes  int64
-	AllocNodes int64
+	MkNodes      int64
+	FreeNodes    int64 // Number of invocations of the freeNode() API.
+	AllocNodes   int64
+	CurFreeNodes int64 // Current length of freeNodes list.
 
-	MkNodeLocs    int64
-	FreeNodeLocs  int64
-	AllocNodeLocs int64
+	MkNodeLocs      int64
+	FreeNodeLocs    int64 // Number of invocations of the freeNodeLoc() API.
+	AllocNodeLocs   int64
+	CurFreeNodeLocs int64 // Current length of freeNodeLocs list.
 
-	MkRootNodeLocs    int64
-	FreeRootNodeLocs  int64
-	AllocRootNodeLocs int64
+	MkRootNodeLocs      int64
+	FreeRootNodeLocs    int64 // Number of invocations of the freeRootNodeLoc() API.
+	AllocRootNodeLocs   int64
+	CurFreeRootNodeLocs int64 // Current length of freeRootNodeLocs list.
 }
 
 func (t *Collection) markReclaimable(n *node) {
@@ -95,6 +98,7 @@ func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 		n = &node{}
 	} else {
 		freeNodes = n.next
+		freeStats.CurFreeNodes--
 		freeNodeLock.Unlock()
 	}
 	n.item.Copy(itemIn)
@@ -121,6 +125,7 @@ func (t *Collection) freeNode_unlocked(n *node) {
 
 	n.next = freeNodes
 	freeNodes = n
+	freeStats.CurFreeNodes++
 	freeStats.FreeNodes++
 	t.stats.FreeNodes++
 }
@@ -138,6 +143,7 @@ func (t *Collection) mkNodeLoc(n *node) *nodeLoc {
 		nloc = &nodeLoc{}
 	} else {
 		freeNodeLocs = nloc.next
+		freeStats.CurFreeNodeLocs--
 		freeNodeLocLock.Unlock()
 	}
 	nloc.loc = unsafe.Pointer(nil)
@@ -160,6 +166,7 @@ func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
 	freeNodeLocLock.Lock()
 	nloc.next = freeNodeLocs
 	freeNodeLocs = nloc
+	freeStats.CurFreeNodeLocs++
 	freeStats.FreeNodeLocs++
 	t.stats.FreeNodeLocs++
 	freeNodeLocLock.Unlock()
@@ -177,6 +184,7 @@ func (t *Collection) mkRootNodeLoc(root *nodeLoc) *rootNodeLoc {
 		rnl = &rootNodeLoc{}
 	} else {
 		freeRootNodeLocs = rnl.next
+		freeStats.CurFreeRootNodeLocs--
 		freeRootNodeLocLock.Unlock()
 	}
 	rnl.refs = 1
@@ -207,6 +215,7 @@ func (t *Collection) freeRootNodeLoc(rnl *rootNodeLoc) {
 	freeRootNodeLocLock.Lock()
 	rnl.next = freeRootNodeLocs
 	freeRootNodeLocs = rnl
+	freeStats.CurFreeRootNodeLocs++
 	freeStats.FreeRootNodeLocs++
 	t.stats.FreeRootNodeLocs++
 	freeRootNodeLocLock.Unlock()
