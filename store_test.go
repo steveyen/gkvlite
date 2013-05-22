@@ -1595,3 +1595,21 @@ func TestItemCopy(t *testing.T) {
 		t.Errorf("expected item copy to work")
 	}
 }
+
+func TestCurFreeNodes(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	n := x.mkNode(empty_itemLoc, empty_nodeLoc, empty_nodeLoc, 0, 0)
+	f := freeStats
+	x.freeNode_unlocked(n)
+	if f.FreeNodes + 1 != freeStats.FreeNodes {
+		t.Errorf("expected freeNodes to increment")
+	}
+	if f.CurFreeNodes + 1 != freeStats.CurFreeNodes {
+		t.Errorf("expected CurFreeNodes + 1 == freeStats.CurrFreeNodes, got: %v, %v",
+			f.CurFreeNodes + 1, freeStats.CurFreeNodes)
+	}
+}
