@@ -1657,4 +1657,27 @@ func TestStoreClose(t *testing.T) {
 	if s.coll != unsafe.Pointer(nil) {
 		t.Errorf("expected no coll after Close()")
 	}
+	s.Close()
+	if s.coll != unsafe.Pointer(nil) {
+		t.Errorf("expected no coll after re-Close()")
+	}
+	s.Close()
+	if s.coll != unsafe.Pointer(nil) {
+		t.Errorf("expected no coll after re-Close()")
+	}
+
+	// Now, with a collection
+	s, _ = NewStore(nil)
+	s.SetCollection("x", bytes.Compare)
+	if s.coll == unsafe.Pointer(nil) {
+		t.Errorf("expected coll before Close()")
+	}
+	s.Close()
+	if s.coll != unsafe.Pointer(nil) {
+		t.Errorf("expected no coll after Close()")
+	}
+	s.Close()
+	if s.coll != unsafe.Pointer(nil) {
+		t.Errorf("expected no coll after Close()")
+	}
 }
