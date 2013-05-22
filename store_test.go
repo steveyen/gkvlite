@@ -1614,6 +1614,26 @@ func TestCurFreeNodes(t *testing.T) {
 	}
 }
 
+func TestCollectionStats(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	g := x.Stats()
+	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+	h := x.Stats()
+	if h.MkNodes <= g.MkNodes {
+		t.Errorf("expected MkNodes to be more")
+	}
+	if h.MkNodeLocs <= g.MkNodeLocs {
+		t.Errorf("expected MkNodeLocs to be more")
+	}
+	if h.MkRootNodeLocs <= g.MkRootNodeLocs {
+		t.Errorf("expected MkRootNodeLocs to be more")
+	}
+}
+
 func TestStoreClose(t *testing.T) {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
