@@ -1613,3 +1613,17 @@ func TestCurFreeNodes(t *testing.T) {
 			f.CurFreeNodes + 1, freeStats.CurFreeNodes)
 	}
 }
+
+func TestStoreClose(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	if s.coll == unsafe.Pointer(nil) {
+		t.Errorf("expected coll before Close()")
+	}
+	s.Close()
+	if s.coll != unsafe.Pointer(nil) {
+		t.Errorf("expected no coll after Close()")
+	}
+}
