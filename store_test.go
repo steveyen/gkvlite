@@ -1681,3 +1681,27 @@ func TestStoreClose(t *testing.T) {
 		t.Errorf("expected no coll after Close()")
 	}
 }
+
+func TestItemNumValBytes(t *testing.T) {
+	var x *Collection
+	var h *Item
+	s, err := NewStoreEx(nil, StoreCallbacks{
+		ItemValLength: func(c *Collection, i *Item) int {
+			if c != x {
+				t.Errorf("expected colls to be the same")
+			}
+			if h != i {
+				t.Errorf("expected items to be the same")
+			}
+			return 1313
+		},
+	})
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x = s.SetCollection("x", bytes.Compare)
+	h = &Item{}
+	if 1313 != h.NumValBytes(x) {
+		t.Errorf("expected NumValBytes to be 1313")
+	}
+}
