@@ -1581,3 +1581,17 @@ func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
 		t.Errorf("expected 0 items, got: %v", m)
 	}
 }
+
+func TestItemCopy(t *testing.T) {
+	i := &Item{
+		Key: []byte("hi"),
+		Val: []byte("world"),
+		Priority: 1234,
+		Transient: unsafe.Pointer(&node{}),
+	}
+	j := i.Copy()
+	if !bytes.Equal(j.Key, i.Key) || !bytes.Equal(j.Val, i.Val) ||
+		j.Priority != i.Priority || j.Transient != i.Transient {
+		t.Errorf("expected item copy to work")
+	}
+}
