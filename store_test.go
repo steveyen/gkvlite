@@ -1634,6 +1634,17 @@ func TestCollectionStats(t *testing.T) {
 	}
 }
 
+func TestDump(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
+	fmt.Printf("testing dump\n")
+	dump(s, x.root.root, 1)
+}
+
 func TestStoreClose(t *testing.T) {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
