@@ -73,16 +73,6 @@ func (t *Collection) reclaimNodes_unlocked(n *node, reclaimLater *[2]*node) int6
 	return 1 + numLeft + numRight
 }
 
-func numFreeNodes() int64 {
-	freeNodeLock.Lock()
-	defer freeNodeLock.Unlock()
-	i := int64(0)
-	for n := freeNodes; n != nil; n = n.next {
-		i++
-	}
-	return i
-}
-
 // Assumes that the caller serializes invocations.
 func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 	numNodesIn uint64, numBytesIn uint64) *node {
