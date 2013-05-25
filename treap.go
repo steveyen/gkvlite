@@ -1,5 +1,9 @@
 package gkvlite
 
+import (
+	"fmt"
+)
+
 // The core algorithms for treaps are straightforward.  However, that
 // algorithmic simplicity is obscured by the additional useful
 // features of gkvlite, such as persistence, garbage-avoidance, stats
@@ -294,6 +298,9 @@ func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,
 	nItem, err := nItemLoc.read(t, false)
 	if err != nil {
 		return false, err
+	}
+	if nItem == nil {
+		panic(fmt.Sprintf("visitNodes nItem nil: %#v", nNode))
 	}
 	choice, choiceT, choiceF := choiceFunc(t.compare(target, nItem.Key), nNode)
 	if choice {
