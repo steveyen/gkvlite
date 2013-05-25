@@ -1705,3 +1705,41 @@ func TestItemNumValBytes(t *testing.T) {
 		t.Errorf("expected NumValBytes to be 1313")
 	}
 }
+
+func TestReclaimRootChain(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	x.SetItem(&Item{
+		Key:      []byte("a"),
+		Val:      []byte("aaa"),
+		Priority: 100,
+	})
+	x.SetItem(&Item{
+		Key:      []byte("b"),
+		Val:      []byte("bbb"),
+		Priority: 200,
+	})
+	s2 := s.Snapshot()
+	x2 := s2.GetCollection("x")
+	x.SetItem(&Item{
+		Key:      []byte("b"),
+		Val:      []byte("bbbb"),
+		Priority: 200,
+	})
+	x.SetItem(&Item{
+		Key:      []byte("a"),
+		Val:      []byte("aaaa"),
+		Priority: 100,
+	})
+	v, err := x.Get([]byte("a"))
+	if v == nil || !bytes.Equal(v, []byte("aaaa")) {
+		t.Errorf("expected aaaa, got: %v\n", v)
+	}
+	v, err = x2.Get([]byte("a"))
+	if v == nil || !bytes.Equal(v, []byte("aaa")) {
+		t.Errorf("expected aaa, got: %v\n", v)
+	}
+}
