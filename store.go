@@ -182,7 +182,19 @@ func (s *Store) Flush() error {
 		return errors.New("no file / in-memory only, so cannot Flush()")
 	}
 	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
-	for _, name := range collNames(coll) {
+	cnames := collNames(coll)
+	rnls := map[*Collection]*rootNodeLoc{}
+	for _, name := range cnames {
+		c := coll[name]
+		rnls[c] = c.rootAddRef()
+	}
+	defer func() {
+		for c, rnl := range(rnls) {
+			c.rootDecRef(rnl)
+		}
+	}()
+
+	for _, name := range cnames {
 		if err := coll[name].Write(); err != nil {
 			return err
 		}
