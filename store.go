@@ -97,13 +97,17 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 		coll := copyColl(*(*map[string]*Collection)(orig))
 		cnew := s.MakePrivateCollection(compare)
 		cnew.name = name
-		if coll[name] != nil {
-			cnew.root = coll[name].rootAddRef()
+		cold := coll[name]
+		if cold != nil {
+			cnew.rootLock = cold.rootLock
+			cnew.root = cold.rootAddRef()
 		}
 		coll[name] = cnew
 		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
+			cold.closeCollection()
 			return cnew
 		}
+		cnew.closeCollection()
 	}
 }
 
@@ -147,8 +151,10 @@ func (s *Store) RemoveCollection(name string) {
 	for {
 		orig := atomic.LoadPointer(&s.coll)
 		coll := copyColl(*(*map[string]*Collection)(orig))
+		cold := coll[name]
 		delete(coll, name)
 		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
+			cold.closeCollection()
 			return
 		}
 	}
@@ -223,14 +229,7 @@ func (s *Store) Close() {
 	coll := *(*map[string]*Collection)(cptr)
 	atomic.StorePointer(&s.coll, unsafe.Pointer(nil))
 	for _, name := range collNames(coll) {
-		c := coll[name]
-		c.rootLock.Lock()
-		r := c.root
-		c.root = nil
-		c.rootLock.Unlock()
-		if r != nil {
-			c.rootDecRef(r)
-		}
+		coll[name].closeCollection()
 	}
 }
 

@@ -47,6 +47,19 @@ func (t *Collection) Name() string {
 	return t.name
 }
 
+func (t *Collection) closeCollection() { // Just "close" is a keyword.
+	if t == nil {
+		return
+	}
+	t.rootLock.Lock()
+	r := t.root
+	t.root = nil
+	t.rootLock.Unlock()
+	if r != nil {
+		t.rootDecRef(r)
+	}
+}
+
 // Retrieve an item by its key.  Use withValue of false if you don't
 // need the item's value (Item.Val may be nil), which might be able
 // to save on I/O and memory resources, especially for large values.
