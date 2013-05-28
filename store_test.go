@@ -1280,7 +1280,7 @@ func TestJoinWithFileErrors(t *testing.T) {
 	errAfter = 0x10000000 // Attempt with no errors.
 	numReads = 0
 
-	res, err = s2.join(x2, root, empty_nodeLoc)
+	res, err = s2.join(x2, root, empty_nodeLoc, nil)
 	if err != nil {
 		t.Errorf("expected no error")
 	}
@@ -1336,7 +1336,7 @@ func TestJoinWithFileErrors(t *testing.T) {
 		errAfter = i
 		numReads = 0
 
-		res, err = s2.join(x2, root2, root3)
+		res, err = s2.join(x2, root2, root3, nil)
 		if err == nil {
 			t.Errorf("expected error due to mockfile errorAfter %v, got nil", errAfter)
 		}
@@ -1604,7 +1604,7 @@ func TestCurFreeNodes(t *testing.T) {
 	x := s.SetCollection("x", bytes.Compare)
 	n := x.mkNode(empty_itemLoc, empty_nodeLoc, empty_nodeLoc, 0, 0)
 	f := freeStats
-	x.freeNode_unlocked(n)
+	x.freeNode_unlocked(n, nil)
 	if f.FreeNodes + 1 != freeStats.FreeNodes {
 		t.Errorf("expected freeNodes to increment")
 	}
@@ -1739,6 +1739,59 @@ func TestReclaimRootChain(t *testing.T) {
 		t.Errorf("expected aaaa, got: %v\n", v)
 	}
 	v, err = x2.Get([]byte("a"))
+	if v == nil || !bytes.Equal(v, []byte("aaa")) {
+		t.Errorf("expected aaa, got: %v\n", v)
+	}
+}
+
+func TestReclaimRootChainMultipleMutations(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	x.SetItem(&Item{
+		Key:      []byte("a"),
+		Val:      []byte("aaa"),
+		Priority: 100,
+	})
+	x.SetItem(&Item{
+		Key:      []byte("b"),
+		Val:      []byte("bbb"),
+		Priority: 200,
+	})
+	s2 := s.Snapshot()
+	x2 := s2.GetCollection("x")
+	x.SetItem(&Item{
+		Key:      []byte("b"),
+		Val:      []byte("bbbb"),
+		Priority: 200,
+	})
+	s3 := s.Snapshot()
+	x3 := s3.GetCollection("x")
+	x.SetItem(&Item{
+		Key:      []byte("a"),
+		Val:      []byte("aaaa"),
+		Priority: 100,
+	})
+	v, err := x.Get([]byte("a"))
+	if v == nil || !bytes.Equal(v, []byte("aaaa")) {
+		t.Errorf("expected aaaa, got: %v\n", v)
+	}
+	v, err = x2.Get([]byte("a"))
+	if v == nil || !bytes.Equal(v, []byte("aaa")) {
+		t.Errorf("expected aaa, got: %v\n", v)
+	}
+	v, err = x3.Get([]byte("a"))
+	if v == nil || !bytes.Equal(v, []byte("aaa")) {
+		t.Errorf("expected aaaa, got: %v\n", v)
+	}
+	s2.Close()
+	v, err = x.Get([]byte("a"))
+	if v == nil || !bytes.Equal(v, []byte("aaaa")) {
+		t.Errorf("expected aaaa, got: %v\n", v)
+	}
+	v, err = x3.Get([]byte("a"))
 	if v == nil || !bytes.Equal(v, []byte("aaa")) {
 		t.Errorf("expected aaa, got: %v\n", v)
 	}

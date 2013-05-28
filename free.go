@@ -6,8 +6,6 @@ import (
 	"unsafe"
 )
 
-var reclaimable_node = &node{} // Sentinel.
-
 var freeNodeLock sync.Mutex
 var freeNodes *node
 
@@ -36,16 +34,17 @@ type FreeStats struct {
 	CurFreeRootNodeLocs int64 // Current length of freeRootNodeLocs list.
 }
 
-func (t *Collection) markReclaimable(n *node) {
+func (t *Collection) markReclaimable(n *node, reclaimMark *node) {
 	t.rootLock.Lock()
 	defer t.rootLock.Unlock()
-	if n == nil || n.next != nil || n == reclaimable_node {
+	if n == nil || n.next != nil || n == reclaimMark {
 		return
 	}
-	n.next = reclaimable_node // Use next pointer as sentinel.
+	n.next = reclaimMark
 }
 
-func (t *Collection) reclaimNodes_unlocked(n *node, reclaimLater *[2]*node) int64 {
+func (t *Collection) reclaimNodes_unlocked(n *node,
+	reclaimLater *[2]*node, reclaimMark *node) int64 {
 	if n == nil {
 		return 0
 	}
@@ -56,7 +55,7 @@ func (t *Collection) reclaimNodes_unlocked(n *node, reclaimLater *[2]*node) int6
 			}
 		}
 	}
-	if n.next != reclaimable_node {
+	if n.next != reclaimMark {
 		return 0
 	}
 	var left *node
@@ -67,9 +66,9 @@ func (t *Collection) reclaimNodes_unlocked(n *node, reclaimLater *[2]*node) int6
 	if !n.right.isEmpty() {
 		right = n.right.Node()
 	}
-	t.freeNode_unlocked(n)
-	numLeft := t.reclaimNodes_unlocked(left, reclaimLater)
-	numRight := t.reclaimNodes_unlocked(right, reclaimLater)
+	t.freeNode_unlocked(n, reclaimMark)
+	numLeft := t.reclaimNodes_unlocked(left, reclaimLater, reclaimMark)
+	numRight := t.reclaimNodes_unlocked(right, reclaimLater, reclaimMark)
 	return 1 + numLeft + numRight
 }
 
@@ -100,11 +99,11 @@ func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 	return n
 }
 
-func (t *Collection) freeNode_unlocked(n *node) {
-	if n == nil || n == reclaimable_node {
+func (t *Collection) freeNode_unlocked(n *node, reclaimMark *node) {
+	if n == nil || n == reclaimMark {
 		return
 	}
-	if n.next != nil && n.next != reclaimable_node {
+	if n.next != nil && n.next != reclaimMark {
 		panic("double free node")
 	}
 	n.item = *empty_itemLoc

@@ -32,6 +32,8 @@ type rootNodeLoc struct {
 	root *nodeLoc
 	next *rootNodeLoc // For free-list tracking.
 
+	reclaimMark node // Address is used as a sentinel.
+
 	// We might own a reference count on another Collection/rootNodeLoc.
 	// When our reference drops to 0 and we're free'd, then also release
 	// our reference count on the next guy in the chain.
@@ -130,7 +132,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	n := t.mkNode(nil, nil, nil, 1, uint64(len(item.Key))+uint64(item.NumValBytes(t)))
 	n.item.item = unsafe.Pointer(item) // Avoid garbage via separate init.
 	nloc := t.mkNodeLoc(n)
-	r, err := t.store.union(t, root, nloc)
+	r, err := t.store.union(t, root, nloc, &rnl.reclaimMark)
 	if err != nil {
 		return err
 	}
@@ -158,7 +160,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if err != nil || i == nil {
 		return false, err
 	}
-	left, middle, right, err := t.store.split(t, root, key)
+	left, middle, right, err := t.store.split(t, root, key, &rnl.reclaimMark)
 	if err != nil {
 		return false, err
 	}
@@ -167,9 +169,9 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	}
 	// TODO: Even though we markReclaimable() the middle node, there
 	// might not be a pathway to it during reclaimation.
-	t.markReclaimable(middle.Node())
+	t.markReclaimable(middle.Node(), &rnl.reclaimMark)
 	t.freeNodeLoc(middle)
-	r, err := t.store.join(t, left, right)
+	r, err := t.store.join(t, left, right, &rnl.reclaimMark)
 	if err != nil {
 		return false, err
 	}
@@ -390,10 +392,10 @@ func (t *Collection) rootDecRef_unlocked(r *rootNodeLoc) {
 	if r.chainedCollection != nil && r.chainedRootNodeLoc != nil {
 		r.chainedCollection.rootDecRef_unlocked(r.chainedRootNodeLoc)
 	}
-	t.reclaimNodes_unlocked(r.root.Node(), &r.reclaimLater)
+	t.reclaimNodes_unlocked(r.root.Node(), &r.reclaimLater, &r.reclaimMark)
 	for i := 0; i < len(r.reclaimLater); i++ {
 		if r.reclaimLater[i] != nil {
-			t.reclaimNodes_unlocked(r.reclaimLater[i], nil)
+			t.reclaimNodes_unlocked(r.reclaimLater[i], nil, &r.reclaimMark)
 		}
 	}
 	t.freeNodeLoc(r.root)
