@@ -183,23 +183,22 @@ func (s *Store) Flush() error {
 	}
 	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
 	cnames := collNames(coll)
-	rnls := map[*Collection]*rootNodeLoc{}
+	rnls := map[string]*rootNodeLoc{}
 	for _, name := range cnames {
 		c := coll[name]
-		rnls[c] = c.rootAddRef()
+		rnls[name] = c.rootAddRef()
 	}
 	defer func() {
-		for c, rnl := range(rnls) {
-			c.rootDecRef(rnl)
+		for _, name := range cnames {
+			coll[name].rootDecRef(rnls[name])
 		}
 	}()
-
 	for _, name := range cnames {
 		if err := coll[name].Write(); err != nil {
 			return err
 		}
 	}
-	return s.writeRoots()
+	return s.writeRoots(coll)
 }
 
 // Returns a non-persistable snapshot, including any mutations that
@@ -318,8 +317,7 @@ func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
 	return nloc.write(o) // Write nodes in children-first order.
 }
 
-func (o *Store) writeRoots() error {
-	coll := *(*map[string]*Collection)(atomic.LoadPointer(&o.coll))
+func (o *Store) writeRoots(coll map[string]*Collection) error {
 	sJSON, err := json.Marshal(coll)
 	if err != nil {
 		return err
