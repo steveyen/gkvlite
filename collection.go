@@ -138,6 +138,9 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	}
 	rnlNew := t.mkRootNodeLoc(r)
 	rnlNew.reclaimLater[0] = n // Can't reclaim n right now because r might point to n.
+	if rnlNew.reclaimLater[0].next == &rnl.reclaimMark {
+		rnlNew.reclaimLater[0].next = &rnlNew.reclaimMark
+	}
 	if !t.rootCAS(rnl, rnlNew) {
 		return errors.New("concurrent mutation attempted")
 	}
@@ -178,9 +181,15 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	rnlNew := t.mkRootNodeLoc(r)
 	if !left.isEmpty() { // Can't reclaim left right now due to readers.
 		rnlNew.reclaimLater[0] = left.Node()
+		if rnlNew.reclaimLater[0].next == &rnl.reclaimMark {
+			rnlNew.reclaimLater[0].next = &rnlNew.reclaimMark
+		}
 	}
 	if !right.isEmpty() { // Can't reclaim right right now due to readers.
 		rnlNew.reclaimLater[1] = right.Node()
+		if rnlNew.reclaimLater[1].next == &rnl.reclaimMark {
+			rnlNew.reclaimLater[1].next = &rnlNew.reclaimMark
+		}
 	}
 	if !t.rootCAS(rnl, rnlNew) {
 		return false, errors.New("concurrent mutation attempted")
