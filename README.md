@@ -254,6 +254,11 @@ TRADEOFF: the append-only persistence design means file sizes will
 grow until there's a compaction.  To get a compacted file, use
 CopyTo() with a high "flushEvery" argument.
 
+The append-only file format allows the FlushRevert() API (undo the
+changes on a file) to have a simple implementation of scanning
+backwards in the file for the next-to-last good root record and
+truncating the file at that point.
+
 TRADEOFF: the append-only design means it's possible for an advanced
 adversary to corrupt a gkvlite file by cleverly storing the bytes of a
 valid gkvlite root record as a value; however, they would need to know
