@@ -119,6 +119,16 @@ Other features
   with clever collection naming you can know that the main collection
   will always be "ahead of" the secondary-index collection even with
   concurrent flushing.
+* A Store can be reverted using the FlushRevert() API to revert the
+  last Flush().  This brings the state of a Store back to where it was
+  as of the next-to-last Flush().  This allows the application to
+  rollback or undo changes on a persisted file.
+* Reverted snapshots (calling FlushRevert() on a snapshot) does not
+  affect (is isolated from) the original Store and does not affect the
+  underlying file.  Calling FlushRevert() on the main Store, however,
+  will adversely affect any active snapshots; where the application
+  should stop using any snapshots that were created before the
+  FlushRevert() invocation on the main Store.
 * To evict O(log N) number of items from memory, call
   Collection.EvictSomeItems(), which traverses a random tree branch
   and evicts any clean (already persisted) items found during that
