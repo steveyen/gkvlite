@@ -32,6 +32,7 @@ type StoreFile interface {
 	io.ReaderAt
 	io.WriterAt
 	Stat() (os.FileInfo, error)
+	Truncate(size int64) error
 }
 
 // Allows applications to override or interpose before/after events.
@@ -64,6 +65,9 @@ const VERSION = uint32(4)
 
 var MAGIC_BEG []byte = []byte("0g1t2r")
 var MAGIC_END []byte = []byte("3e4a5p")
+
+var rootsEndLen int = 8 + 4 + 2*len(MAGIC_END)
+var rootsLen int64 = int64(2*len(MAGIC_BEG) + 4 + 4 + rootsEndLen)
 
 // Provide a nil StoreFile for in-memory-only (non-persistent) usage.
 func NewStore(file StoreFile) (*Store, error) {
@@ -199,6 +203,31 @@ func (s *Store) Flush() error {
 		}
 	}
 	return s.writeRoots(coll)
+}
+
+// Reverts the last Flush(), bringing the Store back to its state at
+// its next-to-last Flush() or to an empty Store (with no Collections)
+// if there were no next-to-last Flush().  This call will truncate the
+// Store file.
+func (s *Store) FlushRevert() error {
+	if s.file == nil {
+		return errors.New("no file / in-memory only, so cannot FlushRevert()")
+	}
+	orig := atomic.LoadPointer(&s.coll)
+	coll := make(map[string]*Collection)
+	if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
+		for _, cold := range *(*map[string]*Collection)(orig) {
+			cold.closeCollection()
+		}
+	}
+	if atomic.LoadInt64(&s.size) > rootsLen {
+		atomic.AddInt64(&s.size, -1)
+	}
+	err := s.readRootsScan(true)
+	if err != nil {
+		return err
+	}
+	return s.file.Truncate(atomic.LoadInt64(&s.size))
 }
 
 // Returns a non-persistable snapshot, including any mutations that
@@ -350,23 +379,26 @@ func (o *Store) readRoots() error {
 	if o.size <= 0 {
 		return nil
 	}
-	return o.readRootsScan()
+	return o.readRootsScan(false)
 }
 
-func (o *Store) readRootsScan() (err error) {
-	endBArr := make([]byte, 8+4+2*len(MAGIC_END))
-	minSize := int64(2*len(MAGIC_BEG) + 4 + 4 + len(endBArr))
+func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
+	rootsEnd := make([]byte, rootsEndLen)
 	for {
 		for { // Scan backwards for MAGIC_END.
-			if atomic.LoadInt64(&o.size) <= minSize {
+			if atomic.LoadInt64(&o.size) <= rootsLen {
+				if defaultToEmpty {
+					atomic.StoreInt64(&o.size, 0)
+					return nil
+				}
 				return errors.New("couldn't find roots; file corrupted or wrong?")
 			}
-			if _, err := o.file.ReadAt(endBArr,
-				atomic.LoadInt64(&o.size)-int64(len(endBArr))); err != nil {
+			if _, err := o.file.ReadAt(rootsEnd,
+				atomic.LoadInt64(&o.size)-int64(len(rootsEnd))); err != nil {
 				return err
 			}
-			if bytes.Equal(MAGIC_END, endBArr[8+4:8+4+len(MAGIC_END)]) &&
-				bytes.Equal(MAGIC_END, endBArr[8+4+len(MAGIC_END):]) {
+			if bytes.Equal(MAGIC_END, rootsEnd[8+4:8+4+len(MAGIC_END)]) &&
+				bytes.Equal(MAGIC_END, rootsEnd[8+4+len(MAGIC_END):]) {
 				break
 			}
 			atomic.AddInt64(&o.size, -1) // TODO: optimizations to scan backwards faster.
@@ -374,7 +406,7 @@ func (o *Store) readRootsScan() (err error) {
 		// Read and check the roots.
 		var offset int64
 		var length uint32
-		endBuf := bytes.NewBuffer(endBArr)
+		endBuf := bytes.NewBuffer(rootsEnd)
 		err = binary.Read(endBuf, binary.BigEndian, &offset)
 		if err != nil {
 			return err
@@ -382,9 +414,9 @@ func (o *Store) readRootsScan() (err error) {
 		if err = binary.Read(endBuf, binary.BigEndian, &length); err != nil {
 			return err
 		}
-		if offset >= 0 && offset < atomic.LoadInt64(&o.size)-int64(minSize) &&
+		if offset >= 0 && offset < atomic.LoadInt64(&o.size)-int64(rootsLen) &&
 			length == uint32(atomic.LoadInt64(&o.size)-offset) {
-			data := make([]byte, atomic.LoadInt64(&o.size)-offset-int64(len(endBArr)))
+			data := make([]byte, atomic.LoadInt64(&o.size)-offset-int64(len(rootsEnd)))
 			if _, err := o.file.ReadAt(data, offset); err != nil {
 				return err
 			}

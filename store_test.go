@@ -14,12 +14,17 @@ import (
 )
 
 type mockfile struct {
-	f       *os.File
-	readat  func(p []byte, off int64) (n int, err error)
-	writeat func(p []byte, off int64) (n int, err error)
+	f           *os.File
+	readat      func(p []byte, off int64) (n int, err error)
+	writeat     func(p []byte, off int64) (n int, err error)
+	numReadAt   int
+	numWriteAt  int
+	numStat     int
+	numTruncate int
 }
 
 func (m *mockfile) ReadAt(p []byte, off int64) (n int, err error) {
+	m.numReadAt++
 	if m.readat != nil {
 		return m.readat(p, off)
 	}
@@ -27,6 +32,7 @@ func (m *mockfile) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 func (m *mockfile) WriteAt(p []byte, off int64) (n int, err error) {
+	m.numWriteAt++
 	if m.writeat != nil {
 		return m.writeat(p, off)
 	}
@@ -34,7 +40,13 @@ func (m *mockfile) WriteAt(p []byte, off int64) (n int, err error) {
 }
 
 func (m *mockfile) Stat() (fi os.FileInfo, err error) {
+	m.numStat++
 	return m.f.Stat()
+}
+
+func (m *mockfile) Truncate(size int64) error {
+	m.numTruncate++
+	return m.f.Truncate(size)
 }
 
 func TestStoreMem(t *testing.T) {
@@ -1238,8 +1250,21 @@ func TestJoinWithFileErrors(t *testing.T) {
 
 	sOrig, _ := NewStore(m)
 	xOrig := sOrig.SetCollection("x", nil)
+	if m.numStat != 1 {
+		t.Errorf("expected 1 numStat, got: %#v", m)
+	}
+	if m.numTruncate != 0 {
+		t.Errorf("expected 0 truncates, got: %#v", m)
+	}
+
 	loadCollection(xOrig, []string{"a", "b", "c", "d", "e", "f"})
 	sOrig.Flush()
+	if m.numStat != 1 {
+		t.Errorf("expected 1 numStat, got: %#v", m)
+	}
+	if m.numTruncate != 0 {
+		t.Errorf("expected 0 truncates, got: %#v", m)
+	}
 
 	fname2 := "tmp2.test"
 	os.Remove(fname2)
@@ -1584,9 +1609,9 @@ func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
 
 func TestItemCopy(t *testing.T) {
 	i := &Item{
-		Key: []byte("hi"),
-		Val: []byte("world"),
-		Priority: 1234,
+		Key:       []byte("hi"),
+		Val:       []byte("world"),
+		Priority:  1234,
 		Transient: unsafe.Pointer(&node{}),
 	}
 	j := i.Copy()
@@ -1605,12 +1630,12 @@ func TestCurFreeNodes(t *testing.T) {
 	n := x.mkNode(empty_itemLoc, empty_nodeLoc, empty_nodeLoc, 0, 0)
 	f := freeStats
 	x.freeNode_unlocked(n, nil)
-	if f.FreeNodes + 1 != freeStats.FreeNodes {
+	if f.FreeNodes+1 != freeStats.FreeNodes {
 		t.Errorf("expected freeNodes to increment")
 	}
-	if f.CurFreeNodes + 1 != freeStats.CurFreeNodes {
+	if f.CurFreeNodes+1 != freeStats.CurFreeNodes {
 		t.Errorf("expected CurFreeNodes + 1 == freeStats.CurrFreeNodes, got: %v, %v",
-			f.CurFreeNodes + 1, freeStats.CurFreeNodes)
+			f.CurFreeNodes+1, freeStats.CurFreeNodes)
 	}
 }
 
@@ -1794,5 +1819,135 @@ func TestReclaimRootChainMultipleMutations(t *testing.T) {
 	v, err = x3.Get([]byte("a"))
 	if v == nil || !bytes.Equal(v, []byte("aaa")) {
 		t.Errorf("expected aaa, got: %v\n", v)
+	}
+}
+
+func TestMemoryFlushRevert(t *testing.T) {
+	s, _ := NewStore(nil)
+	err := s.FlushRevert()
+	if err == nil {
+		t.Errorf("expected memory-only FlushRevert to fail")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	x.SetItem(&Item{
+		Key:      []byte("a"),
+		Val:      []byte("aaa"),
+		Priority: 100,
+	})
+	err = s.FlushRevert()
+	if err == nil {
+		t.Errorf("expected memory-only FlushRevert to fail")
+	}
+}
+
+func TestFlushRevertEmptyStore(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	s, _ := NewStore(f)
+	err := s.FlushRevert()
+	if err != nil {
+		t.Errorf("expected flush revert on empty store to work, err: %v", err)
+	}
+	s.SetCollection("x", nil)
+	err = s.FlushRevert()
+	if err != nil {
+		t.Errorf("expected flush revert on empty store to work, err: %v", err)
+	}
+	if s.GetCollection("x") != nil {
+		t.Errorf("expected flush revert to provide no collections")
+	}
+	s.Flush()
+	err = s.FlushRevert()
+	if err != nil {
+		t.Errorf("expected flush revert on empty store to work, err: %v", err)
+	}
+	if s.GetCollection("x") != nil {
+		t.Errorf("expected flush revert to provide no collections")
+	}
+	stat, err := f.Stat()
+	if err != nil {
+		t.Errorf("expected stat to work")
+	}
+	if stat.Size() != 0 {
+		t.Errorf("expected file size to be 0, got: %v", stat.Size())
+	}
+}
+
+func TestFlushRevert(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, err := os.Create(fname)
+	s, _ := NewStore(f)
+	x := s.SetCollection("x", nil)
+	x.SetItem(&Item{
+		Key:      []byte("a"),
+		Val:      []byte("aaa"),
+		Priority: 100,
+	})
+	s.Flush()
+	stat0, err := f.Stat()
+	if err != nil {
+		t.Errorf("expected stat to work")
+	}
+	if stat0.Size() <= rootsLen {
+		t.Errorf("expected file size to be >0, got: %v", stat0.Size())
+	}
+	x.SetItem(&Item{
+		Key:      []byte("b"),
+		Val:      []byte("bbb"),
+		Priority: 200,
+	})
+	s.Flush()
+	stat1, err := f.Stat()
+	if err != nil {
+		t.Errorf("expected stat to work")
+	}
+	if stat1.Size() <= stat0.Size()+rootsLen {
+		t.Errorf("expected file size to be larger, got: %v vs %v",
+			stat1.Size(), stat0.Size()+rootsLen)
+	}
+	err = s.FlushRevert()
+	if err != nil {
+		t.Errorf("expected flush revert on empty store to work, err: %v", err)
+	}
+	x = s.GetCollection("x")
+	if x == nil {
+		t.Errorf("expected flush revert to still have collection x")
+	}
+	stat3, err := f.Stat()
+	if err != nil {
+		t.Errorf("expected stat to work")
+	}
+	if stat3.Size() != stat0.Size() {
+		t.Errorf("expected post-flush-revert file size to be reverted, got: %v vs %v",
+			stat3.Size(), stat0.Size())
+	}
+	aval, err := x.Get([]byte("a"))
+	if err != nil || aval == nil || string(aval) != "aaa" {
+		t.Errorf("expected post-flush-revert a to be there, got: %v, %v", aval, err)
+	}
+	bval, err := x.Get([]byte("b"))
+	if err != nil || bval != nil {
+		t.Errorf("expected post-flush-revert b to be gone, got: %v, %v", bval, err)
+	}
+	visitExpectCollection(t, x, "a", []string{"a"}, nil)
+	for i := 0; i < 10; i++ {
+		err = s.FlushRevert()
+		if err != nil {
+			t.Errorf("expected another flush revert to work, err: %v", err)
+		}
+		x = s.GetCollection("x")
+		if x != nil {
+			t.Errorf("expected flush revert to still have no collection")
+		}
+		statx, err := f.Stat()
+		if err != nil {
+			t.Errorf("expected stat to work")
+		}
+		if statx.Size() != 0 {
+			t.Errorf("expected too many flush-revert to bring file size 0, got: %v",
+				statx.Size())
+		}
 	}
 }
