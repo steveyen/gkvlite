@@ -350,6 +350,10 @@ func (o *Store) readRoots() error {
 	if o.size <= 0 {
 		return nil
 	}
+	return o.readRootsScan()
+}
+
+func (o *Store) readRootsScan() (err error) {
 	endBArr := make([]byte, 8+4+2*len(MAGIC_END))
 	minSize := int64(2*len(MAGIC_BEG) + 4 + 4 + len(endBArr))
 	for {
