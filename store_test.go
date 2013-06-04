@@ -1907,6 +1907,52 @@ func TestFlushRevert(t *testing.T) {
 		t.Errorf("expected file size to be larger, got: %v vs %v",
 			stat1.Size(), stat0.Size()+rootsLen)
 	}
+
+	ss := s.Snapshot()
+	err = ss.FlushRevert()
+	if err != nil {
+		t.Errorf("expected flush revert on empty store to work, err: %v", err)
+	}
+	x = ss.GetCollection("x")
+	if x == nil {
+		t.Errorf("expected flush revert to still have collection x")
+	}
+	sstat3, err := f.Stat()
+	if err != nil {
+		t.Errorf("expected stat to work")
+	}
+	if sstat3.Size() != stat1.Size() {
+		t.Errorf("expected snapshot post-flush-revert file size to same, got: %v vs %v",
+			sstat3.Size(), stat1.Size())
+	}
+	aval, err := x.Get([]byte("a"))
+	if err != nil || aval == nil || string(aval) != "aaa" {
+		t.Errorf("expected post-flush-revert a to be there, got: %v, %v", aval, err)
+	}
+	bval, err := x.Get([]byte("b"))
+	if err != nil || bval != nil {
+		t.Errorf("expected post-flush-revert b to be gone, got: %v, %v", bval, err)
+	}
+	visitExpectCollection(t, x, "a", []string{"a"}, nil)
+	for i := 0; i < 10; i++ {
+		err = ss.FlushRevert()
+		if err != nil {
+			t.Errorf("expected another flush revert to work, err: %v", err)
+		}
+		x = ss.GetCollection("x")
+		if x != nil {
+			t.Errorf("expected flush revert to still have no collection")
+		}
+		statx, err := f.Stat()
+		if err != nil {
+			t.Errorf("expected stat to work")
+		}
+		if statx.Size() != stat1.Size() {
+			t.Errorf("expected snapshot flush-revert to have same file size, got: %v",
+				statx.Size())
+		}
+	}
+
 	err = s.FlushRevert()
 	if err != nil {
 		t.Errorf("expected flush revert on empty store to work, err: %v", err)
@@ -1923,11 +1969,11 @@ func TestFlushRevert(t *testing.T) {
 		t.Errorf("expected post-flush-revert file size to be reverted, got: %v vs %v",
 			stat3.Size(), stat0.Size())
 	}
-	aval, err := x.Get([]byte("a"))
+	aval, err = x.Get([]byte("a"))
 	if err != nil || aval == nil || string(aval) != "aaa" {
 		t.Errorf("expected post-flush-revert a to be there, got: %v, %v", aval, err)
 	}
-	bval, err := x.Get([]byte("b"))
+	bval, err = x.Get([]byte("b"))
 	if err != nil || bval != nil {
 		t.Errorf("expected post-flush-revert b to be gone, got: %v, %v", bval, err)
 	}

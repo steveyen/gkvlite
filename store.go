@@ -227,6 +227,9 @@ func (s *Store) FlushRevert() error {
 	if err != nil {
 		return err
 	}
+	if s.readOnly {
+		return nil
+	}
 	return s.file.Truncate(atomic.LoadInt64(&s.size))
 }
 
