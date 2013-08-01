@@ -316,6 +316,11 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 	return nil
 }
 
+func (t *Collection) AllocStats() (res AllocStats) {
+	withAllocLocks(func() { res = t.allocStats })
+	return res
+}
+
 // Writes dirty items of a collection BUT (WARNING) does NOT write new
 // root records.  Use Store.Flush() to write root records, which would
 // make these writes visible to the next file re-opening/re-loading.
@@ -330,12 +335,6 @@ func (t *Collection) Write() (err error) {
 		return err
 	}
 	return nil
-}
-
-// Assumes that the caller serializes invocations w.r.t. mutations.
-func (t *Collection) AllocStats() (res AllocStats) {
-	withAllocLocks(func() { res = t.allocStats })
-	return res
 }
 
 func (t *Collection) writeItems(nloc *nodeLoc) (err error) {
