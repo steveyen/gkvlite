@@ -332,18 +332,18 @@ func (s *Store) Stats(out map[string]uint64) {
 	out["nodeAllocs"] = atomic.LoadUint64(&s.nodeAllocs)
 }
 
-func (o *Store) flushNodes(nloc *nodeLoc) (err error) {
+func (o *Store) writeNodes(nloc *nodeLoc) (err error) {
 	if nloc == nil || !nloc.Loc().isEmpty() {
-		return nil // Flush only non-empty, unpersisted nodes.
+		return nil // Write only non-empty, unpersisted nodes.
 	}
 	node := nloc.Node()
 	if node == nil {
 		return nil
 	}
-	if err = o.flushNodes(&node.left); err != nil {
+	if err = o.writeNodes(&node.left); err != nil {
 		return err
 	}
-	if err = o.flushNodes(&node.right); err != nil {
+	if err = o.writeNodes(&node.right); err != nil {
 		return err
 	}
 	return nloc.write(o) // Write nodes in children-first order.

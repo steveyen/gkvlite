@@ -323,10 +323,10 @@ func (t *Collection) Write() (err error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
 	root := rnl.root
-	if err = t.flushItems(root); err != nil {
+	if err = t.writeItems(root); err != nil {
 		return err
 	}
-	if err = t.store.flushNodes(root); err != nil {
+	if err = t.store.writeNodes(root); err != nil {
 		return err
 	}
 	return nil
@@ -338,21 +338,21 @@ func (t *Collection) AllocStats() (res AllocStats) {
 	return res
 }
 
-func (t *Collection) flushItems(nloc *nodeLoc) (err error) {
+func (t *Collection) writeItems(nloc *nodeLoc) (err error) {
 	if nloc == nil || !nloc.Loc().isEmpty() {
-		return nil // Flush only unpersisted items of non-empty, unpersisted nodes.
+		return nil // Write only unpersisted items of non-empty, unpersisted nodes.
 	}
 	node := nloc.Node()
 	if node == nil {
 		return nil
 	}
-	if err = t.flushItems(&node.left); err != nil {
+	if err = t.writeItems(&node.left); err != nil {
 		return err
 	}
 	if err = node.item.write(t); err != nil { // Write items in key order.
 		return err
 	}
-	return t.flushItems(&node.right)
+	return t.writeItems(&node.right)
 }
 
 func (t *Collection) rootCAS(prev, next *rootNodeLoc) bool {
