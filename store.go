@@ -332,23 +332,6 @@ func (s *Store) Stats(out map[string]uint64) {
 	out["nodeAllocs"] = atomic.LoadUint64(&s.nodeAllocs)
 }
 
-func (o *Store) writeNodes(nloc *nodeLoc) (err error) {
-	if nloc == nil || !nloc.Loc().isEmpty() {
-		return nil // Write only non-empty, unpersisted nodes.
-	}
-	node := nloc.Node()
-	if node == nil {
-		return nil
-	}
-	if err = o.writeNodes(&node.left); err != nil {
-		return err
-	}
-	if err = o.writeNodes(&node.right); err != nil {
-		return err
-	}
-	return nloc.write(o) // Write nodes in children-first order.
-}
-
 func (o *Store) writeRoots(rnls map[string]*rootNodeLoc) error {
 	sJSON, err := json.Marshal(rnls)
 	if err != nil {

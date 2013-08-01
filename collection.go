@@ -339,7 +339,7 @@ func (t *Collection) write(nloc *nodeLoc) error {
 	if err := t.writeItems(nloc); err != nil {
 		return err
 	}
-	if err := t.store.writeNodes(nloc); err != nil {
+	if err := t.writeNodes(nloc); err != nil {
 		return err
 	}
 	return nil
@@ -360,6 +360,23 @@ func (t *Collection) writeItems(nloc *nodeLoc) (err error) {
 		return err
 	}
 	return t.writeItems(&node.right)
+}
+
+func (t *Collection) writeNodes(nloc *nodeLoc) (err error) {
+	if nloc == nil || !nloc.Loc().isEmpty() {
+		return nil // Write only non-empty, unpersisted nodes.
+	}
+	node := nloc.Node()
+	if node == nil {
+		return nil
+	}
+	if err = t.writeNodes(&node.left); err != nil {
+		return err
+	}
+	if err = t.writeNodes(&node.right); err != nil {
+		return err
+	}
+	return nloc.write(t.store) // Write nodes in children-first order.
 }
 
 func (t *Collection) rootCAS(prev, next *rootNodeLoc) bool {
