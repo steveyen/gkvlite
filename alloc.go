@@ -15,9 +15,9 @@ var freeNodeLocs *nodeLoc
 var freeRootNodeLocLock sync.Mutex
 var freeRootNodeLocs *rootNodeLoc
 
-var freeStats FreeStats
+var allocStats AllocStats
 
-type FreeStats struct {
+type AllocStats struct {
 	MkNodes      int64
 	FreeNodes    int64 // Number of invocations of the freeNode() API.
 	AllocNodes   int64
@@ -32,6 +32,16 @@ type FreeStats struct {
 	FreeRootNodeLocs    int64 // Number of invocations of the freeRootNodeLoc() API.
 	AllocRootNodeLocs   int64
 	CurFreeRootNodeLocs int64 // Current length of freeRootNodeLocs list.
+}
+
+func withAllocLocks(cb func()) {
+	freeNodeLock.Lock()
+	freeNodeLocLock.Lock()
+	freeRootNodeLocLock.Lock()
+	defer freeNodeLock.Unlock()
+	defer freeNodeLocLock.Unlock()
+	defer freeRootNodeLocLock.Unlock()
+	cb()
 }
 
 func (t *Collection) markReclaimable(n *node, reclaimMark *node) {
@@ -76,18 +86,18 @@ func (t *Collection) reclaimNodes_unlocked(n *node,
 func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 	numNodesIn uint64, numBytesIn uint64) *node {
 	freeNodeLock.Lock()
-	freeStats.MkNodes++
-	t.stats.MkNodes++
+	allocStats.MkNodes++
+	t.allocStats.MkNodes++
 	n := freeNodes
 	if n == nil {
-		freeStats.AllocNodes++
-		t.stats.AllocNodes++
+		allocStats.AllocNodes++
+		t.allocStats.AllocNodes++
 		freeNodeLock.Unlock()
 		atomic.AddUint64(&t.store.nodeAllocs, 1)
 		n = &node{}
 	} else {
 		freeNodes = n.next
-		freeStats.CurFreeNodes--
+		allocStats.CurFreeNodes--
 		freeNodeLock.Unlock()
 	}
 	n.item.Copy(itemIn)
@@ -114,25 +124,25 @@ func (t *Collection) freeNode_unlocked(n *node, reclaimMark *node) {
 
 	n.next = freeNodes
 	freeNodes = n
-	freeStats.CurFreeNodes++
-	freeStats.FreeNodes++
-	t.stats.FreeNodes++
+	allocStats.CurFreeNodes++
+	allocStats.FreeNodes++
+	t.allocStats.FreeNodes++
 }
 
 // Assumes that the caller serializes invocations.
 func (t *Collection) mkNodeLoc(n *node) *nodeLoc {
 	freeNodeLocLock.Lock()
-	freeStats.MkNodeLocs++
-	t.stats.MkNodeLocs++
+	allocStats.MkNodeLocs++
+	t.allocStats.MkNodeLocs++
 	nloc := freeNodeLocs
 	if nloc == nil {
-		freeStats.AllocNodeLocs++
-		t.stats.AllocNodeLocs++
+		allocStats.AllocNodeLocs++
+		t.allocStats.AllocNodeLocs++
 		freeNodeLocLock.Unlock()
 		nloc = &nodeLoc{}
 	} else {
 		freeNodeLocs = nloc.next
-		freeStats.CurFreeNodeLocs--
+		allocStats.CurFreeNodeLocs--
 		freeNodeLocLock.Unlock()
 	}
 	nloc.loc = unsafe.Pointer(nil)
@@ -155,25 +165,25 @@ func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
 	freeNodeLocLock.Lock()
 	nloc.next = freeNodeLocs
 	freeNodeLocs = nloc
-	freeStats.CurFreeNodeLocs++
-	freeStats.FreeNodeLocs++
-	t.stats.FreeNodeLocs++
+	allocStats.CurFreeNodeLocs++
+	allocStats.FreeNodeLocs++
+	t.allocStats.FreeNodeLocs++
 	freeNodeLocLock.Unlock()
 }
 
 func (t *Collection) mkRootNodeLoc(root *nodeLoc) *rootNodeLoc {
 	freeRootNodeLocLock.Lock()
-	freeStats.MkRootNodeLocs++
-	t.stats.MkRootNodeLocs++
+	allocStats.MkRootNodeLocs++
+	t.allocStats.MkRootNodeLocs++
 	rnl := freeRootNodeLocs
 	if rnl == nil {
-		freeStats.AllocRootNodeLocs++
-		t.stats.AllocRootNodeLocs++
+		allocStats.AllocRootNodeLocs++
+		t.allocStats.AllocRootNodeLocs++
 		freeRootNodeLocLock.Unlock()
 		rnl = &rootNodeLoc{}
 	} else {
 		freeRootNodeLocs = rnl.next
-		freeStats.CurFreeRootNodeLocs--
+		allocStats.CurFreeRootNodeLocs--
 		freeRootNodeLocLock.Unlock()
 	}
 	rnl.refs = 1
@@ -204,8 +214,8 @@ func (t *Collection) freeRootNodeLoc(rnl *rootNodeLoc) {
 	freeRootNodeLocLock.Lock()
 	rnl.next = freeRootNodeLocs
 	freeRootNodeLocs = rnl
-	freeStats.CurFreeRootNodeLocs++
-	freeStats.FreeRootNodeLocs++
-	t.stats.FreeRootNodeLocs++
+	allocStats.CurFreeRootNodeLocs++
+	allocStats.FreeRootNodeLocs++
+	t.allocStats.FreeRootNodeLocs++
 	freeRootNodeLocLock.Unlock()
 }

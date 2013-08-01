@@ -1628,14 +1628,14 @@ func TestCurFreeNodes(t *testing.T) {
 	}
 	x := s.SetCollection("x", bytes.Compare)
 	n := x.mkNode(empty_itemLoc, empty_nodeLoc, empty_nodeLoc, 0, 0)
-	f := freeStats
+	f := allocStats
 	x.freeNode_unlocked(n, nil)
-	if f.FreeNodes+1 != freeStats.FreeNodes {
+	if f.FreeNodes+1 != allocStats.FreeNodes {
 		t.Errorf("expected freeNodes to increment")
 	}
-	if f.CurFreeNodes+1 != freeStats.CurFreeNodes {
-		t.Errorf("expected CurFreeNodes + 1 == freeStats.CurrFreeNodes, got: %v, %v",
-			f.CurFreeNodes+1, freeStats.CurFreeNodes)
+	if f.CurFreeNodes+1 != allocStats.CurFreeNodes {
+		t.Errorf("expected CurFreeNodes + 1 == allocStats.CurrFreeNodes, got: %v, %v",
+			f.CurFreeNodes+1, allocStats.CurFreeNodes)
 	}
 }
 
@@ -1645,9 +1645,9 @@ func TestCollectionStats(t *testing.T) {
 		t.Errorf("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	g := x.Stats()
+	g := x.AllocStats()
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
-	h := x.Stats()
+	h := x.AllocStats()
 	if h.MkNodes <= g.MkNodes {
 		t.Errorf("expected MkNodes to be more")
 	}

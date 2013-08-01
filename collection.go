@@ -23,7 +23,7 @@ type Collection struct {
 	rootLock *sync.Mutex
 	root     *rootNodeLoc // Protected by rootLock.
 
-	stats FreeStats
+	allocStats AllocStats // User must serialize access (e.g., see locks in alloc.go).
 }
 
 type rootNodeLoc struct {
@@ -333,8 +333,9 @@ func (t *Collection) Write() (err error) {
 }
 
 // Assumes that the caller serializes invocations w.r.t. mutations.
-func (t *Collection) Stats() FreeStats {
-	return t.stats
+func (t *Collection) AllocStats() (res AllocStats) {
+	withAllocLocks(func() { res = t.allocStats })
+	return res
 }
 
 func (t *Collection) flushItems(nloc *nodeLoc) (err error) {
