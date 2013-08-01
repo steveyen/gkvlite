@@ -292,6 +292,11 @@ func (t *Collection) GetTotals() (numItems uint64, numBytes uint64, err error) {
 func (t *Collection) MarshalJSON() ([]byte, error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
+	return rnl.MarshalJSON()
+}
+
+// Returns JSON representation of root node file location.
+func (rnl *rootNodeLoc) MarshalJSON() ([]byte, error) {
 	loc := rnl.root.Loc()
 	if loc.isEmpty() {
 		return json.Marshal(ploc_empty)
@@ -324,14 +329,17 @@ func (t *Collection) AllocStats() (res AllocStats) {
 // Writes dirty items of a collection BUT (WARNING) does NOT write new
 // root records.  Use Store.Flush() to write root records, which would
 // make these writes visible to the next file re-opening/re-loading.
-func (t *Collection) Write() (err error) {
+func (t *Collection) Write() error {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
-	root := rnl.root
-	if err = t.writeItems(root); err != nil {
+	return t.write(rnl.root)
+}
+
+func (t *Collection) write(nloc *nodeLoc) error {
+	if err := t.writeItems(nloc); err != nil {
 		return err
 	}
-	if err = t.store.writeNodes(root); err != nil {
+	if err := t.store.writeNodes(nloc); err != nil {
 		return err
 	}
 	return nil

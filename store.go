@@ -186,8 +186,8 @@ func (s *Store) Flush() error {
 		return errors.New("no file / in-memory only, so cannot Flush()")
 	}
 	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
-	cnames := collNames(coll)
 	rnls := map[string]*rootNodeLoc{}
+	cnames := collNames(coll)
 	for _, name := range cnames {
 		c := coll[name]
 		rnls[name] = c.rootAddRef()
@@ -198,11 +198,11 @@ func (s *Store) Flush() error {
 		}
 	}()
 	for _, name := range cnames {
-		if err := coll[name].Write(); err != nil {
+		if err := coll[name].write(rnls[name].root); err != nil {
 			return err
 		}
 	}
-	return s.writeRoots(coll)
+	return s.writeRoots(rnls)
 }
 
 // Reverts the last Flush(), bringing the Store back to its state at
@@ -349,8 +349,8 @@ func (o *Store) writeNodes(nloc *nodeLoc) (err error) {
 	return nloc.write(o) // Write nodes in children-first order.
 }
 
-func (o *Store) writeRoots(coll map[string]*Collection) error {
-	sJSON, err := json.Marshal(coll)
+func (o *Store) writeRoots(rnls map[string]*rootNodeLoc) error {
+	sJSON, err := json.Marshal(rnls)
 	if err != nil {
 		return err
 	}
