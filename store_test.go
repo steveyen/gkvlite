@@ -2070,3 +2070,29 @@ func TestCollectionMisc(t *testing.T) {
 	}
 	i.Key = []byte("a")
 }
+
+func TestDoubleFreeNode(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	n := x.mkNode(nil, nil, nil, 1, 0)
+	c := 0
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("expected panic with double free")
+		}
+		if c != 2 {
+			t.Errorf("expected c to be 2")
+		}
+	}()
+	withAllocLocks(func() {
+		x.freeNode_unlocked(nil, nil)
+		c++
+		x.freeNode_unlocked(n, nil)
+		c++
+		x.freeNode_unlocked(n, nil)
+		c++
+	})
+}
