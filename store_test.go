@@ -2171,6 +2171,31 @@ func TestNumInfo(t *testing.T) {
 	}
 }
 
+func TestWriteEmptyItemsErr(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	defer os.Remove(fname)
+
+	writeShouldErr := false
+	m := &mockfile{
+		f: f,
+		writeat: func(p []byte, off int64) (n int, err error) {
+			if writeShouldErr {
+				return 0, errors.New("mockfile error")
+			}
+			return f.WriteAt(p, off)
+		},
+	}
+
+	s, _ := NewStore(m)
+
+	writeShouldErr = true
+	if s.Flush() == nil {
+		t.Errorf("expected Flush() to error")
+	}
+}
+
 func TestWriteItemsErr(t *testing.T) {
 	fname := "tmp.test"
 	os.Remove(fname)
@@ -2211,4 +2236,3 @@ func TestWriteItemsErr(t *testing.T) {
 		t.Errorf("expected Flush() to error")
 	}
 }
-
