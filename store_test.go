@@ -1997,3 +1997,25 @@ func TestFlushRevert(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectionMisc(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	b, err := x.MarshalJSON()
+	if err != nil {
+		t.Errorf("expected MarshalJSON to work")
+	}
+	c, err := x.rootAddRef().MarshalJSON()
+	if err != nil {
+		t.Errorf("expected MarshalJSON to work")
+	}
+	if !bytes.Equal(b, c) {
+		t.Errorf("expected MarshalJSON to be same")
+	}
+	if x.Write() != nil {
+		t.Errorf("expected Write to be nil")
+	}
+}
