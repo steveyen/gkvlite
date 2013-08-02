@@ -2024,4 +2024,16 @@ func TestCollectionMisc(t *testing.T) {
 	if x.UnmarshalJSON([]byte("{}")) == nil {
 		t.Errorf("expected UnmarshalJSON to fail")
 	}
+	i := &Item{
+		Key:      []byte("a"),
+		Val:      []byte("aaa"),
+		Priority: 100,
+	}
+	x.SetItem(i)
+	i.Key = nil // Introduce bad condition.
+	_, err = x.Get([]byte("a"))
+	if err == nil {
+		t.Errorf("expected Get() to err")
+	}
+	i.Key = []byte("a")
 }
