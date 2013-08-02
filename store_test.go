@@ -2307,3 +2307,41 @@ func TestStatErr(t *testing.T) {
 		t.Errorf("expected store open to fail due to stat err")
 	}
 }
+
+func TestNodeLocWriteErr(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	defer os.Remove(fname)
+
+	writeShouldErr := false
+	m := &mockfile{
+		f: f,
+		writeat: func(p []byte, off int64) (n int, err error) {
+			if writeShouldErr {
+				return 0, errors.New("mockfile error")
+			}
+			return f.WriteAt(p, off)
+		},
+	}
+
+	s, _ := NewStore(m)
+	x := s.SetCollection("x", nil)
+	x.SetItem(&Item{
+		Key:      []byte("b"),
+		Val:      []byte("bbb"),
+		Priority: 100,
+	})
+	rnl := x.rootAddRef()
+
+	writeShouldErr = true
+	if rnl.root.write(s) == nil {
+		t.Errorf("expected write node to fail")
+	}
+	writeShouldErr = false
+
+	rnl.root.node = unsafe.Pointer(nil) // Force a nil node.
+	if rnl.root.write(s) != nil {
+		t.Errorf("expected write node on nil node to work")
+	}
+}
