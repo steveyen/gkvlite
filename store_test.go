@@ -2041,6 +2041,15 @@ func TestCollectionMisc(t *testing.T) {
 		t.Errorf("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
+
+	e0, e1, e2, err := s.split(x, empty_nodeLoc, nil, nil)
+	if err != nil ||
+		e0 != empty_nodeLoc ||
+		e1 != empty_nodeLoc ||
+		e2 != empty_nodeLoc {
+		t.Errorf("expected split of empty node loc to be empty")
+	}
+
 	b, err := x.MarshalJSON()
 	if err != nil {
 		t.Errorf("expected MarshalJSON to work")
