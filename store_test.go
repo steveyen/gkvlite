@@ -17,6 +17,7 @@ type mockfile struct {
 	f           *os.File
 	readat      func(p []byte, off int64) (n int, err error)
 	writeat     func(p []byte, off int64) (n int, err error)
+	stat        func() (fi os.FileInfo, err error)
 	numReadAt   int
 	numWriteAt  int
 	numStat     int
@@ -41,6 +42,9 @@ func (m *mockfile) WriteAt(p []byte, off int64) (n int, err error) {
 
 func (m *mockfile) Stat() (fi os.FileInfo, err error) {
 	m.numStat++
+	if m.stat != nil {
+		return m.stat()
+	}
 	return m.f.Stat()
 }
 
@@ -2260,5 +2264,37 @@ func TestWriteItemsErr(t *testing.T) {
 	writeShouldErr = true
 	if s.Flush() == nil {
 		t.Errorf("expected Flush() to error")
+	}
+}
+
+func TestStatErr(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, err := os.Create(fname)
+	defer os.Remove(fname)
+
+	s, _ := NewStore(f)
+	x := s.SetCollection("x", nil)
+	x.SetItem(&Item{
+		Key:      []byte("a"),
+		Val:      []byte("aaa"),
+		Priority: 100,
+	})
+	s.Flush()
+
+	f2, err := os.Open(fname) // Test reading the file.
+
+	m := &mockfile{
+		f: f2,
+		stat: func() (fi os.FileInfo, err error) {
+			return nil, errors.New("mockfile error")
+		},
+	}
+	s2, err := NewStore(m)
+	if err == nil {
+		t.Errorf("expected store open to fail due to stat err")
+	}
+	if s2 != nil {
+		t.Errorf("expected store open to fail due to stat err")
 	}
 }
