@@ -2018,4 +2018,10 @@ func TestCollectionMisc(t *testing.T) {
 	if x.Write() != nil {
 		t.Errorf("expected Write to be nil")
 	}
+	if x.UnmarshalJSON([]byte{0}) == nil {
+		t.Errorf("expected UnmarshalJSON to fail")
+	}
+	if x.UnmarshalJSON([]byte("{}")) == nil {
+		t.Errorf("expected UnmarshalJSON to fail")
+	}
 }
