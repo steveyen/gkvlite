@@ -2122,6 +2122,32 @@ func TestDoubleFreeNodeLoc(t *testing.T) {
 	c++
 }
 
+func TestDoubleFreeRootNodeLoc(t *testing.T) {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	n := x.mkNode(nil, nil, nil, 1, 0)
+	nl := x.mkNodeLoc(n)
+	rnl := x.mkRootNodeLoc(nl)
+	c := 0
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("expected panic with double free")
+		}
+		if c != 2 {
+			t.Errorf("expected c to be 2")
+		}
+	}()
+	x.freeRootNodeLoc(nil)
+	c++
+	x.freeRootNodeLoc(rnl)
+	c++
+	x.freeRootNodeLoc(rnl)
+	c++
+}
+
 func TestNodeLocRead(t *testing.T) {
 	var nl *nodeLoc
 	n, err := nl.read(nil)
