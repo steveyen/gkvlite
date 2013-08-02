@@ -2121,3 +2121,53 @@ func TestDoubleFreeNodeLoc(t *testing.T) {
 	x.freeNodeLoc(nl)
 	c++
 }
+
+func TestNodeLocRead(t *testing.T) {
+	var nl *nodeLoc
+	n, err := nl.read(nil)
+	if n != nil || err != nil {
+		t.Errorf("expected nodeLoc.read() err")
+	}
+}
+
+func TestNumInfo(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, err := os.Create(fname)
+	defer os.Remove(fname)
+
+	readShouldErr := false
+	m := &mockfile{
+		f: f,
+		readat: func(p []byte, off int64) (n int, err error) {
+			if readShouldErr {
+				return 0, errors.New("mockfile error")
+			}
+			return f.ReadAt(p, off)
+		},
+	}
+
+	s, _ := NewStore(m)
+	x := s.SetCollection("x", nil)
+	x.SetItem(&Item{
+		Key:      []byte("a"),
+		Val:      []byte("aaa"),
+		Priority: 100,
+	})
+	s.Flush()
+
+	readShouldErr = true
+
+	rnl := x.rootAddRef()
+	rnl.root.node = unsafe.Pointer(nil) // Evict node from memory to force reading.
+
+	_, _, _, _, err = numInfo(s, rnl.root, empty_nodeLoc)
+	if err == nil {
+		t.Errorf("expected numInfo to error")
+	}
+	_, _, _, _, err = numInfo(s, empty_nodeLoc, rnl.root)
+	if err == nil {
+		t.Errorf("expected numInfo to error")
+	}
+}
+
