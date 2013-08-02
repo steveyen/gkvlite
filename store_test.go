@@ -1998,6 +1998,39 @@ func TestFlushRevert(t *testing.T) {
 	}
 }
 
+func TestFlushRevertWithReadError(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, err := os.Create(fname)
+	defer os.Remove(fname)
+
+	readShouldErr := false
+	m := &mockfile{
+		f: f,
+		readat: func(p []byte, off int64) (n int, err error) {
+			if readShouldErr {
+				return 0, errors.New("mockfile error")
+			}
+			return f.ReadAt(p, off)
+		},
+	}
+
+	s, _ := NewStore(m)
+	x := s.SetCollection("x", nil)
+	x.SetItem(&Item{
+		Key:      []byte("a"),
+		Val:      []byte("aaa"),
+		Priority: 100,
+	})
+	s.Flush()
+
+	readShouldErr = true
+	err = s.FlushRevert()
+	if err == nil {
+		t.Errorf("expected FlushRevert to error")
+	}
+}
+
 func TestCollectionMisc(t *testing.T) {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
