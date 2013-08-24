@@ -253,8 +253,26 @@ func (t *Collection) VisitItemsAscendEx(target []byte, withValue bool,
 	visitor ItemVisitorEx) error {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
+
+	var prevVisitItem *Item
+	var errCheckedVisitor error
+
+	checkedVisitor := func(i *Item, depth uint64) bool {
+		if prevVisitItem != nil && t.compare(prevVisitItem.Key, i.Key) > 0 {
+			errCheckedVisitor = fmt.Errorf("corrupted / out-of-order index"+
+				", key: %s vs %s, coll: %p, collName: %s, store: %p, storeFile: %v",
+				string(prevVisitItem.Key), string(i.Key), t, t.name, t.store, t.store.file)
+			return false
+		}
+		prevVisitItem = i
+		return visitor(i, depth)
+	}
+
 	_, err := t.store.visitNodes(t, rnl.root,
-		target, withValue, visitor, 0, ascendChoice)
+		target, withValue, checkedVisitor, 0, ascendChoice)
+	if errCheckedVisitor != nil {
+		return errCheckedVisitor
+	}
 	return err
 }
 
@@ -263,6 +281,7 @@ func (t *Collection) VisitItemsDescendEx(target []byte, withValue bool,
 	visitor ItemVisitorEx) error {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
+
 	_, err := t.store.visitNodes(t, rnl.root,
 		target, withValue, visitor, 0, descendChoice)
 	return err
