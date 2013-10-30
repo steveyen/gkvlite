@@ -19,9 +19,9 @@ import (
 type Store struct {
 	// Atomic CAS'ed int64/uint64's must be at the top for 32-bit compatibility.
 	size       int64          // Atomic protected; file size or next write position.
-	nodeAllocs uint64         // Atomic protected.
+	nodeAllocs uint64         // Atomic protected; total node allocation stats.
 	coll       unsafe.Pointer // Copy-on-write map[string]*Collection.
-	file       StoreFile      // When nil, it's memory-only or no persistence.
+	file       StoreFile      // When nil, we're memory-only or no persistence.
 	callbacks  StoreCallbacks // Optional / may be nil.
 	readOnly   bool           // When true, Flush()'ing is disallowed.
 }
