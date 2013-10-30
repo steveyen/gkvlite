@@ -42,13 +42,13 @@ type StoreCallbacks struct {
 	// Optional callback to control on-disk size, in bytes, of an item's value.
 	ItemValLength func(c *Collection, i *Item) int
 
-	// Optional callback to allow write item bytes differently.
+	// Optional callback to allow you to write item bytes differently.
 	ItemValWrite func(c *Collection, i *Item,
 		w io.WriterAt, offset int64) error
 
-	// Optional callback to read item bytes differently.  For example,
-	// the app might have an optimization to just remember the reader
-	// & file offsets in the item.Transient field.
+	// Optional callback to read item bytes differently.  For example, the
+	// app might have an optimization to just remember the reader & file
+	// offsets in the item.Transient field for lazy reading or Sendto()'s.
 	ItemValRead func(c *Collection, i *Item,
 		r io.ReaderAt, offset int64, valLength uint32) error
 
