@@ -13,7 +13,7 @@ gkvlite has the following features...
 
 * 100% implemented in the Go Language (golang).
 * Open source license - MIT.
-* Keys are ordered, so range iterations are supported.
+* Keys are ordered, so range scans are supported.
 * On-disk storage for a "Store" is a single file.
 * ACID properties are supported via a simple, append-only,
   copy-on-write storage design.
@@ -22,6 +22,7 @@ gkvlite has the following features...
 Key concepts
 ============
 
+* A Store is held in a single file.
 * A Store can have zero or more Collections.
 * A Collection can have zero or more Items.
 * An Item is a key and value.
@@ -182,7 +183,7 @@ Examples
     // Retrieve values.
     mercedesPrice, err := c.Get([]byte("mercedes"))
     
-    // One of the most priceless cars is not in the collection.
+    // One of the most priceless vehicles is not in the collection.
     thisIsNil, err := c.Get([]byte("the-apollo-15-moon-buggy"))
     
     // Iterate through items.
@@ -236,6 +237,7 @@ Implementation / design
 =======================
 
 The fundamental data structure is an immutable treap (tree + heap).
+
 When used with random heap item priorities, treaps have probabilistic
 balanced tree behavior with the usual O(log N) performance bounds
 expected of balanced binary trees.
@@ -257,7 +259,7 @@ CopyTo() with a high "flushEvery" argument.
 The append-only file format allows the FlushRevert() API (undo the
 changes on a file) to have a simple implementation of scanning
 backwards in the file for the next-to-last good root record and
-truncating the file at that point.
+physically truncating the file at that point.
 
 TRADEOFF: the append-only design means it's possible for an advanced
 adversary to corrupt a gkvlite file by cleverly storing the bytes of a
