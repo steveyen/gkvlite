@@ -172,7 +172,7 @@ func copyColl(orig map[string]*Collection) map[string]*Collection {
 	return res
 }
 
-// Writes (appends) any unpersisted data to file.  As a
+// Writes (appends) any dirty, unpersisted data to file.  As a
 // greater-window-of-data-loss versus higher-performance tradeoff,
 // consider having many mutations (Set()'s & Delete()'s) and then
 // have a less occasional Flush() instead of Flush()'ing after every
@@ -326,7 +326,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 	return dstStore, nil
 }
 
-// Updates provided map with statistics.
+// Updates the provided map with statistics.
 func (s *Store) Stats(out map[string]uint64) {
 	out["fileSize"] = uint64(atomic.LoadInt64(&s.size))
 	out["nodeAllocs"] = atomic.LoadUint64(&s.nodeAllocs)
