@@ -122,6 +122,10 @@ func (t *Collection) freeNode_unlocked(n *node, reclaimMark *node) {
 	if n.next != nil && n.next != reclaimMark {
 		panic("double free node")
 	}
+	i := n.item.Item()
+	if i != nil {
+		t.store.ItemValDecRef(t, i)
+	}
 	n.item = *empty_itemLoc
 	n.left = *empty_nodeLoc
 	n.right = *empty_nodeLoc
