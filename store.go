@@ -466,3 +466,15 @@ func (o *Store) ItemValWrite(c *Collection, i *Item, w io.WriterAt, offset int64
 	_, err := w.WriteAt(i.Val, offset)
 	return err
 }
+
+func (o *Store) ItemValAddRef(c *Collection, i *Item) {
+	if o.callbacks.ItemValAddRef != nil {
+		o.callbacks.ItemValAddRef(c, i)
+	}
+}
+
+func (o *Store) ItemValDecRef(c *Collection, i *Item) {
+	if o.callbacks.ItemValDecRef != nil {
+		o.callbacks.ItemValDecRef(c, i)
+	}
+}
