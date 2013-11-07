@@ -57,6 +57,9 @@ type StoreCallbacks struct {
 	// comparison func for each collection.  Otherwise, the default is
 	// the bytes.Compare func.
 	KeyCompareForCollection func(collName string) KeyCompare
+
+	ItemValAddRef func(c *Collection, i *Item)
+	ItemValDecRef func(c *Collection, i *Item)
 }
 
 type ItemCallback func(*Collection, *Item) (*Item, error)
