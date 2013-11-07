@@ -52,14 +52,14 @@ type StoreCallbacks struct {
 	ItemValRead func(c *Collection, i *Item,
 		r io.ReaderAt, offset int64, valLength uint32) error
 
+	ItemValAddRef func(c *Collection, i *Item)
+	ItemValDecRef func(c *Collection, i *Item)
+
 	// Invoked when a Store is reloaded (during NewStoreEx()) from
 	// disk, this callback allows the user to optionally supply a key
 	// comparison func for each collection.  Otherwise, the default is
 	// the bytes.Compare func.
 	KeyCompareForCollection func(collName string) KeyCompare
-
-	ItemValAddRef func(c *Collection, i *Item)
-	ItemValDecRef func(c *Collection, i *Item)
 }
 
 type ItemCallback func(*Collection, *Item) (*Item, error)
