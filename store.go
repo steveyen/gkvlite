@@ -46,9 +46,11 @@ type StoreCallbacks struct {
 	ItemValWrite func(c *Collection, i *Item,
 		w io.WriterAt, offset int64) error
 
-	// Optional callback to read item bytes differently.  For example, the
-	// app might have an optimization to just remember the reader & file
-	// offsets in the item.Transient field for lazy reading or Sendto()'s.
+	// Optional callback to read item bytes differently.  For example,
+	// the app might have an optimization to just remember the reader
+	// & file offsets in the item.Transient field for lazy reading.
+	// If the application uses ref-counting, the item i.Val should
+	// logically have 1 ref count on it when ItemValRead() returns.
 	ItemValRead func(c *Collection, i *Item,
 		r io.ReaderAt, offset int64, valLength uint32) error
 

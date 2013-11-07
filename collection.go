@@ -97,6 +97,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 					return nil, err
 				}
 			}
+			t.store.ItemValAddRef(t, iItem)
 			return iItem, nil
 		}
 	}
@@ -132,6 +133,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	defer t.rootDecRef(rnl)
 	root := rnl.root
 	n := t.mkNode(nil, nil, nil, 1, uint64(len(item.Key))+uint64(item.NumValBytes(t)))
+	t.store.ItemValAddRef(t, item)
 	n.item.item = unsafe.Pointer(item) // Avoid garbage via separate init.
 	nloc := t.mkNodeLoc(n)
 	r, err := t.store.union(t, root, nloc, &rnl.reclaimMark)
@@ -218,10 +220,14 @@ func (t *Collection) MaxItem(withValue bool) (*Item, error) {
 
 // Evict some clean items found by randomly walking a tree branch.
 func (t *Collection) EvictSomeItems() (numEvicted uint64) {
-	t.store.walk(t, false, func(n *node) (*nodeLoc, bool) {
+	i, err := t.store.walk(t, false, func(n *node) (*nodeLoc, bool) {
 		if !n.item.Loc().isEmpty() {
-			atomic.StorePointer(&n.item.item, unsafe.Pointer(nil))
-			numEvicted++
+			i := n.item.Item()
+			if i != nil && atomic.CompareAndSwapPointer(&n.item.item,
+				unsafe.Pointer(i), unsafe.Pointer(nil)) {
+				t.store.ItemValDecRef(t, i)
+				numEvicted++
+			}
 		}
 		next := &n.left
 		if (rand.Int() & 0x01) == 0x01 {
@@ -232,6 +238,9 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 		}
 		return next, true
 	})
+	if i != nil && err != nil {
+		t.store.ItemValDecRef(t, i)
+	}
 	return numEvicted
 }
 
