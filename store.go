@@ -54,7 +54,20 @@ type StoreCallbacks struct {
 	ItemValRead func(c *Collection, i *Item,
 		r io.ReaderAt, offset int64, valLength uint32) error
 
+	// Optional callback to allow you to track ref counts on
+	// Item.Val's, invoked when gkvlite adds a reference to an
+	// Item.Val.  Apps might use this for buffer management and
+	// re-use.  While the ref count is >0, then the Item.Val buffer is
+	// still in use.  For example, gkvlite will invoke ItemValAddRef()
+	// while processing a SetItem() call in order to have its own ref
+	// count on the input Item.Val.
 	ItemValAddRef func(c *Collection, i *Item)
+
+	// Optional callback to allow you to track ref counts on
+	// Item.Val's, invoked when gkvlite drops a reference to an
+	// Item.Val.  Apps might use this for buffer management and
+	// re-use.  When the ref count is 0, then the Item.Val buffer can
+	// be reused.
 	ItemValDecRef func(c *Collection, i *Item)
 
 	// Invoked when a Store is reloaded (during NewStoreEx()) from
