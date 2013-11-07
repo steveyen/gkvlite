@@ -448,3 +448,21 @@ func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
 		atomic.AddInt64(&o.size, -1) // Roots were wrong, so keep scanning.
 	}
 }
+
+func (o *Store) ItemValRead(c *Collection, i *Item,
+	r io.ReaderAt, offset int64, valLength uint32) error {
+	if o.callbacks.ItemValRead != nil {
+		return o.callbacks.ItemValRead(c, i, r, offset, valLength)
+	}
+	i.Val = make([]byte, valLength)
+	_, err := r.ReadAt(i.Val, offset)
+	return err
+}
+
+func (o *Store) ItemValWrite(c *Collection, i *Item, w io.WriterAt, offset int64) error {
+	if o.callbacks.ItemValWrite != nil {
+		return o.callbacks.ItemValWrite(c, i, w, offset)
+	}
+	_, err := w.WriteAt(i.Val, offset)
+	return err
+}

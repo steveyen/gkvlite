@@ -95,17 +95,9 @@ func (i *itemLoc) write(c *Collection) (err error) {
 		if _, err := c.store.file.WriteAt(b, offset); err != nil {
 			return err
 		}
-		if c.store.callbacks.ItemValWrite != nil {
-			err := c.store.callbacks.ItemValWrite(c, iItem, c.store.file,
-				offset+int64(pos))
-			if err != nil {
-				return err
-			}
-		} else {
-			_, err := c.store.file.WriteAt(iItem.Val, offset+int64(pos))
-			if err != nil {
-				return err
-			}
+		err := c.store.ItemValWrite(c, iItem, c.store.file, offset+int64(pos))
+		if err != nil {
+			return err
 		}
 		atomic.StoreInt64(&c.store.size, offset+int64(ilength))
 		atomic.StorePointer(&i.loc,
@@ -155,18 +147,10 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (i *Item, err error) {
 			return nil, err
 		}
 		if withValue {
-			if c.store.callbacks.ItemValRead != nil {
-				err := c.store.callbacks.ItemValRead(c, i, c.store.file,
-					loc.Offset+int64(hdrLength)+int64(keyLength), valLength)
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				i.Val = make([]byte, valLength)
-				if _, err := c.store.file.ReadAt(i.Val,
-					loc.Offset+int64(hdrLength)+int64(keyLength)); err != nil {
-					return nil, err
-				}
+			err := c.store.ItemValRead(c, i, c.store.file,
+				loc.Offset+int64(hdrLength)+int64(keyLength), valLength)
+			if err != nil {
+				return nil, err
 			}
 		}
 		if c.store.callbacks.AfterItemRead != nil {
