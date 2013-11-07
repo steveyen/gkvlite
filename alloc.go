@@ -100,6 +100,12 @@ func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 		allocStats.CurFreeNodes--
 		freeNodeLock.Unlock()
 	}
+	if itemIn != nil {
+		i := itemIn.Item()
+		if i != nil {
+			t.store.ItemValAddRef(t, i)
+		}
+	}
 	n.item.Copy(itemIn)
 	n.left.Copy(leftIn)
 	n.right.Copy(rightIn)
