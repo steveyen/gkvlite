@@ -24,6 +24,8 @@ type Collection struct {
 	root     *rootNodeLoc // Protected by rootLock.
 
 	allocStats AllocStats // User must serialize access (e.g., see locks in alloc.go).
+
+	AppData unsafe.Pointer // For app-specific data; atomic CAS recommended.
 }
 
 type rootNodeLoc struct {
