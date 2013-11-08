@@ -2345,3 +2345,134 @@ func TestNodeLocWriteErr(t *testing.T) {
 		t.Errorf("expected write node on nil node to work")
 	}
 }
+
+func TestStoreRefCount(t *testing.T) {
+	counts := map[string]int{}
+	nadds := 0
+	ndecs := 0
+	s, err := NewStoreEx(nil, StoreCallbacks{
+		ItemValAddRef: func(c *Collection, i *Item) {
+			counts[string(i.Key)]++
+			if counts[string(i.Key)] <= 0 {
+				t.Errorf("in ItemValAddRef, count for k: %s was <= 0", string(i.Key))
+			}
+			nadds++
+		},
+		ItemValDecRef: func(c *Collection, i *Item) {
+			counts[string(i.Key)]--
+			if counts[string(i.Key)] < 0 {
+				t.Errorf("in ItemValDecRef, count for k: %s was <= 0", string(i.Key))
+			}
+			if counts[string(i.Key)] == 0 {
+				delete(counts, string(i.Key))
+			}
+			ndecs++
+		},
+	})
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStoreEx to work")
+	}
+	mustJustOneRef := func(msg string) {
+		for k, count := range counts {
+			if count != 1 {
+				t.Errorf("expect count 1 for k: %s, got: %v, msg: %s", k, count, msg)
+			}
+		}
+	}
+	mustn := func(ea, ed int, msg string) {
+		if ea != nadds {
+			t.Errorf("expected nadds: %v, got: %v, msg: %s", ea, nadds, msg)
+		}
+		if ed != ndecs {
+			t.Errorf("expected ndecs: %v, got: %v, msg: %s", ed, ndecs, msg)
+		}
+	}
+	mustn(0, 0, "")
+	s.SetCollection("x", bytes.Compare)
+	mustn(0, 0, "")
+	x := s.GetCollection("x")
+	if x == nil {
+		t.Errorf("expected SetColl/GetColl to work")
+	}
+	mustn(0, 0, "")
+	if x.Name() != "x" {
+		t.Errorf("expected name to be same")
+	}
+	x2 := s.GetCollection("x")
+	if x2 != x {
+		t.Errorf("expected 2nd GetColl to work")
+	}
+	mustn(0, 0, "")
+	if x2.Name() != "x" {
+		t.Errorf("expected name to be same")
+	}
+	mustn(0, 0, "")
+	numItems, numBytes, err := x2.GetTotals()
+	if err != nil || numItems != 0 || numBytes != 0 {
+		t.Errorf("expected empty memory coll to be empty")
+	}
+	mustn(0, 0, "")
+
+	tests := []struct {
+		op  string
+		val string
+		pri int
+		exp string
+	}{
+		{"ups", "a", 100, ""},
+		{"ups", "b", 200, ""},
+		{"ups", "a", 300, ""},
+		{"ups", "c", 200, ""},
+		{"ups", "a", 100, ""},
+		{"ups", "b", 200, ""},
+		{"ups", "a", 300, ""},
+		{"ups", "b", 100, ""},
+		{"ups", "c", 300, ""},
+		{"del", "a", 0, ""},
+		{"del", "b", 0, ""},
+		{"del", "c", 0, ""},
+	}
+
+	for testIdx, test := range tests {
+		switch test.op {
+		case "get":
+			i, err := x.GetItem([]byte(test.val), true)
+			if err != nil {
+				t.Errorf("test: %v, expected get nil error, got: %v",
+					testIdx, err)
+			}
+			if i != nil {
+				s.ItemValDecRef(x, i)
+			}
+			if i == nil && test.exp == "NIL" {
+				continue
+			}
+			if string(i.Key) != test.exp {
+				t.Errorf("test: %v, on Get, expected key: %v, got: %v",
+					testIdx, test.exp, i.Key)
+			}
+			if string(i.Val) != test.exp {
+				t.Errorf("test: %v, on Get, expected val: %v, got: %v",
+					testIdx, test.exp, i.Key)
+			}
+		case "ups":
+			err := x.SetItem(&Item{
+				Key:      []byte(test.val),
+				Val:      []byte(test.val),
+				Priority: int32(test.pri),
+			})
+			if err != nil {
+				t.Errorf("test: %v, expected ups nil error, got: %v",
+					testIdx, err)
+			}
+		case "del":
+			_, err := x.Delete([]byte(test.val))
+			if err != nil {
+				t.Errorf("test: %v, expected del nil error, got: %v",
+					testIdx, err)
+			}
+		}
+	}
+
+	mustJustOneRef("final")
+}
