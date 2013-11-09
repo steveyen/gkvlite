@@ -6,10 +6,10 @@ import (
 
 // The core algorithms for treaps are straightforward.  However, that
 // algorithmic simplicity is obscured by the additional useful
-// features of gkvlite, such as persistence, garbage-avoidance, stats
-// tracking, and error handling.  For a simple, memory-only
-// implementation of the union/split/join treap algorithms that may be
-// easier to understand, see:
+// features, such as persistence, garbage-avoidance, stats tracking,
+// and error handling.  For a simple, memory-only implementation of
+// the union/split/join treap algorithms that may be easier to
+// understand, see:
 // https://github.com/steveyen/gtreap/blob/master/treap.go
 
 // Memory management rules: the union/split/join functions will not
