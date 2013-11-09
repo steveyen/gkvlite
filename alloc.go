@@ -1,6 +1,7 @@
 package gkvlite
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -219,6 +220,10 @@ func (t *Collection) freeRootNodeLoc(rnl *rootNodeLoc) {
 	rnl.chainedCollection = nil
 	rnl.chainedRootNodeLoc = nil
 	for i := 0; i < len(rnl.reclaimLater); i++ {
+		if rnl.reclaimLater[i] != nil {
+			panic(fmt.Sprintf("non-nil rnl.reclaimLater[%d]: %v",
+				i, rnl.reclaimLater[i]))
+		}
 		rnl.reclaimLater[i] = nil
 	}
 	freeRootNodeLocLock.Lock()

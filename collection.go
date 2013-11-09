@@ -460,6 +460,7 @@ func (t *Collection) rootDecRef_unlocked(r *rootNodeLoc) {
 	for i := 0; i < len(r.reclaimLater); i++ {
 		if r.reclaimLater[i] != nil {
 			t.reclaimNodes_unlocked(r.reclaimLater[i], nil, &r.reclaimMark)
+			r.reclaimLater[i] = nil
 		}
 	}
 	t.freeNodeLoc(r.root)
