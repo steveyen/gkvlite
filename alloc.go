@@ -132,7 +132,6 @@ func (t *Collection) freeNode_unlocked(n *node, reclaimMark *node) {
 	n.right = *empty_nodeLoc
 	n.numNodes = 0
 	n.numBytes = 0
-
 	n.next = freeNodes
 	freeNodes = n
 	allocStats.CurFreeNodes++
