@@ -54,6 +54,24 @@ func (t *Collection) markReclaimable(n *node, reclaimMark *node) {
 	n.next = reclaimMark
 }
 
+func (t *Collection) reclaimMarkUpdate(nloc *nodeLoc,
+	oldReclaimMark, newReclaimMark *node) *node {
+	if nloc.isEmpty() {
+		return nil
+	}
+	n := nloc.Node()
+	t.rootLock.Lock()
+	if n != nil && n.next == oldReclaimMark {
+		n.next = newReclaimMark
+		t.rootLock.Unlock()
+		t.reclaimMarkUpdate(&n.left, oldReclaimMark, newReclaimMark)
+		t.reclaimMarkUpdate(&n.right, oldReclaimMark, newReclaimMark)
+	} else {
+		t.rootLock.Unlock()
+	}
+	return n
+}
+
 func (t *Collection) reclaimNodes_unlocked(n *node,
 	reclaimLater *[3]*node, reclaimMark *node) int64 {
 	if n == nil {
