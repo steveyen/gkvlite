@@ -136,6 +136,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	t.store.ItemValAddRef(t, item)
 	n.item.item = unsafe.Pointer(item) // Avoid garbage via separate init.
 	nloc := t.mkNodeLoc(n)
+	defer t.freeNodeLoc(nloc)
 	r, err := t.store.union(t, root, nloc, &rnl.reclaimMark)
 	if err != nil {
 		return err
@@ -149,7 +150,6 @@ func (t *Collection) SetItem(item *Item) (err error) {
 		return errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
-	t.freeNodeLoc(nloc)
 	return nil
 }
 
@@ -172,13 +172,12 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if err != nil {
 		return false, err
 	}
+	defer t.freeNodeLoc(left)
+	defer t.freeNodeLoc(right)
+	defer t.freeNodeLoc(middle)
 	if middle.isEmpty() {
 		return false, fmt.Errorf("concurrent delete, key: %v", key)
 	}
-	// TODO: Even though we markReclaimable() the middle node, there
-	// might not be a pathway to it during reclaimation.
-	t.markReclaimable(middle.Node(), &rnl.reclaimMark)
-	t.freeNodeLoc(middle)
 	r, err := t.store.join(t, left, right, &rnl.reclaimMark)
 	if err != nil {
 		return false, err
@@ -196,12 +195,12 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 			rnlNew.reclaimLater[1].next = &rnlNew.reclaimMark
 		}
 	}
+	rnl.reclaimLater[2] = middle.Node()
+	t.markReclaimable(rnl.reclaimLater[2], &rnl.reclaimMark)
 	if !t.rootCAS(rnl, rnlNew) {
 		return false, errors.New("concurrent mutation attempted")
 	}
 	t.rootDecRef(rnl)
-	t.freeNodeLoc(left)
-	t.freeNodeLoc(right)
 	return true, nil
 }
 
