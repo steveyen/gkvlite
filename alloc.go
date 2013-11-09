@@ -55,7 +55,7 @@ func (t *Collection) markReclaimable(n *node, reclaimMark *node) {
 }
 
 func (t *Collection) reclaimNodes_unlocked(n *node,
-	reclaimLater *[2]*node, reclaimMark *node) int64 {
+	reclaimLater *[3]*node, reclaimMark *node) int64 {
 	if n == nil {
 		return 0
 	}

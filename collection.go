@@ -44,7 +44,7 @@ type rootNodeLoc struct {
 
 	// More nodes to maybe reclaim when our reference count goes to 0.
 	// But they might be repeated, so we scan for them during reclaimation.
-	reclaimLater [2]*node
+	reclaimLater [3]*node
 }
 
 func (t *Collection) Name() string {
