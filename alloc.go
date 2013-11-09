@@ -223,7 +223,6 @@ func (t *Collection) freeRootNodeLoc(rnl *rootNodeLoc) {
 			panic(fmt.Sprintf("non-nil rnl.reclaimLater[%d]: %v",
 				i, rnl.reclaimLater[i]))
 		}
-		rnl.reclaimLater[i] = nil
 	}
 	freeRootNodeLocLock.Lock()
 	rnl.next = freeRootNodeLocs
