@@ -167,6 +167,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if err != nil || i == nil {
 		return false, err
 	}
+	t.store.ItemValDecRef(t, i)
 	left, middle, right, err := t.store.split(t, root, key, &rnl.reclaimMark)
 	if err != nil {
 		return false, err
