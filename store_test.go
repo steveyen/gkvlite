@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"runtime"
 	"strconv"
@@ -2475,4 +2476,78 @@ func TestStoreRefCount(t *testing.T) {
 	}
 
 	mustJustOneRef("final")
+}
+
+func TestStoreRefCountRandom(t *testing.T) {
+	counts := map[string]int{}
+	mustJustOneRef := func(msg string) {
+		for k, count := range counts {
+			if count != 1 {
+				t.Fatalf("expect count 1 for k: %s, got: %v, msg: %s",
+					k, count, msg)
+			}
+		}
+	}
+	mustJustOneRef("")
+
+	s, err := NewStoreEx(nil, StoreCallbacks{
+		ItemValAddRef: func(c *Collection, i *Item) {
+			k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
+			counts[k]++
+			if counts[k] <= 0 {
+				t.Errorf("in ItemValAddRef, count for k: %s was <= 0", k)
+			}
+		},
+		ItemValDecRef: func(c *Collection, i *Item) {
+			k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
+			counts[k]--
+			if counts[k] < 0 {
+				t.Errorf("in ItemValDecRef, count for k: %s was <= 0", k)
+			}
+			if counts[k] == 0 {
+				delete(counts, k)
+			}
+		},
+	})
+	if err != nil || s == nil {
+		t.Errorf("expected memory-only NewStoreEx to work")
+	}
+
+	x := s.SetCollection("x", bytes.Compare)
+
+	numSets := 0
+	numKeys := 10
+	for i := 0; i < 100; i++ {
+		for j := 0; j < 1000; j++ {
+			ks := fmt.Sprintf("%03d", rand.Int() % numKeys)
+			k := []byte(ks)
+			r := rand.Int() % 2
+			switch r {
+			case 0:
+				numSets++
+				v := fmt.Sprintf("%d", numSets)
+				pri := rand.Int31()
+				err := x.SetItem(&Item{
+					Key:      k,
+					Val:      []byte(v),
+					Priority: pri,
+				})
+				if err != nil {
+					t.Errorf("expected nil error, got: %v", err)
+				}
+			case 1:
+				_, err := x.Delete(k)
+				if err != nil {
+					t.Errorf("expected nil error, got: %v", err)
+				}
+			}
+		}
+		for k := 0; k < numKeys; k++ {
+			_, err := x.Delete([]byte(fmt.Sprintf("%03d", k)))
+			if err != nil {
+				t.Fatalf("expected nil error, got: %v", err)
+			}
+		}
+		mustJustOneRef(fmt.Sprintf("i: %d", i))
+	}
 }
