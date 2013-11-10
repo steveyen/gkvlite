@@ -149,7 +149,11 @@ func dump(o *Store, n *nodeLoc, level int) {
 	nNode, _ := n.read(o)
 	dump(o, &nNode.left, level+1)
 	dumpIndent(level)
-	fmt.Printf("%p - %v\n", nNode, string(nNode.item.Item().Key))
+	k := "<evicted>"
+	if nNode.item.Item() != nil {
+		k = string(nNode.item.Item().Key)
+	}
+	fmt.Printf("%p - %v\n", nNode, k)
 	dump(o, &nNode.right, level+1)
 }
 
