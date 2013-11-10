@@ -315,6 +315,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 		if minItem == nil {
 			continue
 		}
+		defer s.store.ItemValDecRef(t, minItem)
 		numItems := 0
 		var errCopyItem error = nil
 		err = srcColl.VisitItemsAscend(minItem.Key, true, func(i *Item) bool {
