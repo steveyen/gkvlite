@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -2640,10 +2641,140 @@ func TestPersistRefCountRandom(t *testing.T) {
 			} else {
 				// Close and reopen the store.
 				stop()
-				f, _ := os.OpenFile(fname, os.O_RDWR, 0666)
+				f, _ = os.OpenFile(fname, os.O_RDWR, 0666)
 				s, x, counts = start(f)
 			}
 		}
+		for k := 0; k < numKeys; k++ {
+			_, err := x.Delete([]byte(fmt.Sprintf("%03d", k)))
+			if err != nil {
+				t.Fatalf("expected nil error, got: %v", err)
+			}
+		}
+		mustJustOneRef(fmt.Sprintf("i: %d", i))
+	}
+}
+
+func TestEvictRefCountRandom(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	defer os.Remove(fname)
+
+	start := func(f *os.File) (*Store, *Collection, map[string]int) {
+		counts := map[string]int{}
+		var s *Store
+		var x *Collection
+		var err error
+		itemValAddRef := func(c *Collection, i *Item) {
+			k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
+			if i.Val == nil {
+				return
+			}
+			counts[k]++
+			if counts[k] <= 0 {
+				t.Fatalf("in ItemValAddRef, count for k: %s was <= 0", k)
+			}
+		}
+		itemValDecRef := func(c *Collection, i *Item) {
+			k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
+			if i.Val == nil {
+				return
+			}
+			if counts[k] == 0 {
+				if x.root != nil {
+					dump(s, x.root.root, 1)
+				}
+				t.Fatalf("in ItemValDecRef, count for k: %s at 0, counts: %#v",
+					k, counts)
+				}
+			counts[k]--
+			if counts[k] == 0 {
+				delete(counts, k)
+			}
+		}
+		s, err = NewStoreEx(f, StoreCallbacks{
+			ItemValAddRef: itemValAddRef,
+			ItemValDecRef: itemValDecRef,
+			ItemValRead: func(c *Collection, i *Item,
+				r io.ReaderAt, offset int64, valLength uint32) error {
+				i.Val = make([]byte, valLength)
+				_, err := r.ReadAt(i.Val, offset)
+				itemValAddRef(c, i)
+				return err
+			},
+		})
+		if err != nil || s == nil {
+			t.Errorf("expected memory-only NewStoreEx to work")
+		}
+		x = s.SetCollection("x", bytes.Compare)
+		return s, x, counts
+	}
+
+	s, x, counts := start(f)
+
+	stop := func() {
+		s.Flush()
+		s.Close()
+		if len(counts) != 0 {
+			t.Errorf("counts not empty after Close(), got: %#v\n", counts)
+		}
+		f.Close()
+		f = nil
+	}
+
+	mustJustOneRef := func(msg string) {
+		for k, count := range counts {
+			if count != 1 {
+				t.Fatalf("expect count 1 for k: %s, got: %v, msg: %s, counts: %#v",
+					k, count, msg, counts)
+			}
+		}
+	}
+	mustJustOneRef("")
+
+	numSets := 0
+	numKeys := 10
+	for i := 0; i < 10; i++ {
+		for j := 0; j < 1000; j++ {
+			ks := fmt.Sprintf("%03d", rand.Int() % numKeys)
+			k := []byte(ks)
+			r := rand.Int() % 100
+			if r < 30 {
+				i, err := x.GetItem(k, true)
+				if err != nil {
+					t.Errorf("expected nil error, got: %v", err)
+				}
+				if i != nil {
+					s.ItemValDecRef(x, i)
+				}
+			} else if r < 60 {
+				numSets++
+				v := fmt.Sprintf("%d", numSets)
+				pri := rand.Int31()
+				err := x.SetItem(&Item{
+					Key:      k,
+					Val:      []byte(v),
+					Priority: pri,
+				})
+				if err != nil {
+					t.Errorf("expected nil error, got: %v", err)
+				}
+			} else if r < 75 {
+				_, err := x.Delete(k)
+				if err != nil {
+					t.Errorf("expected nil error, got: %v", err)
+				}
+			} else if r < 90 {
+				x.EvictSomeItems()
+			} else {
+				// Close and reopen the store.
+				stop()
+				f, _ = os.OpenFile(fname, os.O_RDWR, 0666)
+				s, x, counts = start(f)
+			}
+		}
+		x.EvictSomeItems()
 		for k := 0; k < numKeys; k++ {
 			_, err := x.Delete([]byte(fmt.Sprintf("%03d", k)))
 			if err != nil {
