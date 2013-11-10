@@ -59,6 +59,7 @@ func (t *Collection) closeCollection() { // Just "close" is a keyword.
 	r := t.root
 	t.root = nil
 	t.rootLock.Unlock()
+	t.reclaimMarkUpdate(r.root, nil, &r.reclaimMark)
 	if r != nil {
 		t.rootDecRef(r)
 	}
