@@ -251,7 +251,7 @@ func visitExpectCollection(t *testing.T, x *Collection, start string,
 			cb(i)
 		}
 		if string(i.Key) != arr[n] {
-			t.Errorf("expected visit item: %v, saw key: %s, item: %#v",
+			t.Fatalf("expected visit item: %v, saw key: %s, item: %#v",
 				arr[n], string(i.Key), i)
 		}
 		n++
@@ -769,6 +769,18 @@ func TestStoreFile(t *testing.T) {
 	if xsnap == nil {
 		t.Errorf("expected snapshot to have x")
 	}
+	err = xsnap.SetItem(&Item{
+		Key:      []byte("should-be-read-only"),
+		Val:      []byte("aaa"),
+		Priority: 100,
+	})
+	if err == nil {
+		t.Errorf("expected snapshot SetItem() error")
+	}
+	wd, err := xsnap.Delete([]byte("should-be-read-only"))
+	if err == nil || wd != false {
+		t.Errorf("expected snapshot Delete() error")
+	}
 	visitExpectCollection(t, xsnap, "a", []string{}, nil)
 	if ssnap.Flush() == nil {
 		t.Errorf("expected snapshot Flush() error")
@@ -800,10 +812,6 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected snapshot Flush() error")
 	}
 
-	loadCollection(x3snap, []string{"e", "d", "a", "c", "b", "c", "a"})
-	visitExpectCollection(t, x3snap1, "a", []string{"a", "b", "c"}, nil)
-	visitExpectCollection(t, x3, "a", []string{"a", "b", "c"}, nil)
-
 	// ------------------------------------------------
 
 	// Exercise CopyTo.
@@ -816,7 +824,7 @@ func TestStoreFile(t *testing.T) {
 		{s5, 0, []string{"a", "d"}},
 		{s5, 2, []string{"a", "d"}},
 		{s5, 4, []string{"a", "d"}},
-		{s3snap, 4, []string{"a", "b", "c", "d", "e"}},
+		{s3snap, 2, []string{"a", "b", "c"}},
 		{s3snap1, 1, []string{"a", "b", "c"}},
 		{s3snap1, 0, []string{"a", "b", "c"}},
 		{s3, 1000, []string{"a", "b", "c"}},

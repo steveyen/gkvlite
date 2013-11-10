@@ -55,10 +55,7 @@ Performance
 Snapshots
 =========
 
-* Non-persistable snapshots are supported, where you can still
-  "scribble" on your snapshots with more (non-persistable)
-  updates. These scribbles on snapshots won't affect (are isolated
-  from) the original Store.
+* Read-only Store snapshots are supported.
 * Mutations on the original Store won't be seen by snapshots.
 * Snapshot creation is a fast O(1) operation per Collection.
 

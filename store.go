@@ -251,15 +251,10 @@ func (s *Store) FlushRevert() error {
 	return s.file.Truncate(atomic.LoadInt64(&s.size))
 }
 
-// Returns a non-persistable snapshot, including any mutations that
-// have not been Flush()'ed to disk yet.  The snapshot has its Flush()
-// disabled because the original store "owns" writes to the StoreFile.
-// Caller should ensure that the returned snapshot store and the
-// original store are used in "single-threaded" manner.  On isolation:
-// if you make updates to a snapshot store, those updates will not be
-// seen by the original store; and vice-versa for mutations on the
-// original store.  To persist the snapshot (and any updates on it) to
-// a new file, use snapshot.CopyTo().
+// Returns a read-only snapshot, including any mutations on the
+// original Store that have not been Flush()'ed to disk yet.  The
+// snapshot has its mutations and Flush() operations disabled because
+// the original store "owns" writes to the StoreFile.
 func (s *Store) Snapshot() (snapshot *Store) {
 	coll := copyColl(*(*map[string]*Collection)(atomic.LoadPointer(&s.coll)))
 	res := &Store{

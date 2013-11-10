@@ -123,6 +123,9 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 // at the risk of unbalancing the lookup tree.  The input Item instance
 // should be considered immutable and owned by the Collection.
 func (t *Collection) SetItem(item *Item) (err error) {
+	if t.store.readOnly {
+		return errors.New("store is read only")
+	}
 	if item.Key == nil || len(item.Key) > 0xffff || len(item.Key) == 0 ||
 		item.Val == nil {
 		return errors.New("Item.Key/Val missing or too long")
@@ -160,6 +163,9 @@ func (t *Collection) Set(key []byte, val []byte) error {
 
 // Deletes an item of a given key.
 func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
+	if t.store.readOnly {
+		return false, errors.New("store is read only")
+	}
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
 	root := rnl.root
@@ -214,6 +220,9 @@ func (t *Collection) MaxItem(withValue bool) (*Item, error) {
 
 // Evict some clean items found by randomly walking a tree branch.
 func (t *Collection) EvictSomeItems() (numEvicted uint64) {
+	if t.store.readOnly {
+		return 0
+	}
 	i, err := t.store.walk(t, false, func(n *node) (*nodeLoc, bool) {
 		if !n.item.Loc().isEmpty() {
 			i := n.item.Item()
@@ -354,6 +363,9 @@ func (t *Collection) AllocStats() (res AllocStats) {
 // root records.  Use Store.Flush() to write root records, which would
 // make these writes visible to the next file re-opening/re-loading.
 func (t *Collection) Write() error {
+	if t.store.readOnly {
+		return errors.New("store is read only")
+	}
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
 	return t.write(rnl.root)
