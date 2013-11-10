@@ -2551,3 +2551,105 @@ func TestStoreRefCountRandom(t *testing.T) {
 		mustJustOneRef(fmt.Sprintf("i: %d", i))
 	}
 }
+
+func TestPersistRefCountRandom(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, _ := os.Create(fname)
+	defer os.Remove(fname)
+
+	start := func(f *os.File) (*Store, *Collection, map[string]int) {
+		counts := map[string]int{}
+		s, err := NewStoreEx(f, StoreCallbacks{
+			ItemValAddRef: func(c *Collection, i *Item) {
+				if i.Val == nil {
+					return
+				}
+				k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
+				counts[k]++
+				if counts[k] <= 0 {
+					t.Errorf("in ItemValAddRef, count for k: %s was <= 0", k)
+				}
+			},
+			ItemValDecRef: func(c *Collection, i *Item) {
+				if i.Val == nil {
+					return
+				}
+				k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
+				if counts[k] == 0 {
+					t.Errorf("in ItemValDecRef, count for k: %s at 0", k)
+				}
+				counts[k]--
+				if counts[k] == 0 {
+					delete(counts, k)
+				}
+			},
+		})
+		if err != nil || s == nil {
+			t.Errorf("expected memory-only NewStoreEx to work")
+		}
+		x := s.SetCollection("x", bytes.Compare)
+		return s, x, counts
+	}
+
+	s, x, counts := start(f)
+
+	stop := func() {
+		s.Flush()
+		s.Close()
+		if len(counts) != 0 {
+			t.Errorf("counts not empty after Close(), got: %#v\n", counts)
+		}
+		f.Close()
+	}
+
+	mustJustOneRef := func(msg string) {
+		for k, count := range counts {
+			if count != 1 {
+				t.Fatalf("expect count 1 for k: %s, got: %v, msg: %s, counts: %#v",
+					k, count, msg, counts)
+			}
+		}
+	}
+	mustJustOneRef("")
+
+	numSets := 0
+	numKeys := 10
+	for i := 0; i < 100; i++ {
+		for j := 0; j < 1000; j++ {
+			ks := fmt.Sprintf("%03d", rand.Int() % numKeys)
+			k := []byte(ks)
+			r := rand.Int() % 100
+			if r < 60 {
+				numSets++
+				v := fmt.Sprintf("%d", numSets)
+				pri := rand.Int31()
+				err := x.SetItem(&Item{
+					Key:      k,
+					Val:      []byte(v),
+					Priority: pri,
+				})
+				if err != nil {
+					t.Errorf("expected nil error, got: %v", err)
+				}
+			} else if r < 90 {
+				_, err := x.Delete(k)
+				if err != nil {
+					t.Errorf("expected nil error, got: %v", err)
+				}
+			} else {
+				// Close and reopen the store.
+				stop()
+				f, _ := os.OpenFile(fname, os.O_RDWR, 0666)
+				s, x, counts = start(f)
+			}
+		}
+		for k := 0; k < numKeys; k++ {
+			_, err := x.Delete([]byte(fmt.Sprintf("%03d", k)))
+			if err != nil {
+				t.Fatalf("expected nil error, got: %v", err)
+			}
+		}
+		mustJustOneRef(fmt.Sprintf("i: %d", i))
+	}
+}
