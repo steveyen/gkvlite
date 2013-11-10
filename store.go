@@ -284,11 +284,11 @@ func (s *Store) Snapshot() (snapshot *Store) {
 func (s *Store) Close() {
 	s.file = nil
 	cptr := atomic.LoadPointer(&s.coll)
-	if cptr == nil {
+	if cptr == nil ||
+		!atomic.CompareAndSwapPointer(&s.coll, cptr, unsafe.Pointer(nil)) {
 		return
 	}
 	coll := *(*map[string]*Collection)(cptr)
-	atomic.StorePointer(&s.coll, unsafe.Pointer(nil))
 	for _, name := range collNames(coll) {
 		coll[name].closeCollection()
 	}
