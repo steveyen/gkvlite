@@ -2528,7 +2528,7 @@ func TestStoreRefCountRandom(t *testing.T) {
 	numKeys := 10
 	for i := 0; i < 100; i++ {
 		for j := 0; j < 1000; j++ {
-			ks := fmt.Sprintf("%03d", rand.Int() % numKeys)
+			ks := fmt.Sprintf("%03d", rand.Int()%numKeys)
 			k := []byte(ks)
 			r := rand.Int() % 2
 			switch r {
@@ -2626,7 +2626,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 	numKeys := 10
 	for i := 0; i < 100; i++ {
 		for j := 0; j < 1000; j++ {
-			ks := fmt.Sprintf("%03d", rand.Int() % numKeys)
+			ks := fmt.Sprintf("%03d", rand.Int()%numKeys)
 			k := []byte(ks)
 			r := rand.Int() % 100
 			if r < 60 {
@@ -2695,7 +2695,7 @@ func TestEvictRefCountRandom(t *testing.T) {
 				}
 				t.Fatalf("in ItemValDecRef, count for k: %s at 0, counts: %#v",
 					k, counts)
-				}
+			}
 			counts[k]--
 			if counts[k] == 0 {
 				delete(counts, k)
@@ -2745,7 +2745,7 @@ func TestEvictRefCountRandom(t *testing.T) {
 	numKeys := 10
 	for i := 0; i < 10; i++ {
 		for j := 0; j < 1000; j++ {
-			ks := fmt.Sprintf("%03d", rand.Int() % numKeys)
+			ks := fmt.Sprintf("%03d", rand.Int()%numKeys)
 			k := []byte(ks)
 			r := rand.Int() % 100
 			if r < 30 {
