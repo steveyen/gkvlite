@@ -144,6 +144,10 @@ Other features
   sync/atomic pointer functions for concurrency correctness.
   In general, Item's should be treated as immutable, except for the
   Item.Transient field.
+* Application-level Item.Val buffer management is possible via the
+  optional ItemValAddRef/ItemValDecRef() store callbacks, to help
+  reduce garbage memory.  Libraries like github.com/steveyen/go-slab
+  may be helpful here.
 * Errors from file operations are propagated all the way back to your
   code, so your application can respond appropriately.
 * Tested - "go test" unit tests.
@@ -276,20 +280,13 @@ garbage collector (GC).
 TODO / ideas
 ============
 
-* TODO: Provide public API for O(1) collection swapping, allowing
-  advanced users to snapshot-modify-swap their collections for
-  transactional changes.  User snapshots a collection, makes changes,
-  then swaps that collection into the registered collections of a
-  store, and the user should ensure that there is only one swapper.
-
 * TODO: Performance: consider splitting item storage from node
   storage, so we're not mixing metadata and data in same cache pages.
   Need to measure how much win this could be in cases like compaction.
   Tradeoff as this could mean no more single file simplicity.
 
-* TODO: Allow mutability for less garbage, perhaps switching to
-  immutable only when there are in-use snapshots.  This probably won't
-  be a win if there are always active snapshots.
+* TODO: Performance: persist items as log, and don't write treap nodes
+  on every Flush().
 
 * TODO: Keep stats on misses, disk fetches & writes, etc.
 
@@ -299,6 +296,9 @@ TODO / ideas
   users can split collections at decent points.
 
 * TODO: Provide item priority shifting during CopyTo().
+
+* TODO: Build up perfectly balanced treap from large batch of
+  (potentially externally) sorted items.
 
 * TODO: Allow users to retrieve an item's value size (in bytes)
   without having to first fetch the item into memory.
