@@ -26,7 +26,7 @@ var pctSets = flag.Int("sets", 50,
 	"percentage of sets; 50 means 50% sets")
 var pctDeletes = flag.Int("deletes", 5,
 	"percentage of deletes; 5 means 5% deletes")
-var pctEvicts = flag.Int("evicts", 5,
+var pctEvicts = flag.Int("evicts", 3,
 	"percentage of evicts; 3 means 3% evicts")
 var pctReopens = flag.Int("reopens", 0,
 	"percentage of reopens; 0 means 0% reopens")
