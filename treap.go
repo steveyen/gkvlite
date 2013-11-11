@@ -76,7 +76,7 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
 				return empty_nodeLoc, err
 			}
 			middleItemLoc := &middleNode.item
-			middleItem, err := middleItemLoc.read(t, false)
+			middleItem, err := middleItemLoc.read(t, true)
 			if err != nil {
 				return empty_nodeLoc, err
 			}
@@ -84,6 +84,10 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
 				leftNum+rightNum+1,
 				leftBytes+rightBytes+uint64(middleItem.NumBytes(t))))
 		} else {
+			thisItem, err = thisItemLoc.read(t, true)
+			if err != nil {
+				return empty_nodeLoc, err
+			}
 			res = t.mkNodeLoc(t.mkNode(thisItemLoc, newLeft, newRight,
 				leftNum+rightNum+1,
 				leftBytes+rightBytes+uint64(thisItem.NumBytes(t))))
@@ -116,6 +120,10 @@ func (o *Store) union(t *Collection, this *nodeLoc, that *nodeLoc,
 	if err != nil {
 		return empty_nodeLoc, err
 	}
+	thatItem, err = thatItemLoc.read(t, true)
+	if err != nil {
+		return empty_nodeLoc, err
+	}
 	res = t.mkNodeLoc(t.mkNode(thatItemLoc, newLeft, newRight,
 		leftNum+rightNum+1,
 		leftBytes+rightBytes+uint64(thatItem.NumBytes(t))))
@@ -144,7 +152,7 @@ func (o *Store) split(t *Collection, n *nodeLoc, s []byte,
 	}
 
 	nItemLoc := &nNode.item
-	nItem, err := nItemLoc.read(t, false)
+	nItem, err := nItemLoc.read(t, true)
 	if err != nil {
 		return empty_nodeLoc, empty_nodeLoc, empty_nodeLoc, err
 	}
@@ -239,6 +247,11 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc,
 		if err != nil {
 			return empty_nodeLoc, err
 		}
+		// TODO: remember valLength in node rather than re-reading the item.
+		thisItem, err = thisItemLoc.read(t, true)
+		if err != nil {
+			return empty_nodeLoc, err
+		}
 		res = t.mkNodeLoc(t.mkNode(thisItemLoc, &thisNode.left, newRight,
 			leftNum+rightNum+1,
 			leftBytes+rightBytes+uint64(thisItem.NumBytes(t))))
@@ -253,6 +266,11 @@ func (o *Store) join(t *Collection, this *nodeLoc, that *nodeLoc,
 	}
 	leftNum, leftBytes, rightNum, rightBytes, err :=
 		numInfo(o, newLeft, &thatNode.right)
+	if err != nil {
+		return empty_nodeLoc, err
+	}
+	// TODO: remember valLength in node rather than re-reading the item.
+	thatItem, err = thatItemLoc.read(t, true)
 	if err != nil {
 		return empty_nodeLoc, err
 	}

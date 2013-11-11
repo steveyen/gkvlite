@@ -2567,31 +2567,43 @@ func TestPersistRefCountRandom(t *testing.T) {
 	f, _ := os.Create(fname)
 	defer os.Remove(fname)
 
+	counts := map[string]int{}
+
+	itemValAddRef := func(c *Collection, i *Item) {
+		if i.Val == nil {
+			return
+		}
+		k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
+		counts[k]++
+		if counts[k] <= 0 {
+			t.Fatalf("in ItemValAddRef, count for k: %s was <= 0", k)
+		}
+	}
+
+	itemValDecRef := func(c *Collection, i *Item) {
+		if i.Val == nil {
+			return
+		}
+		k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
+		if counts[k] == 0 {
+			t.Fatalf("in ItemValDecRef, count for k: %s at 0", k)
+		}
+		counts[k]--
+		if counts[k] == 0 {
+			delete(counts, k)
+		}
+	}
+
 	start := func(f *os.File) (*Store, *Collection, map[string]int) {
-		counts := map[string]int{}
 		s, err := NewStoreEx(f, StoreCallbacks{
-			ItemValAddRef: func(c *Collection, i *Item) {
-				if i.Val == nil {
-					return
-				}
-				k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
-				counts[k]++
-				if counts[k] <= 0 {
-					t.Errorf("in ItemValAddRef, count for k: %s was <= 0", k)
-				}
-			},
-			ItemValDecRef: func(c *Collection, i *Item) {
-				if i.Val == nil {
-					return
-				}
-				k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
-				if counts[k] == 0 {
-					t.Errorf("in ItemValDecRef, count for k: %s at 0", k)
-				}
-				counts[k]--
-				if counts[k] == 0 {
-					delete(counts, k)
-				}
+			ItemValAddRef: itemValAddRef,
+			ItemValDecRef: itemValDecRef,
+			ItemValRead: func(c *Collection, i *Item,
+				r io.ReaderAt, offset int64, valLength uint32) error {
+				i.Val = make([]byte, valLength)
+				_, err := r.ReadAt(i.Val, offset)
+				itemValAddRef(c, i)
+				return err
 			},
 		})
 		if err != nil || s == nil {
