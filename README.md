@@ -132,8 +132,6 @@ Other features
   and evicts any clean (already persisted) items found during that
   traversal.  Eviction means clearing out references to those clean
   items, which means those items can be candidates for GC.
-* Eviction are concurrent safe: you may evict concurrently with other
-  readers, mutators, flushers, etc.
 * You can control item priority to access hotter items faster by
   shuffling them closer to the top of balanced binary trees (warning:
   intricate/advanced tradeoffs here).

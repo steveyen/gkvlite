@@ -219,6 +219,8 @@ func (t *Collection) MaxItem(withValue bool) (*Item, error) {
 }
 
 // Evict some clean items found by randomly walking a tree branch.
+// For concurrent users, only the single mutator thread should call
+// EvictSomeItems(), making it serialized with mutations.
 func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 	if t.store.readOnly {
 		return 0
