@@ -61,6 +61,8 @@ func (i *itemLoc) Copy(src *itemLoc) {
 	atomic.StorePointer(&i.item, unsafe.Pointer(src.Item()))
 }
 
+const itemLoc_hdrLength int = 4 + 2 + 4 + 4
+
 func (i *itemLoc) write(c *Collection) (err error) {
 	if i.Loc().isEmpty() {
 		iItem := i.Item()
@@ -74,7 +76,7 @@ func (i *itemLoc) write(c *Collection) (err error) {
 			}
 		}
 		offset := atomic.LoadInt64(&c.store.size)
-		hlength := 4 + 2 + 4 + 4 + len(iItem.Key)
+		hlength := itemLoc_hdrLength + len(iItem.Key)
 		vlength := iItem.NumValBytes(c)
 		ilength := hlength + vlength
 		b := make([]byte, hlength)
@@ -116,12 +118,11 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (i *Item, err error) {
 		if loc.isEmpty() {
 			return nil, nil
 		}
-		hdrLength := 4 + 2 + 4 + 4
-		if loc.Length < uint32(hdrLength) {
+		if loc.Length < uint32(itemLoc_hdrLength) {
 			return nil, fmt.Errorf("unexpected item loc.Length: %v < %v",
-				loc.Length, hdrLength)
+				loc.Length, itemLoc_hdrLength)
 		}
-		b := make([]byte, hdrLength)
+		b := make([]byte, itemLoc_hdrLength)
 		if _, err := c.store.file.ReadAt(b, loc.Offset); err != nil {
 			return nil, err
 		}
@@ -135,20 +136,21 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (i *Item, err error) {
 		pos += 4
 		i.Priority = int32(binary.BigEndian.Uint32(b[pos : pos+4]))
 		pos += 4
-		if length != uint32(hdrLength)+uint32(keyLength)+valLength {
+		if length != uint32(itemLoc_hdrLength)+uint32(keyLength)+valLength {
 			return nil, errors.New("mismatched itemLoc lengths")
 		}
-		if pos != hdrLength {
-			return nil, fmt.Errorf("read pos != hdrLength, %v != %v", pos, hdrLength)
+		if pos != itemLoc_hdrLength {
+			return nil, fmt.Errorf("read pos != itemLoc_hdrLength, %v != %v",
+				pos, itemLoc_hdrLength)
 		}
 		i.Key = make([]byte, keyLength)
 		if _, err := c.store.file.ReadAt(i.Key,
-			loc.Offset+int64(hdrLength)); err != nil {
+			loc.Offset+int64(itemLoc_hdrLength)); err != nil {
 			return nil, err
 		}
 		if withValue {
 			err := c.store.ItemValRead(c, i, c.store.file,
-				loc.Offset+int64(hdrLength)+int64(keyLength), valLength)
+				loc.Offset+int64(itemLoc_hdrLength)+int64(keyLength), valLength)
 			if err != nil {
 				return nil, err
 			}
