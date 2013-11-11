@@ -165,3 +165,15 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (i *Item, err error) {
 	}
 	return i, nil
 }
+
+func (iloc *itemLoc) NumBytes(c *Collection) int {
+	loc := iloc.Loc()
+	if loc.isEmpty() {
+		i := iloc.Item()
+		if i == nil {
+			return 0
+		}
+		return i.NumBytes(c)
+	}
+	return int(loc.Length) - itemLoc_hdrLength
+}
