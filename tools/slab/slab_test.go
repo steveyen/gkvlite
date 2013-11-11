@@ -229,7 +229,8 @@ func TestSlabStoreRandom(t *testing.T) {
 	numKeys := 10
 	for i := 0; i < 100; i++ {
 		for j := 0; j < 1000; j++ {
-			ks := fmt.Sprintf("%03d", rand.Int() % numKeys)
+			kr := rand.Int() % numKeys
+			ks := fmt.Sprintf("%03d", kr)
 			k := []byte(ks)
 			r := rand.Int() % 100
 			if r < 20 {
@@ -238,13 +239,16 @@ func TestSlabStoreRandom(t *testing.T) {
 					t.Errorf("expected nil error, got: %v", err)
 				}
 				if i != nil {
+					kr4 := kr * kr * kr * kr
+					if scb.ItemValLength(x, i) != kr4 {
+						t.Errorf("expected len: %d, got %d",
+							kr4, scb.ItemValLength(x, i))
+					}
 					s.ItemValDecRef(x, i)
 				}
 			} else if r < 60 {
 				numSets++
-				v := fmt.Sprintf("%d", numSets)
-				b := arena.Alloc(len(v))
-				copy(b, []byte(v))
+				b := arena.Alloc(kr * kr * kr * kr)
 				pri := rand.Int31()
 				err := x.SetItem(&gkvlite.Item{
 					Key:      k,
