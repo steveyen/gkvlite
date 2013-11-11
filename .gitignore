@@ -1,5 +1,7 @@
 #*
 *~
 *.test
+*.tmp
 tmp
 tools/view/view
+tools/slab/slab

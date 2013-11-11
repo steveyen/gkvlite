@@ -1,4 +1,4 @@
-package slab
+package main
 
 // Test integration of gkvlite with go-slab, using gkvlite's optional
 // ItemValAddRef/DecRef() callbacks to integrate with a slab memory
@@ -7,117 +7,12 @@ package slab
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 	"testing"
 
 	"github.com/steveyen/gkvlite"
-	"github.com/steveyen/go-slab"
 )
-
-// Helper function to read a contiguous byte sequence, splitting
-// it up into chained buf's of maxBufSize.  The last buf in the
-// chain can have length <= maxBufSize.
-func readBufChain(arena *slab.Arena, maxBufSize int, r io.ReaderAt, offset int64,
-	valLength uint32) ([]byte, error) {
-	n := int(valLength)
-	if n > maxBufSize {
-		n = maxBufSize
-	}
-	b := arena.Alloc(n)
-	_, err := r.ReadAt(b, offset)
-	if err != nil {
-		arena.DecRef(b)
-		return nil, err
-	}
-	remaining := valLength - uint32(n)
-	if remaining > 0 {
-		next, err := readBufChain(arena, maxBufSize, r, offset + int64(n), remaining)
-		if err != nil {
-			arena.DecRef(b)
-			return nil, err
-		}
-		arena.SetNext(b, next)
-	}
-	return b, nil
-}
-
-func setupStoreArena(t *testing.T, maxBufSize int) (
-	*slab.Arena, gkvlite.StoreCallbacks) {
-	arena := slab.NewArena(48, // The smallest slab class "chunk size" is 48 bytes.
-		1024*1024, // Each slab will be 1MB in size.
-		2,         // Power of 2 growth in "chunk sizes".
-		nil)       // Use default make([]byte) for slab memory.
-	if arena == nil {
-		t.Errorf("expected arena")
-	}
-
-	itemValLength := func(c *gkvlite.Collection, i *gkvlite.Item) int {
-		if i.Val == nil {
-			t.Fatalf("itemValLength on nil i.Val, i: %#v", i)
-		}
-		s := 0
-		b := i.Val
-		for b != nil {
-			s = s + len(b)
-			n := arena.GetNext(b)
-			if s > len(b) {
-				arena.DecRef(b)
-			}
-			b = n
-		}
-		return s
-	}
-	itemValWrite := func(c *gkvlite.Collection,
-		i *gkvlite.Item, w io.WriterAt, offset int64) error {
-		s := 0
-		b := i.Val
-		for b != nil {
-			_, err := w.WriteAt(b, offset + int64(s))
-			if err != nil {
-				return err
-			}
-			s = s + len(b)
-			n := arena.GetNext(b)
-			if s > len(b) {
-				arena.DecRef(b)
-			}
-			b = n
-		}
-		return nil
-	}
-	itemValRead := func(c *gkvlite.Collection,
-		i *gkvlite.Item, r io.ReaderAt, offset int64, valLength uint32) error {
-		b, err := readBufChain(arena, maxBufSize, r, offset, valLength)
-		if err != nil {
-			return err
-		}
-		i.Val = b
-		return nil
-	}
-	itemValAddRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
-		if i.Val == nil {
-			return
-		}
-		arena.AddRef(i.Val)
-	}
-	itemValDecRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
-		if i.Val == nil {
-			return
-		}
-		arena.DecRef(i.Val)
-	}
-
-	scb := gkvlite.StoreCallbacks{
-		ItemValLength: itemValLength,
-		ItemValWrite:  itemValWrite,
-		ItemValRead:   itemValRead,
-		ItemValAddRef: itemValAddRef,
-		ItemValDecRef: itemValDecRef,
-	}
-	return arena, scb
-}
 
 func TestSlabStore(t *testing.T) {
 	fname := "tmp.test"
