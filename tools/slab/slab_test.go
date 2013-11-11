@@ -6,7 +6,9 @@ package slab
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"testing"
 
@@ -55,21 +57,33 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		if i.Val == nil {
 			t.Fatalf("itemValLength on nil i.Val, i: %#v", i)
 		}
-		n := 0
-		for b := i.Val; b != nil; b = arena.GetNext(b) {
-			n = n + len(b)
+		s := 0
+		b := i.Val
+		for b != nil {
+			s = s + len(b)
+			n := arena.GetNext(b)
+			if s > len(b) {
+				arena.DecRef(b)
+			}
+			b = n
 		}
-		return n
+		return s
 	}
 	itemValWrite := func(c *gkvlite.Collection,
 		i *gkvlite.Item, w io.WriterAt, offset int64) error {
-		n := 0
-		for b := i.Val; b != nil; b = arena.GetNext(b) {
-			_, err := w.WriteAt(b, offset + int64(n))
+		s := 0
+		b := i.Val
+		for b != nil {
+			_, err := w.WriteAt(b, offset + int64(s))
 			if err != nil {
 				return err
 			}
-			n = n + len(b)
+			s = s + len(b)
+			n := arena.GetNext(b)
+			if s > len(b) {
+				arena.DecRef(b)
+			}
+			b = n
 		}
 		return nil
 	}
@@ -176,4 +190,90 @@ func TestSlabStore(t *testing.T) {
 		t.Errorf("expected 1234, got: %d", scb.ItemValLength(x, i))
 	}
 	s.ItemValDecRef(x, i)
+}
+
+func TestSlabStoreRandom(t *testing.T) {
+	fname := "tmp.test"
+	os.Remove(fname)
+	f, err := os.Create(fname)
+	if err != nil {
+		t.Errorf("expected to create file: " + fname)
+	}
+	defer os.Remove(fname)
+
+	arena, scb := setupStoreArena(t, 256)
+
+	start := func(f *os.File) (*gkvlite.Store, *gkvlite.Collection) {
+		s, err := gkvlite.NewStoreEx(f, scb)
+		if err != nil || s == nil {
+			t.Errorf("expected NewStoreEx to work")
+		}
+		s.SetCollection("x", bytes.Compare)
+		x := s.GetCollection("x")
+		if x == nil {
+			t.Errorf("expected SetColl/GetColl to work")
+		}
+		return s, x
+	}
+
+	s, x := start(f)
+
+	stop := func() {
+		s.Flush()
+		s.Close()
+		f.Close()
+		f = nil
+	}
+
+	numSets := 0
+	numKeys := 10
+	for i := 0; i < 100; i++ {
+		for j := 0; j < 1000; j++ {
+			ks := fmt.Sprintf("%03d", rand.Int() % numKeys)
+			k := []byte(ks)
+			r := rand.Int() % 100
+			if r < 20 {
+				i, err := x.GetItem(k, true)
+				if err != nil {
+					t.Errorf("expected nil error, got: %v", err)
+				}
+				if i != nil {
+					s.ItemValDecRef(x, i)
+				}
+			} else if r < 60 {
+				numSets++
+				v := fmt.Sprintf("%d", numSets)
+				b := arena.Alloc(len(v))
+				copy(b, []byte(v))
+				pri := rand.Int31()
+				err := x.SetItem(&gkvlite.Item{
+					Key:      k,
+					Val:      b,
+					Priority: pri,
+				})
+				if err != nil {
+					t.Errorf("expected nil error, got: %v", err)
+				}
+			} else if r < 80 {
+				_, err := x.Delete(k)
+				if err != nil {
+					t.Errorf("expected nil error, got: %v", err)
+				}
+			} else if r < 90 {
+				x.EvictSomeItems()
+			} else {
+				// Close and reopen the store.
+				stop()
+				f, _ = os.OpenFile(fname, os.O_RDWR, 0666)
+				s, x = start(f)
+			}
+		}
+		x.EvictSomeItems()
+		for k := 0; k < numKeys; k++ {
+			_, err := x.Delete([]byte(fmt.Sprintf("%03d", k)))
+			if err != nil {
+				t.Fatalf("expected nil error, got: %v", err)
+			}
+		}
+	}
 }
