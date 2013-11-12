@@ -22,6 +22,8 @@ var maxOps = flag.Int("ops", 0,
 	"max number of ops; 0 means run forever")
 var maxItems = flag.Int("n", 10000,
 	"max number of items")
+var maxItemBytes = flag.Int("maxItemBytes", 20000,
+	"max bytes for an item")
 var pctSets = flag.Int("sets", 50,
 	"percentage of sets; 50 means 50% sets")
 var pctDeletes = flag.Int("deletes", 5,
@@ -32,6 +34,8 @@ var pctReopens = flag.Int("reopens", 0,
 	"percentage of reopens; 0 means 0% reopens")
 var useSlab = flag.Bool("useSlab", true,
 	"whether to use slab allocator")
+var flushEvery = flag.Int("flushEvery", 0,
+	"flush every N ops; 0 means no flushing")
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "gkvlite slab testing tool\n")
@@ -55,7 +59,8 @@ func main() {
 		log.Fatalf("error: percentages are > 100%% (%d%%+%d%%+%d%%+%d%%)",
 			*pctSets, *pctDeletes, *pctEvicts + *pctReopens)
 	}
-	run(args[0], *useSlab, *maxOps, *maxItems, *pctSets, *pctDeletes, *pctEvicts, *pctReopens)
+	run(args[0], *useSlab, *flushEvery, *maxItemBytes,
+		*maxOps, *maxItems, *pctSets, *pctDeletes, *pctEvicts, *pctReopens)
 }
 
 // Helper function to read a contiguous byte sequence, splitting
@@ -165,8 +170,14 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 	return arena, scb
 }
 
-func run(fname string, useSlab bool,
+func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 	maxOps, maxItems, pctSets, pctDeletes, pctEvicts, pctReopens int) {
+	fmt.Printf("fname: %s, useSlab: %v, flushEvery: %d" +
+		", maxItemBytes: %d, maxOps: %d, maxItems: %d" +
+		", pctSets: %d, pctDeletes; %d, pctEvicts: %d, pctReopens: %d\n",
+		fname, useSlab, flushEvery, maxItemBytes,
+		maxOps, maxItems, pctSets, pctDeletes, pctEvicts, pctReopens)
+
 	os.Remove(fname)
 	f, err := os.Create(fname)
 	if err != nil {
@@ -209,6 +220,7 @@ func run(fname string, useSlab bool,
 	numDeletes := 0
 	numEvicts := 0
 	numReopens := 0
+	numFlushes := 0
 
 	psd := pctSets + pctDeletes
 	psde := pctSets + pctDeletes + pctEvicts
@@ -217,8 +229,8 @@ func run(fname string, useSlab bool,
 	for i := 0; maxOps <= 0 || i < maxOps; i++ {
 		kr := rand.Int() % maxItems
 		kr4 := kr * kr * kr * kr
-		if kr4 > 1000000 {
-			kr4 = 1000000
+		if kr4 > maxItemBytes {
+			kr4 = maxItemBytes
 		}
 		ks := fmt.Sprintf("%03d", kr)
 		k := []byte(ks)
@@ -272,10 +284,15 @@ func run(fname string, useSlab bool,
 			}
 		}
 
+		if flushEvery > 0 && i % flushEvery == 0 {
+			numFlushes++
+			s.Flush()
+		}
+
 		if i % 10000 == 0 {
 			log.Printf("i: %d, numGets: %d, numSets: %d, numDeletes: %d" +
-				", numEvicts: %d, numReopens: %d\n",
-				i, numGets, numSets, numDeletes, numEvicts, numReopens)
+				", numEvicts: %d, numReopens: %d, numFlushes: %d\n",
+				i, numGets, numSets, numDeletes, numEvicts, numReopens, numFlushes)
 		}
 	}
 }
