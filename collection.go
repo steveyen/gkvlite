@@ -98,7 +98,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 					return nil, err
 				}
 			}
-			t.store.ItemValAddRef(t, iItem)
+			t.store.ItemAddRef(t, iItem)
 			return iItem, nil
 		}
 	}
@@ -137,7 +137,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	defer t.rootDecRef(rnl)
 	root := rnl.root
 	n := t.mkNode(nil, nil, nil, 1, uint64(len(item.Key))+uint64(item.NumValBytes(t)))
-	t.store.ItemValAddRef(t, item)
+	t.store.ItemAddRef(t, item)
 	n.item.item = unsafe.Pointer(item) // Avoid garbage via separate init.
 	nloc := t.mkNodeLoc(n)
 	defer t.freeNodeLoc(nloc)
@@ -173,7 +173,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if err != nil || i == nil {
 		return false, err
 	}
-	t.store.ItemValDecRef(t, i)
+	t.store.ItemDecRef(t, i)
 	left, middle, right, err := t.store.split(t, root, key, &rnl.reclaimMark)
 	if err != nil {
 		return false, err
@@ -230,7 +230,7 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 			i := n.item.Item()
 			if i != nil && atomic.CompareAndSwapPointer(&n.item.item,
 				unsafe.Pointer(i), unsafe.Pointer(nil)) {
-				t.store.ItemValDecRef(t, i)
+				t.store.ItemDecRef(t, i)
 				numEvicted++
 			}
 		}
@@ -244,7 +244,7 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 		return next, true
 	})
 	if i != nil && err != nil {
-		t.store.ItemValDecRef(t, i)
+		t.store.ItemDecRef(t, i)
 	}
 	return numEvicted
 }

@@ -1,7 +1,7 @@
 package main
 
 // Test integration of gkvlite with go-slab, using gkvlite's optional
-// ItemValAddRef/DecRef() callbacks to integrate with a slab memory
+// ItemAddRef/ItemDecRef() callbacks to integrate with a slab memory
 // allocator.
 
 import (
@@ -150,13 +150,13 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		i.Val = b
 		return nil
 	}
-	itemValAddRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
+	itemAddRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
 		if i.Val == nil {
 			return
 		}
 		arena.AddRef(i.Val)
 	}
-	itemValDecRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
+	itemDecRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
 		if i.Val == nil {
 			return
 		}
@@ -167,8 +167,8 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		ItemValLength: itemValLength,
 		ItemValWrite:  itemValWrite,
 		ItemValRead:   itemValRead,
-		ItemValAddRef: itemValAddRef,
-		ItemValDecRef: itemValDecRef,
+		ItemAddRef:    itemAddRef,
+		ItemDecRef:    itemDecRef,
 	}
 	return arena, scb
 }
@@ -284,7 +284,7 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 					panic(fmt.Sprintf("error: expected len: %d, got %d",
 						kr4, scb.ItemValLength(x, i)))
 				}
-				s.ItemValDecRef(x, i)
+				s.ItemDecRef(x, i)
 			}
 		}
 

@@ -35,6 +35,8 @@ func (i *Item) NumValBytes(c *Collection) int {
 	return len(i.Val)
 }
 
+// The returned Item will not have been allocated through the optional
+// StoreCallbacks.ItemAlloc() callback.
 func (i *Item) Copy() *Item {
 	return &Item{
 		Key:       i.Key,
@@ -108,12 +110,12 @@ func (i *itemLoc) write(c *Collection) (err error) {
 	return nil
 }
 
-func (iloc *itemLoc) read(c *Collection, withValue bool) (i *Item, err error) {
+func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error) {
 	if iloc == nil {
 		return nil, nil
 	}
-	i = iloc.Item()
-	if i == nil || (i.Val == nil && withValue) {
+	icur = iloc.Item()
+	if icur == nil || (icur.Val == nil && withValue) {
 		loc := iloc.Loc()
 		if loc.isEmpty() {
 			return nil, nil
@@ -126,7 +128,6 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (i *Item, err error) {
 		if _, err := c.store.file.ReadAt(b, loc.Offset); err != nil {
 			return nil, err
 		}
-		i = &Item{}
 		pos := 0
 		length := binary.BigEndian.Uint32(b[pos : pos+4])
 		pos += 4
@@ -134,36 +135,52 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (i *Item, err error) {
 		pos += 2
 		valLength := binary.BigEndian.Uint32(b[pos : pos+4])
 		pos += 4
+		i := c.store.ItemAlloc(c, keyLength)
+		if i == nil {
+			return nil, errors.New("ItemAlloc() failed")
+		}
 		i.Priority = int32(binary.BigEndian.Uint32(b[pos : pos+4]))
 		pos += 4
 		if length != uint32(itemLoc_hdrLength)+uint32(keyLength)+valLength {
+			c.store.ItemDecRef(c, i)
 			return nil, errors.New("mismatched itemLoc lengths")
 		}
 		if pos != itemLoc_hdrLength {
+			c.store.ItemDecRef(c, i)
 			return nil, fmt.Errorf("read pos != itemLoc_hdrLength, %v != %v",
 				pos, itemLoc_hdrLength)
 		}
-		i.Key = make([]byte, keyLength)
 		if _, err := c.store.file.ReadAt(i.Key,
 			loc.Offset+int64(itemLoc_hdrLength)); err != nil {
+			c.store.ItemDecRef(c, i)
 			return nil, err
 		}
 		if withValue {
 			err := c.store.ItemValRead(c, i, c.store.file,
 				loc.Offset+int64(itemLoc_hdrLength)+int64(keyLength), valLength)
 			if err != nil {
+				c.store.ItemDecRef(c, i)
 				return nil, err
 			}
 		}
 		if c.store.callbacks.AfterItemRead != nil {
 			i, err = c.store.callbacks.AfterItemRead(c, i)
 			if err != nil {
+				c.store.ItemDecRef(c, i)
 				return nil, err
 			}
 		}
-		atomic.StorePointer(&iloc.item, unsafe.Pointer(i))
+		if !atomic.CompareAndSwapPointer(&iloc.item,
+			unsafe.Pointer(icur), unsafe.Pointer(i)) {
+			c.store.ItemDecRef(c, i)
+			return iloc.read(c, withValue)
+		}
+		if icur != nil {
+			c.store.ItemDecRef(c, icur)
+		}
+		icur = i
 	}
-	return i, nil
+	return icur, nil
 }
 
 func (iloc *itemLoc) NumBytes(c *Collection) int {

@@ -1,7 +1,7 @@
 package main
 
 // Test integration of gkvlite with go-slab, using gkvlite's optional
-// ItemValAddRef/DecRef() callbacks to integrate with a slab memory
+// ItemAddRef/ItemDecRef() callbacks to integrate with a slab memory
 // allocator.
 
 import (
@@ -73,7 +73,7 @@ func TestSlabStore(t *testing.T) {
 	if string(i.Val) != "hello" {
 		t.Errorf("expected hello, got: %#v", i)
 	}
-	s.ItemValDecRef(x, i)
+	s.ItemDecRef(x, i)
 	i, err = x.GetItem([]byte("big"), true)
 	if err != nil || i == nil {
 		t.Errorf("expected no GetItem() err, got: %v", err)
@@ -84,7 +84,7 @@ func TestSlabStore(t *testing.T) {
 	if scb.ItemValLength(x, i) != 1234 {
 		t.Errorf("expected 1234, got: %d", scb.ItemValLength(x, i))
 	}
-	s.ItemValDecRef(x, i)
+	s.ItemDecRef(x, i)
 }
 
 func TestSlabStoreRandom(t *testing.T) {
@@ -139,7 +139,7 @@ func TestSlabStoreRandom(t *testing.T) {
 						t.Errorf("expected len: %d, got %d",
 							kr4, scb.ItemValLength(x, i))
 					}
-					s.ItemValDecRef(x, i)
+					s.ItemDecRef(x, i)
 				}
 			} else if r < 60 {
 				numSets++

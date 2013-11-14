@@ -283,7 +283,7 @@ func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, b
 			if err != nil {
 				return nil, err
 			}
-			o.ItemValAddRef(t, i)
+			o.ItemAddRef(t, i)
 			return i, nil
 		}
 		nNode = childNode

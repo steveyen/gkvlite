@@ -2361,17 +2361,17 @@ func TestStoreRefCount(t *testing.T) {
 	nadds := 0
 	ndecs := 0
 	s, err := NewStoreEx(nil, StoreCallbacks{
-		ItemValAddRef: func(c *Collection, i *Item) {
+		ItemAddRef: func(c *Collection, i *Item) {
 			counts[string(i.Key)]++
 			if counts[string(i.Key)] <= 0 {
-				t.Errorf("in ItemValAddRef, count for k: %s was <= 0", string(i.Key))
+				t.Errorf("in ItemAddRef, count for k: %s was <= 0", string(i.Key))
 			}
 			nadds++
 		},
-		ItemValDecRef: func(c *Collection, i *Item) {
+		ItemDecRef: func(c *Collection, i *Item) {
 			counts[string(i.Key)]--
 			if counts[string(i.Key)] < 0 {
-				t.Errorf("in ItemValDecRef, count for k: %s was <= 0", string(i.Key))
+				t.Errorf("in ItemDecRef, count for k: %s was <= 0", string(i.Key))
 			}
 			if counts[string(i.Key)] == 0 {
 				delete(counts, string(i.Key))
@@ -2452,7 +2452,7 @@ func TestStoreRefCount(t *testing.T) {
 					testIdx, err)
 			}
 			if i != nil {
-				s.ItemValDecRef(x, i)
+				s.ItemDecRef(x, i)
 			}
 			if i == nil && test.exp == "NIL" {
 				continue
@@ -2500,18 +2500,18 @@ func TestStoreRefCountRandom(t *testing.T) {
 	mustJustOneRef("")
 
 	s, err := NewStoreEx(nil, StoreCallbacks{
-		ItemValAddRef: func(c *Collection, i *Item) {
+		ItemAddRef: func(c *Collection, i *Item) {
 			k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
 			counts[k]++
 			if counts[k] <= 0 {
-				t.Errorf("in ItemValAddRef, count for k: %s was <= 0", k)
+				t.Errorf("in ItemAddRef, count for k: %s was <= 0", k)
 			}
 		},
-		ItemValDecRef: func(c *Collection, i *Item) {
+		ItemDecRef: func(c *Collection, i *Item) {
 			k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
 			counts[k]--
 			if counts[k] < 0 {
-				t.Errorf("in ItemValDecRef, count for k: %s was <= 0", k)
+				t.Errorf("in ItemDecRef, count for k: %s was <= 0", k)
 			}
 			if counts[k] == 0 {
 				delete(counts, k)
@@ -2569,24 +2569,24 @@ func TestPersistRefCountRandom(t *testing.T) {
 
 	counts := map[string]int{}
 
-	itemValAddRef := func(c *Collection, i *Item) {
+	itemAddRef := func(c *Collection, i *Item) {
 		if i.Val == nil {
 			return
 		}
 		k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
 		counts[k]++
 		if counts[k] <= 0 {
-			t.Fatalf("in ItemValAddRef, count for k: %s was <= 0", k)
+			t.Fatalf("in ItemAddRef, count for k: %s was <= 0", k)
 		}
 	}
 
-	itemValDecRef := func(c *Collection, i *Item) {
+	itemDecRef := func(c *Collection, i *Item) {
 		if i.Val == nil {
 			return
 		}
 		k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
 		if counts[k] == 0 {
-			t.Fatalf("in ItemValDecRef, count for k: %s at 0", k)
+			t.Fatalf("in ItemDecRef, count for k: %s at 0", k)
 		}
 		counts[k]--
 		if counts[k] == 0 {
@@ -2596,13 +2596,13 @@ func TestPersistRefCountRandom(t *testing.T) {
 
 	start := func(f *os.File) (*Store, *Collection, map[string]int) {
 		s, err := NewStoreEx(f, StoreCallbacks{
-			ItemValAddRef: itemValAddRef,
-			ItemValDecRef: itemValDecRef,
+			ItemAddRef: itemAddRef,
+			ItemDecRef: itemDecRef,
 			ItemValRead: func(c *Collection, i *Item,
 				r io.ReaderAt, offset int64, valLength uint32) error {
 				i.Val = make([]byte, valLength)
 				_, err := r.ReadAt(i.Val, offset)
-				itemValAddRef(c, i)
+				itemAddRef(c, i)
 				return err
 			},
 		})
@@ -2686,17 +2686,17 @@ func TestEvictRefCountRandom(t *testing.T) {
 		var s *Store
 		var x *Collection
 		var err error
-		itemValAddRef := func(c *Collection, i *Item) {
+		itemAddRef := func(c *Collection, i *Item) {
 			k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
 			if i.Val == nil {
 				return
 			}
 			counts[k]++
 			if counts[k] <= 0 {
-				t.Fatalf("in ItemValAddRef, count for k: %s was <= 0", k)
+				t.Fatalf("in ItemAddRef, count for k: %s was <= 0", k)
 			}
 		}
-		itemValDecRef := func(c *Collection, i *Item) {
+		itemDecRef := func(c *Collection, i *Item) {
 			k := fmt.Sprintf("%s-%s", i.Key, string(i.Val))
 			if i.Val == nil {
 				return
@@ -2705,7 +2705,7 @@ func TestEvictRefCountRandom(t *testing.T) {
 				if x.root != nil {
 					dump(s, x.root.root, 1)
 				}
-				t.Fatalf("in ItemValDecRef, count for k: %s at 0, counts: %#v",
+				t.Fatalf("in ItemDecRef, count for k: %s at 0, counts: %#v",
 					k, counts)
 			}
 			counts[k]--
@@ -2714,13 +2714,13 @@ func TestEvictRefCountRandom(t *testing.T) {
 			}
 		}
 		s, err = NewStoreEx(f, StoreCallbacks{
-			ItemValAddRef: itemValAddRef,
-			ItemValDecRef: itemValDecRef,
+			ItemAddRef: itemAddRef,
+			ItemDecRef: itemDecRef,
 			ItemValRead: func(c *Collection, i *Item,
 				r io.ReaderAt, offset int64, valLength uint32) error {
 				i.Val = make([]byte, valLength)
 				_, err := r.ReadAt(i.Val, offset)
-				itemValAddRef(c, i)
+				itemAddRef(c, i)
 				return err
 			},
 		})
@@ -2766,7 +2766,7 @@ func TestEvictRefCountRandom(t *testing.T) {
 					t.Errorf("expected nil error, got: %v", err)
 				}
 				if i != nil {
-					s.ItemValDecRef(x, i)
+					s.ItemDecRef(x, i)
 				}
 			} else if r < 60 {
 				numSets++

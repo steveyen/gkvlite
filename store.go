@@ -39,6 +39,21 @@ type StoreFile interface {
 type StoreCallbacks struct {
 	BeforeItemWrite, AfterItemRead ItemCallback
 
+	// Optional callback to allocate an Item with an Item.Key.  If
+	// your app uses ref-counting, the returned Item should have
+	// logical ref-count of 1.
+	ItemAlloc func(c *Collection, keyLength uint16) *Item
+
+	// Optional callback to allow you to track gkvlite's ref-counts on
+	// an Item.  Apps might use this for buffer management and putting
+	// Item's on a free-list.
+	ItemAddRef func(c *Collection, i *Item)
+
+	// Optional callback to allow you to track gkvlite's ref-counts on
+	// an Item.  Apps might use this for buffer management and putting
+	// Item's on a free-list.
+	ItemDecRef func(c *Collection, i *Item)
+
 	// Optional callback to control on-disk size, in bytes, of an item's value.
 	ItemValLength func(c *Collection, i *Item) int
 
@@ -49,26 +64,8 @@ type StoreCallbacks struct {
 	// Optional callback to read item bytes differently.  For example,
 	// the app might have an optimization to just remember the reader
 	// & file offsets in the item.Transient field for lazy reading.
-	// If the application uses ref-counting, the item i.Val should
-	// logically have 1 ref count on it when ItemValRead() returns.
 	ItemValRead func(c *Collection, i *Item,
 		r io.ReaderAt, offset int64, valLength uint32) error
-
-	// Optional callback to allow you to track ref counts on
-	// Item.Val's, invoked when gkvlite adds a reference to an
-	// Item.Val.  Apps might use this for buffer management and
-	// re-use.  While the ref count is >0, then the Item.Val buffer is
-	// still in use.  For example, gkvlite will invoke ItemValAddRef()
-	// while processing a SetItem() call in order to have its own ref
-	// count on the input Item.Val.
-	ItemValAddRef func(c *Collection, i *Item)
-
-	// Optional callback to allow you to track ref counts on
-	// Item.Val's, invoked when gkvlite drops a reference to an
-	// Item.Val.  Apps might use this for buffer management and
-	// re-use.  When the ref count is 0, then the Item.Val buffer can
-	// be reused.
-	ItemValDecRef func(c *Collection, i *Item)
 
 	// Invoked when a Store is reloaded (during NewStoreEx()) from
 	// disk, this callback allows the user to optionally supply a key
@@ -310,7 +307,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 		if minItem == nil {
 			continue
 		}
-		defer s.ItemValDecRef(srcColl, minItem)
+		defer s.ItemDecRef(srcColl, minItem)
 		numItems := 0
 		var errCopyItem error = nil
 		err = srcColl.VisitItemsAscend(minItem.Key, true, func(i *Item) bool {
@@ -460,6 +457,25 @@ func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
 	}
 }
 
+func (o *Store) ItemAlloc(c *Collection, keyLength uint16) *Item {
+	if o.callbacks.ItemAlloc != nil {
+		return o.callbacks.ItemAlloc(c, keyLength)
+	}
+	return &Item{Key: make([]byte, keyLength)}
+}
+
+func (o *Store) ItemAddRef(c *Collection, i *Item) {
+	if o.callbacks.ItemAddRef != nil {
+		o.callbacks.ItemAddRef(c, i)
+	}
+}
+
+func (o *Store) ItemDecRef(c *Collection, i *Item) {
+	if o.callbacks.ItemDecRef != nil {
+		o.callbacks.ItemDecRef(c, i)
+	}
+}
+
 func (o *Store) ItemValRead(c *Collection, i *Item,
 	r io.ReaderAt, offset int64, valLength uint32) error {
 	if o.callbacks.ItemValRead != nil {
@@ -476,16 +492,4 @@ func (o *Store) ItemValWrite(c *Collection, i *Item, w io.WriterAt, offset int64
 	}
 	_, err := w.WriteAt(i.Val, offset)
 	return err
-}
-
-func (o *Store) ItemValAddRef(c *Collection, i *Item) {
-	if o.callbacks.ItemValAddRef != nil {
-		o.callbacks.ItemValAddRef(c, i)
-	}
-}
-
-func (o *Store) ItemValDecRef(c *Collection, i *Item) {
-	if o.callbacks.ItemValDecRef != nil {
-		o.callbacks.ItemValDecRef(c, i)
-	}
 }

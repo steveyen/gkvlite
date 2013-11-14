@@ -122,7 +122,7 @@ func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 	if itemIn != nil {
 		i := itemIn.Item()
 		if i != nil {
-			t.store.ItemValAddRef(t, i)
+			t.store.ItemAddRef(t, i)
 		}
 	}
 	n.item.Copy(itemIn)
@@ -143,7 +143,7 @@ func (t *Collection) freeNode_unlocked(n *node, reclaimMark *node) {
 	}
 	i := n.item.Item()
 	if i != nil {
-		t.store.ItemValDecRef(t, i)
+		t.store.ItemDecRef(t, i)
 	}
 	n.item = *empty_itemLoc
 	n.left = *empty_nodeLoc
