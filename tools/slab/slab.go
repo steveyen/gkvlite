@@ -12,6 +12,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"sort"
 	"testing"
 
 	"github.com/steveyen/gkvlite"
@@ -36,6 +37,8 @@ var useSlab = flag.Bool("useSlab", true,
 	"whether to use slab allocator")
 var flushEvery = flag.Int("flushEvery", 0,
 	"flush every N ops; 0 means no flushing")
+var slabStats = flag.Bool("slabStats", false,
+	"whether to emit slab stats")
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "gkvlite slab testing tool\n")
@@ -184,6 +187,7 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 		panic(fmt.Sprintf("error: could not create file: %s, err: %v", fname, err))
 	}
 
+	arenaStats := map[string]int64{}
 	arena, scb := setupStoreArena(nil, 256)
 	if !useSlab {
 		arena = nil
@@ -290,6 +294,17 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 		}
 
 		if i % 10000 == 0 {
+			if arena != nil && *slabStats == true {
+				arena.Stats(arenaStats)
+				mk := []string{}
+				for k, _ := range arenaStats {
+					mk = append(mk, k)
+				}
+				sort.Strings(mk)
+				for _, k := range mk {
+					log.Printf("%s = %d", k, arenaStats[k])
+				}
+			}
 			log.Printf("i: %d, numGets: %d, numSets: %d, numDeletes: %d" +
 				", numEvicts: %d, numReopens: %d, numFlushes: %d\n",
 				i, numGets, numSets, numDeletes, numEvicts, numReopens, numFlushes)
