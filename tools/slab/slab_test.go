@@ -39,16 +39,20 @@ func TestSlabStore(t *testing.T) {
 		t.Errorf("expected buf")
 	}
 	copy(b, []byte("hello"))
-	x.SetItem(&gkvlite.Item{
-		Key:      []byte("a"),
-		Val:      b,
-		Priority: 100,
-	})
-	x.SetItem(&gkvlite.Item{
-		Key:      []byte("big"),
-		Val:      arena.Alloc(1234),
-		Priority: 100,
-	})
+	i := scb.ItemAlloc(x, 1)
+	copy(i.Key, []byte("a"))
+	i.Val = b
+	i.Priority = 100
+	x.SetItem(i)
+	scb.ItemDecRef(x, i)
+
+	i = scb.ItemAlloc(x, 3)
+	copy(i.Key, []byte("big"))
+	i.Val = arena.Alloc(1234)
+	i.Priority = 100
+	x.SetItem(i)
+	scb.ItemDecRef(x, i)
+
 	err = s.Flush()
 	if err != nil {
 		t.Errorf("expected Flush() to error")
@@ -66,7 +70,7 @@ func TestSlabStore(t *testing.T) {
 	if x == nil {
 		t.Errorf("expected SetColl/GetColl to work")
 	}
-	i, err := x.GetItem([]byte("a"), true)
+	i, err = x.GetItem([]byte("a"), true)
 	if err != nil || i == nil {
 		t.Errorf("expected no GetItem() err, got: %v", err)
 	}
@@ -145,14 +149,15 @@ func TestSlabStoreRandom(t *testing.T) {
 				numSets++
 				b := arena.Alloc(kr * kr * kr * kr)
 				pri := rand.Int31()
-				err := x.SetItem(&gkvlite.Item{
-					Key:      k,
-					Val:      b,
-					Priority: pri,
-				})
+				it := scb.ItemAlloc(x, uint16(len(k)))
+				copy(it.Key, k)
+				it.Val = b
+				it.Priority = pri
+				err := x.SetItem(it)
 				if err != nil {
 					t.Errorf("expected nil error, got: %v", err)
 				}
+				scb.ItemDecRef(x, it)
 			} else if r < 80 {
 				_, err := x.Delete(k)
 				if err != nil {

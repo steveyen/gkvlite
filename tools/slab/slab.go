@@ -14,6 +14,7 @@ import (
 	"os"
 	"sort"
 	"testing"
+	"unsafe"
 
 	"github.com/steveyen/gkvlite"
 	"github.com/steveyen/go-slab"
@@ -93,6 +94,14 @@ func readBufChain(arena *slab.Arena, maxBufSize int, r io.ReaderAt, offset int64
 	return b, nil
 }
 
+type ItemNode struct {
+	refs int
+	next *ItemNode
+	item gkvlite.Item
+}
+
+var freeItemNodes *ItemNode
+
 func setupStoreArena(t *testing.T, maxBufSize int) (
 	*slab.Arena, gkvlite.StoreCallbacks) {
 	arena := slab.NewArena(48, // The smallest slab class "chunk size" is 48 bytes.
@@ -150,23 +159,54 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		i.Val = b
 		return nil
 	}
-	itemAddRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
-		if i.Val == nil {
-			return
+	itemAlloc := func(c *gkvlite.Collection, keyLength uint16) *gkvlite.Item {
+		var n *ItemNode
+		if freeItemNodes != nil {
+			n = freeItemNodes
+			freeItemNodes = freeItemNodes.next
+			n.next = nil
+		} else {
+			n = &ItemNode{}
+			n.item.Transient = unsafe.Pointer(n)
 		}
-		arena.AddRef(i.Val)
+		if n.refs != 0 ||
+			n.item.Key != nil || n.item.Val != nil || n.item.Priority != 0 ||
+			n.item.Transient != unsafe.Pointer(n) {
+			panic("unexpected ItemNode refs or item fields")
+		}
+		n.refs = 1
+		n.next = nil
+		n.item.Key = arena.Alloc(int(keyLength))
+		return &n.item
+	}
+	itemAddRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
+		n := (*ItemNode)(i.Transient)
+		n.refs++
 	}
 	itemDecRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
-		if i.Val == nil {
-			return
+		n := (*ItemNode)(i.Transient)
+		n.refs--
+		if n.refs == 0 {
+			if i.Key == nil {
+				panic("expected a Key")
+			}
+			arena.DecRef(i.Key)
+			i.Key = nil
+			if i.Val != nil {
+				arena.DecRef(i.Val)
+				i.Val = nil
+			}
+			i.Priority = 0
+			n.next = freeItemNodes
+			freeItemNodes = n
 		}
-		arena.DecRef(i.Val)
 	}
 
 	scb := gkvlite.StoreCallbacks{
 		ItemValLength: itemValLength,
 		ItemValWrite:  itemValWrite,
 		ItemValRead:   itemValRead,
+		ItemAlloc:     itemAlloc,
 		ItemAddRef:    itemAddRef,
 		ItemDecRef:    itemDecRef,
 	}
@@ -248,16 +288,21 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 				b = make([]byte, kr4)
 			}
 			pri := rand.Int31()
-			err := x.SetItem(&gkvlite.Item{
-				Key:      k,
-				Val:      b,
-				Priority: pri,
-			})
+			var it *gkvlite.Item
+			if scb.ItemAlloc != nil {
+				it = scb.ItemAlloc(x, uint16(len(k)))
+			} else {
+				it = &gkvlite.Item{Key: make([]byte, len(k))}
+			}
+			copy(it.Key, k)
+			it.Val = b
+			it.Priority = pri
+			err := x.SetItem(it)
 			if err != nil {
 				panic(fmt.Sprintf("error: expected nil error, got: %v", err))
 			}
-			if arena != nil {
-				arena.DecRef(b)
+			if scb.ItemDecRef != nil {
+				scb.ItemDecRef(x, it)
 			}
 		} else if r < psd {
 			numDeletes++
@@ -284,7 +329,9 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 					panic(fmt.Sprintf("error: expected len: %d, got %d",
 						kr4, scb.ItemValLength(x, i)))
 				}
-				s.ItemDecRef(x, i)
+				if scb.ItemDecRef != nil {
+					scb.ItemDecRef(x, i)
+				}
 			}
 		}
 
