@@ -1,3 +1,6 @@
+// Package gkvlite provides a simple, ordered, ACID, key-value
+// persistence library.  It provides persistent, immutable data
+// structure abstrations.
 package gkvlite
 
 import (
