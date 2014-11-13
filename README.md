@@ -3,6 +3,8 @@ gkvlite
 
 gkvlite is a simple, ordered, ACID, key-value persistence library for Go.
 
+[![GoDoc](https://godoc.org/github.com/steveyen/gkvlite?status.svg)](https://godoc.org/github.com/steveyen/gkvlite) [![Build Status](https://drone.io/github.com/steveyen/gkvlite/status.png)](https://drone.io/github.com/steveyen/gkvlite/latest) [![Coverage Status](https://coveralls.io/repos/steveyen/gkvlite/badge.png)](https://coveralls.io/r/steveyen/gkvlite)
+
 Overview
 ========
 
