@@ -2804,3 +2804,81 @@ func TestEvictRefCountRandom(t *testing.T) {
 		mustJustOneRef(fmt.Sprintf("i: %d", i))
 	}
 }
+
+// perm returns a random permutation of n Int items in the range [0, n).
+func perm(n int) (out [][]byte) {
+    for _, v := range rand.Perm(n) {
+        out = append(out, []byte(strconv.Itoa(v)))
+    }
+    return out
+}
+
+const benchmarkSize = 10000
+
+func BenchmarkRandInsert(b *testing.B) {
+	b.StopTimer()
+	insertP := perm(benchmarkSize)
+	i := 0
+	b.StartTimer()
+	for i < b.N {
+		b.StopTimer()
+		tr, _ := NewStore(nil)
+		x := tr.SetCollection("x", nil)
+		b.StartTimer()
+		for _, item := range insertP {
+			x.Set(item, item)
+			i++
+			if i >= b.N {
+				return
+			}
+		}
+	}
+}
+
+func BenchmarkRandDelete(b *testing.B) {
+	b.StopTimer()
+	insertP := perm(benchmarkSize)
+	removeP := perm(benchmarkSize)
+	i := 0
+	b.StartTimer()
+	for i < b.N {
+		b.StopTimer()
+		tr, _ := NewStore(nil)
+		x := tr.SetCollection("x", nil)
+		for _, item := range insertP {
+			x.Set(item, item)
+		}
+		b.StartTimer()
+		for _, item := range removeP {
+			x.Delete(item)
+			i++
+			if i >= b.N {
+				return
+			}
+		}
+	}
+}
+
+func BenchmarkRandGet(b *testing.B) {
+	b.StopTimer()
+	insertP := perm(benchmarkSize)
+	removeP := perm(benchmarkSize)
+	i := 0
+	b.StartTimer()
+	for i < b.N {
+		b.StopTimer()
+		tr, _ := NewStore(nil)
+		x := tr.SetCollection("x", nil)
+		for _, item := range insertP {
+			x.Set(item, item)
+		}
+		b.StartTimer()
+		for _, item := range removeP {
+			x.Get(item)
+			i++
+			if i >= b.N {
+				return
+			}
+		}
+	}
+}
