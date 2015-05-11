@@ -16,7 +16,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/steveyen/gkvlite"
+	"github.com/luci/gkvlite"
 	"github.com/steveyen/go-slab"
 )
 
@@ -59,9 +59,9 @@ func main() {
 	if len(args) < 1 {
 		log.Fatalf("error: missing dbFileName")
 	}
-	if *pctSets + *pctDeletes + *pctEvicts + *pctReopens > 100 {
+	if *pctSets+*pctDeletes+*pctEvicts+*pctReopens > 100 {
 		log.Fatalf("error: percentages are > 100%% (%d%%+%d%%+%d%%+%d%%)",
-			*pctSets, *pctDeletes, *pctEvicts + *pctReopens)
+			*pctSets, *pctDeletes, *pctEvicts, *pctReopens)
 	}
 	run(args[0], *useSlab, *flushEvery, *maxItemBytes,
 		*maxOps, *maxItems, *pctSets, *pctDeletes, *pctEvicts, *pctReopens)
@@ -84,7 +84,7 @@ func readBufChain(arena *slab.Arena, maxBufSize int, r io.ReaderAt, offset int64
 	}
 	remaining := valLength - uint32(n)
 	if remaining > 0 {
-		next, err := readBufChain(arena, maxBufSize, r, offset + int64(n), remaining)
+		next, err := readBufChain(arena, maxBufSize, r, offset+int64(n), remaining)
 		if err != nil {
 			arena.DecRef(b)
 			return nil, err
@@ -137,7 +137,7 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		s := 0
 		b := i.Val
 		for b != nil {
-			_, err := w.WriteAt(b, offset + int64(s))
+			_, err := w.WriteAt(b, offset+int64(s))
 			if err != nil {
 				return err
 			}
@@ -215,8 +215,8 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 
 func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 	maxOps, maxItems, pctSets, pctDeletes, pctEvicts, pctReopens int) {
-	fmt.Printf("fname: %s, useSlab: %v, flushEvery: %d" +
-		", maxItemBytes: %d, maxOps: %d, maxItems: %d" +
+	fmt.Printf("fname: %s, useSlab: %v, flushEvery: %d"+
+		", maxItemBytes: %d, maxOps: %d, maxItems: %d"+
 		", pctSets: %d, pctDeletes; %d, pctEvicts: %d, pctReopens: %d\n",
 		fname, useSlab, flushEvery, maxItemBytes,
 		maxOps, maxItems, pctSets, pctDeletes, pctEvicts, pctReopens)
@@ -335,16 +335,16 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 			}
 		}
 
-		if flushEvery > 0 && i % flushEvery == 0 {
+		if flushEvery > 0 && i%flushEvery == 0 {
 			numFlushes++
 			s.Flush()
 		}
 
-		if i % 10000 == 0 {
+		if i%10000 == 0 {
 			if arena != nil && *slabStats == true {
 				arena.Stats(arenaStats)
 				mk := []string{}
-				for k, _ := range arenaStats {
+				for k := range arenaStats {
 					mk = append(mk, k)
 				}
 				sort.Strings(mk)
@@ -352,7 +352,7 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 					log.Printf("%s = %d", k, arenaStats[k])
 				}
 			}
-			log.Printf("i: %d, numGets: %d, numSets: %d, numDeletes: %d" +
+			log.Printf("i: %d, numGets: %d, numSets: %d, numDeletes: %d"+
 				", numEvicts: %d, numReopens: %d, numFlushes: %d\n",
 				i, numGets, numSets, numDeletes, numEvicts, numReopens, numFlushes)
 		}
