@@ -63,7 +63,7 @@ func (i *itemLoc) Copy(src *itemLoc) {
 	atomic.StorePointer(&i.item, unsafe.Pointer(src.Item()))
 }
 
-const itemLoc_hdrLength int = 4 + 2 + 4 + 4
+const itemLoc_hdrLength int = 4 + 4 + 4 + 4
 
 func (i *itemLoc) write(c *Collection) (err error) {
 	if i.Loc().isEmpty() {
@@ -85,8 +85,8 @@ func (i *itemLoc) write(c *Collection) (err error) {
 		pos := 0
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(ilength))
 		pos += 4
-		binary.BigEndian.PutUint16(b[pos:pos+2], uint16(len(iItem.Key)))
-		pos += 2
+		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(len(iItem.Key)))
+		pos += 4
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(vlength))
 		pos += 4
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(iItem.Priority))
@@ -131,8 +131,8 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 		pos := 0
 		length := binary.BigEndian.Uint32(b[pos : pos+4])
 		pos += 4
-		keyLength := binary.BigEndian.Uint16(b[pos : pos+2])
-		pos += 2
+		keyLength := binary.BigEndian.Uint32(b[pos : pos+4])
+		pos += 4
 		valLength := binary.BigEndian.Uint32(b[pos : pos+4])
 		pos += 4
 		i := c.store.ItemAlloc(c, keyLength)

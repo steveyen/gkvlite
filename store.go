@@ -45,7 +45,7 @@ type StoreCallbacks struct {
 	// Optional callback to allocate an Item with an Item.Key.  If
 	// your app uses ref-counting, the returned Item should have
 	// logical ref-count of 1.
-	ItemAlloc func(c *Collection, keyLength uint16) *Item
+	ItemAlloc func(c *Collection, keyLength uint32) *Item
 
 	// Optional callback to allow you to track gkvlite's ref-counts on
 	// an Item.  Apps might use this for buffer management and putting
@@ -159,7 +159,7 @@ func (s *Store) GetCollectionNames() []string {
 
 func collNames(coll map[string]*Collection) []string {
 	res := make([]string, 0, len(coll))
-	for name, _ := range coll {
+	for name := range coll {
 		res = append(res, name)
 	}
 	sort.Strings(res) // Sorting because common callers need stability.
@@ -460,7 +460,7 @@ func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
 	}
 }
 
-func (o *Store) ItemAlloc(c *Collection, keyLength uint16) *Item {
+func (o *Store) ItemAlloc(c *Collection, keyLength uint32) *Item {
 	if o.callbacks.ItemAlloc != nil {
 		return o.callbacks.ItemAlloc(c, keyLength)
 	}
