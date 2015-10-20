@@ -4,21 +4,23 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 // A persistable item.
 type Item struct {
-	Transient unsafe.Pointer // For any ephemeral data; atomic CAS recommended.
-	Key, Val  []byte         // Val may be nil if not fetched into memory yet.
-	Priority  int32          // Use rand.Int31() for probabilistic balancing.
+	Transient interface{} // For any ephemeral data.
+	Key, Val  []byte      // Val may be nil if not fetched into memory yet.
+	Priority  int32       // Use rand.Int31() for probabilistic balancing.
 }
 
 // A persistable item and its persistence location.
 type itemLoc struct {
-	loc  unsafe.Pointer // *ploc - can be nil if item is dirty (not yet persisted).
-	item unsafe.Pointer // *Item - can be nil if item is not fetched into memory yet.
+	m sync.Mutex
+
+	loc  *ploc // can be nil if item is dirty (not yet persisted).
+	item *Item // can be nil if item is not fetched into memory yet.
 }
 
 var empty_itemLoc = &itemLoc{}
@@ -47,11 +49,31 @@ func (i *Item) Copy() *Item {
 }
 
 func (i *itemLoc) Loc() *ploc {
-	return (*ploc)(atomic.LoadPointer(&i.loc))
+	i.m.Lock()
+	defer i.m.Unlock()
+	return i.loc
+}
+
+func (i *itemLoc) setLoc(n *ploc) {
+	i.m.Lock()
+	defer i.m.Unlock()
+	i.loc = n
 }
 
 func (i *itemLoc) Item() *Item {
-	return (*Item)(atomic.LoadPointer(&i.item))
+	i.m.Lock()
+	defer i.m.Unlock()
+	return i.item
+}
+
+func (i *itemLoc) casItem(o, n *Item) bool {
+	i.m.Lock()
+	defer i.m.Unlock()
+	if i.item == o {
+		i.item = n
+		return true
+	}
+	return false
 }
 
 func (i *itemLoc) Copy(src *itemLoc) {
@@ -59,8 +81,13 @@ func (i *itemLoc) Copy(src *itemLoc) {
 		i.Copy(empty_itemLoc)
 		return
 	}
-	atomic.StorePointer(&i.loc, unsafe.Pointer(src.Loc()))
-	atomic.StorePointer(&i.item, unsafe.Pointer(src.Item()))
+	newloc := src.Loc()
+	newitem := src.Item()
+
+	i.m.Lock()
+	defer i.m.Unlock()
+	i.loc = newloc
+	i.item = newitem
 }
 
 const itemLoc_hdrLength int = 4 + 4 + 4 + 4
@@ -104,8 +131,7 @@ func (i *itemLoc) write(c *Collection) (err error) {
 			return err
 		}
 		atomic.StoreInt64(&c.store.size, offset+int64(ilength))
-		atomic.StorePointer(&i.loc,
-			unsafe.Pointer(&ploc{Offset: offset, Length: uint32(ilength)}))
+		i.setLoc(&ploc{Offset: offset, Length: uint32(ilength)})
 	}
 	return nil
 }
@@ -170,8 +196,7 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 				return nil, err
 			}
 		}
-		if !atomic.CompareAndSwapPointer(&iloc.item,
-			unsafe.Pointer(icur), unsafe.Pointer(i)) {
+		if !iloc.casItem(icur, i) {
 			c.store.ItemDecRef(c, i)
 			return iloc.read(c, withValue)
 		}

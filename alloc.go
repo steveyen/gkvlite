@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 var freeNodeLock sync.Mutex
@@ -173,8 +172,8 @@ func (t *Collection) mkNodeLoc(n *node) *nodeLoc {
 		allocStats.CurFreeNodeLocs--
 		freeNodeLocLock.Unlock()
 	}
-	nloc.loc = unsafe.Pointer(nil)
-	nloc.node = unsafe.Pointer(n)
+	nloc.loc = nil
+	nloc.node = n
 	nloc.next = nil
 	return nloc
 }
@@ -187,8 +186,8 @@ func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
 	if nloc.next != nil {
 		panic("double free nodeLoc")
 	}
-	nloc.loc = unsafe.Pointer(nil)
-	nloc.node = unsafe.Pointer(nil)
+	nloc.loc = nil
+	nloc.node = nil
 
 	freeNodeLocLock.Lock()
 	nloc.next = freeNodeLocs

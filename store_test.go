@@ -1626,7 +1626,7 @@ func TestItemCopy(t *testing.T) {
 		Key:       []byte("hi"),
 		Val:       []byte("world"),
 		Priority:  1234,
-		Transient: unsafe.Pointer(&node{}),
+		Transient: &node{},
 	}
 	j := i.Copy()
 	if !bytes.Equal(j.Key, i.Key) || !bytes.Equal(j.Val, i.Val) ||
@@ -1689,34 +1689,34 @@ func TestStoreClose(t *testing.T) {
 	if err != nil || s == nil {
 		t.Errorf("expected memory-only NewStore to work")
 	}
-	if s.coll == unsafe.Pointer(nil) {
+	if s.coll == nil {
 		t.Errorf("expected coll before Close()")
 	}
 	s.Close()
-	if s.coll != unsafe.Pointer(nil) {
+	if s.coll != nil {
 		t.Errorf("expected no coll after Close()")
 	}
 	s.Close()
-	if s.coll != unsafe.Pointer(nil) {
+	if s.coll != nil {
 		t.Errorf("expected no coll after re-Close()")
 	}
 	s.Close()
-	if s.coll != unsafe.Pointer(nil) {
+	if s.coll != nil {
 		t.Errorf("expected no coll after re-Close()")
 	}
 
 	// Now, with a collection
 	s, _ = NewStore(nil)
 	s.SetCollection("x", bytes.Compare)
-	if s.coll == unsafe.Pointer(nil) {
+	if s.coll == nil {
 		t.Errorf("expected coll before Close()")
 	}
 	s.Close()
-	if s.coll != unsafe.Pointer(nil) {
+	if s.coll != nil {
 		t.Errorf("expected no coll after Close()")
 	}
 	s.Close()
-	if s.coll != unsafe.Pointer(nil) {
+	if s.coll != nil {
 		t.Errorf("expected no coll after Close()")
 	}
 }
@@ -2208,7 +2208,7 @@ func TestNumInfo(t *testing.T) {
 	readShouldErr = true
 
 	rnl := x.rootAddRef()
-	rnl.root.node = unsafe.Pointer(nil) // Evict node from memory to force reading.
+	rnl.root.node = nil // Evict node from memory to force reading.
 
 	_, _, _, _, err = numInfo(s, rnl.root, empty_nodeLoc)
 	if err == nil {
@@ -2350,7 +2350,7 @@ func TestNodeLocWriteErr(t *testing.T) {
 	}
 	writeShouldErr = false
 
-	rnl.root.node = unsafe.Pointer(nil) // Force a nil node.
+	rnl.root.node = nil // Force a nil node.
 	if rnl.root.write(s) != nil {
 		t.Errorf("expected write node on nil node to work")
 	}
@@ -2807,10 +2807,10 @@ func TestEvictRefCountRandom(t *testing.T) {
 
 // perm returns a random permutation of n Int items in the range [0, n).
 func perm(n int) (out [][]byte) {
-    for _, v := range rand.Perm(n) {
-        out = append(out, []byte(strconv.Itoa(v)))
-    }
-    return out
+	for _, v := range rand.Perm(n) {
+		out = append(out, []byte(strconv.Itoa(v)))
+	}
+	return out
 }
 
 const benchmarkSize = 10000

@@ -15,18 +15,41 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 // A persistable store holding collections of ordered keys & values.
 type Store struct {
+	m sync.Mutex
+
 	// Atomic CAS'ed int64/uint64's must be at the top for 32-bit compatibility.
-	size       int64          // Atomic protected; file size or next write position.
-	nodeAllocs uint64         // Atomic protected; total node allocation stats.
-	coll       unsafe.Pointer // Copy-on-write map[string]*Collection.
-	file       StoreFile      // When nil, we're memory-only or no persistence.
-	callbacks  StoreCallbacks // Optional / may be nil.
-	readOnly   bool           // When true, Flush()'ing is disallowed.
+	size       int64                   // Atomic protected; file size or next write position.
+	nodeAllocs uint64                  // Atomic protected; total node allocation stats.
+	coll       *map[string]*Collection // Copy-on-write map[string]*Collection.
+	file       StoreFile               // When nil, we're memory-only or no persistence.
+	callbacks  StoreCallbacks          // Optional / may be nil.
+	readOnly   bool                    // When true, Flush()'ing is disallowed.
+}
+
+func (s *Store) setColl(n *map[string]*Collection) {
+	s.m.Lock()
+	defer s.m.Unlock()
+	s.coll = n
+}
+
+func (s *Store) getColl() *map[string]*Collection {
+	s.m.Lock()
+	defer s.m.Unlock()
+	return s.coll
+}
+
+func (s *Store) casColl(o, n *map[string]*Collection) bool {
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.coll == o {
+		s.coll = n
+		return true
+	}
+	return false
 }
 
 // The StoreFile interface is implemented by os.File.  Application
@@ -95,7 +118,7 @@ func NewStore(file StoreFile) (*Store, error) {
 func NewStoreEx(file StoreFile,
 	callbacks StoreCallbacks) (*Store, error) {
 	coll := make(map[string]*Collection)
-	res := &Store{coll: unsafe.Pointer(&coll), callbacks: callbacks}
+	res := &Store{coll: &coll, callbacks: callbacks}
 	if file == nil || !reflect.ValueOf(file).Elem().IsValid() {
 		return res, nil // Memory-only Store.
 	}
@@ -115,7 +138,7 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 		compare = bytes.Compare
 	}
 	for {
-		orig := atomic.LoadPointer(&s.coll)
+		orig := s.getColl()
 		coll := copyColl(*(*map[string]*Collection)(orig))
 		cnew := s.MakePrivateCollection(compare)
 		cnew.name = name
@@ -125,7 +148,7 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 			cnew.root = cold.rootAddRef()
 		}
 		coll[name] = cnew
-		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
+		if s.casColl(orig, &coll) {
 			cold.closeCollection()
 			return cnew
 		}
@@ -149,12 +172,11 @@ func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 
 // Retrieves a named Collection.
 func (s *Store) GetCollection(name string) *Collection {
-	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
-	return coll[name]
+	return (*s.getColl())[name]
 }
 
 func (s *Store) GetCollectionNames() []string {
-	return collNames(*(*map[string]*Collection)(atomic.LoadPointer(&s.coll)))
+	return collNames(*s.getColl())
 }
 
 func collNames(coll map[string]*Collection) []string {
@@ -171,11 +193,11 @@ func collNames(coll map[string]*Collection) []string {
 // SetCollection(x) is a fast way to empty a Collection.
 func (s *Store) RemoveCollection(name string) {
 	for {
-		orig := atomic.LoadPointer(&s.coll)
+		orig := s.getColl()
 		coll := copyColl(*(*map[string]*Collection)(orig))
 		cold := coll[name]
 		delete(coll, name)
-		if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
+		if s.casColl(orig, &coll) {
 			cold.closeCollection()
 			return
 		}
@@ -203,7 +225,7 @@ func (s *Store) Flush() error {
 	if s.file == nil {
 		return errors.New("no file / in-memory only, so cannot Flush()")
 	}
-	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
+	coll := *s.getColl()
 	rnls := map[string]*rootNodeLoc{}
 	cnames := collNames(coll)
 	for _, name := range cnames {
@@ -231,9 +253,9 @@ func (s *Store) FlushRevert() error {
 	if s.file == nil {
 		return errors.New("no file / in-memory only, so cannot FlushRevert()")
 	}
-	orig := atomic.LoadPointer(&s.coll)
+	orig := s.getColl()
 	coll := make(map[string]*Collection)
-	if atomic.CompareAndSwapPointer(&s.coll, orig, unsafe.Pointer(&coll)) {
+	if s.casColl(orig, &coll) {
 		for _, cold := range *(*map[string]*Collection)(orig) {
 			cold.closeCollection()
 		}
@@ -256,9 +278,9 @@ func (s *Store) FlushRevert() error {
 // snapshot has its mutations and Flush() operations disabled because
 // the original store "owns" writes to the StoreFile.
 func (s *Store) Snapshot() (snapshot *Store) {
-	coll := copyColl(*(*map[string]*Collection)(atomic.LoadPointer(&s.coll)))
+	coll := copyColl(*s.getColl())
 	res := &Store{
-		coll:      unsafe.Pointer(&coll),
+		coll:      &coll,
 		file:      s.file,
 		size:      atomic.LoadInt64(&s.size),
 		readOnly:  true,
@@ -278,9 +300,8 @@ func (s *Store) Snapshot() (snapshot *Store) {
 
 func (s *Store) Close() {
 	s.file = nil
-	cptr := atomic.LoadPointer(&s.coll)
-	if cptr == nil ||
-		!atomic.CompareAndSwapPointer(&s.coll, cptr, unsafe.Pointer(nil)) {
+	cptr := s.getColl()
+	if cptr == nil || !s.casColl(cptr, nil) {
 		return
 	}
 	coll := *(*map[string]*Collection)(cptr)
@@ -299,7 +320,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 	if err != nil {
 		return nil, err
 	}
-	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
+	coll := *s.getColl()
 	for _, name := range collNames(coll) {
 		srcColl := coll[name]
 		dstColl := dstStore.SetCollection(name, srcColl.compare)
@@ -452,7 +473,7 @@ func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
 						t.compare = bytes.Compare
 					}
 				}
-				atomic.StorePointer(&o.coll, unsafe.Pointer(&m))
+				o.setColl(&m)
 				return nil
 			} // else, perhaps value was unlucky in having MAGIC_END's.
 		} // else, perhaps a gkvlite file was stored as a value.

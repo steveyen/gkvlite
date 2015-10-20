@@ -14,7 +14,6 @@ import (
 	"os"
 	"sort"
 	"testing"
-	"unsafe"
 
 	"github.com/luci/gkvlite"
 	"github.com/steveyen/go-slab"
@@ -167,11 +166,11 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 			n.next = nil
 		} else {
 			n = &ItemNode{}
-			n.item.Transient = unsafe.Pointer(n)
+			n.item.Transient = n
 		}
 		if n.refs != 0 ||
 			n.item.Key != nil || n.item.Val != nil || n.item.Priority != 0 ||
-			n.item.Transient != unsafe.Pointer(n) {
+			n.item.Transient != n {
 			panic("unexpected ItemNode refs or item fields")
 		}
 		n.refs = 1
@@ -180,11 +179,11 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		return &n.item
 	}
 	itemAddRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
-		n := (*ItemNode)(i.Transient)
+		n := i.Transient.(*ItemNode)
 		n.refs++
 	}
 	itemDecRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
-		n := (*ItemNode)(i.Transient)
+		n := i.Transient.(*ItemNode)
 		n.refs--
 		if n.refs == 0 {
 			if i.Key == nil {

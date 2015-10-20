@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
-	"sync/atomic"
-	"unsafe"
 )
 
 // User-supplied key comparison func should return 0 if a == b,
@@ -25,7 +23,7 @@ type Collection struct {
 
 	allocStats AllocStats // User must serialize access (e.g., see locks in alloc.go).
 
-	AppData unsafe.Pointer // For app-specific data; atomic CAS recommended.
+	AppData interface{} // For app-specific data.
 }
 
 type rootNodeLoc struct {
@@ -138,7 +136,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	root := rnl.root
 	n := t.mkNode(nil, nil, nil, 1, uint64(len(item.Key))+uint64(item.NumValBytes(t)))
 	t.store.ItemAddRef(t, item)
-	n.item.item = unsafe.Pointer(item) // Avoid garbage via separate init.
+	n.item.item = item // Avoid garbage via separate init.
 	nloc := t.mkNodeLoc(n)
 	defer t.freeNodeLoc(nloc)
 	r, err := t.store.union(t, root, nloc, &rnl.reclaimMark)
@@ -228,8 +226,7 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 	i, err := t.store.walk(t, false, func(n *node) (*nodeLoc, bool) {
 		if !n.item.Loc().isEmpty() {
 			i := n.item.Item()
-			if i != nil && atomic.CompareAndSwapPointer(&n.item.item,
-				unsafe.Pointer(i), unsafe.Pointer(nil)) {
+			if i != nil && n.item.casItem(i, nil) {
 				t.store.ItemDecRef(t, i)
 				numEvicted++
 			}
@@ -349,7 +346,7 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 		t.rootLock = &sync.Mutex{}
 	}
 	nloc := t.mkNodeLoc(nil)
-	nloc.loc = unsafe.Pointer(&p)
+	nloc.loc = &p
 	if !t.rootCAS(nil, t.mkRootNodeLoc(nloc)) {
 		return errors.New("concurrent mutation during UnmarshalJSON().")
 	}

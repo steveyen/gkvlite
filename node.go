@@ -3,8 +3,8 @@ package gkvlite
 import (
 	"encoding/binary"
 	"fmt"
+	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 // A persistable node.
@@ -17,27 +17,50 @@ type node struct {
 
 // A persistable node and its persistence location.
 type nodeLoc struct {
-	loc  unsafe.Pointer // *ploc - can be nil if node is dirty (not yet persisted).
-	node unsafe.Pointer // *node - can be nil if node is not fetched into memory yet.
-	next *nodeLoc       // For free-list tracking.
+	m sync.Mutex
+
+	loc  *ploc    // *ploc - can be nil if node is dirty (not yet persisted).
+	node *node    // *node - can be nil if node is not fetched into memory yet.
+	next *nodeLoc // For free-list tracking.
 }
 
 var empty_nodeLoc = &nodeLoc{} // Sentinel.
 
 func (nloc *nodeLoc) Loc() *ploc {
-	return (*ploc)(atomic.LoadPointer(&nloc.loc))
+	nloc.m.Lock()
+	defer nloc.m.Unlock()
+	return nloc.loc
+}
+
+func (nloc *nodeLoc) setLoc(n *ploc) {
+	nloc.m.Lock()
+	defer nloc.m.Unlock()
+	nloc.loc = n
 }
 
 func (nloc *nodeLoc) Node() *node {
-	return (*node)(atomic.LoadPointer(&nloc.node))
+	nloc.m.Lock()
+	defer nloc.m.Unlock()
+	return nloc.node
+}
+
+func (nloc *nodeLoc) setNode(n *node) {
+	nloc.m.Lock()
+	defer nloc.m.Unlock()
+	nloc.node = n
 }
 
 func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
 	if src == nil {
 		return nloc.Copy(empty_nodeLoc)
 	}
-	atomic.StorePointer(&nloc.loc, unsafe.Pointer(src.Loc()))
-	atomic.StorePointer(&nloc.node, unsafe.Pointer(src.Node()))
+	newloc := src.Loc()
+	newnode := src.Node()
+
+	nloc.m.Lock()
+	defer nloc.m.Unlock()
+	nloc.loc = newloc
+	nloc.node = newnode
 	return nloc
 }
 
@@ -70,8 +93,7 @@ func (nloc *nodeLoc) write(o *Store) error {
 			return err
 		}
 		atomic.StoreInt64(&o.size, offset+int64(length))
-		atomic.StorePointer(&nloc.loc,
-			unsafe.Pointer(&ploc{Offset: offset, Length: uint32(length)}))
+		nloc.setLoc(&ploc{Offset: offset, Length: uint32(length)})
 	}
 	return nil
 }
@@ -102,13 +124,13 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 	var p *ploc
 	p = &ploc{}
 	p, pos = p.read(b, pos)
-	n.item.loc = unsafe.Pointer(p)
+	n.item.loc = p
 	p = &ploc{}
 	p, pos = p.read(b, pos)
-	n.left.loc = unsafe.Pointer(p)
+	n.left.loc = p
 	p = &ploc{}
 	p, pos = p.read(b, pos)
-	n.right.loc = unsafe.Pointer(p)
+	n.right.loc = p
 	n.numNodes = binary.BigEndian.Uint64(b[pos : pos+8])
 	pos += 8
 	n.numBytes = binary.BigEndian.Uint64(b[pos : pos+8])
@@ -117,7 +139,7 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 		return nil, fmt.Errorf("nodeLoc.read() pos: %v didn't match length: %v",
 			pos, len(b))
 	}
-	atomic.StorePointer(&nloc.node, unsafe.Pointer(n))
+	nloc.setNode(n)
 	return n, nil
 }
 

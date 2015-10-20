@@ -149,7 +149,7 @@ func TestSlabStoreRandom(t *testing.T) {
 				numSets++
 				b := arena.Alloc(kr * kr * kr * kr)
 				pri := rand.Int31()
-				it := scb.ItemAlloc(x, uint16(len(k)))
+				it := scb.ItemAlloc(x, uint32(len(k)))
 				copy(it.Key, k)
 				it.Val = b
 				it.Priority = pri
