@@ -15,10 +15,10 @@ type node struct {
 	next               *node // For free-list tracking.
 }
 
+var nodeLocGL = sync.RWMutex{}
+
 // A persistable node and its persistence location.
 type nodeLoc struct {
-	m sync.Mutex
-
 	loc  *ploc    // *ploc - can be nil if node is dirty (not yet persisted).
 	node *node    // *node - can be nil if node is not fetched into memory yet.
 	next *nodeLoc // For free-list tracking.
@@ -27,50 +27,59 @@ type nodeLoc struct {
 var empty_nodeLoc = &nodeLoc{} // Sentinel.
 
 func (nloc *nodeLoc) Loc() *ploc {
-	nloc.m.Lock()
-	defer nloc.m.Unlock()
+	nodeLocGL.RLock()
+	defer nodeLocGL.RUnlock()
 	return nloc.loc
 }
 
 func (nloc *nodeLoc) setLoc(n *ploc) {
-	nloc.m.Lock()
-	defer nloc.m.Unlock()
+	nodeLocGL.Lock()
+	defer nodeLocGL.Unlock()
 	nloc.loc = n
 }
 
 func (nloc *nodeLoc) Node() *node {
-	nloc.m.Lock()
-	defer nloc.m.Unlock()
+	nodeLocGL.RLock()
+	defer nodeLocGL.RUnlock()
 	return nloc.node
 }
 
 func (nloc *nodeLoc) setNode(n *node) {
-	nloc.m.Lock()
-	defer nloc.m.Unlock()
+	nodeLocGL.Lock()
+	defer nodeLocGL.Unlock()
 	nloc.node = n
+}
+
+func (nloc *nodeLoc) LocNode() (*ploc, *node) {
+	nodeLocGL.RLock()
+	defer nodeLocGL.RUnlock()
+	return nloc.loc, nloc.node
 }
 
 func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
 	if src == nil {
 		return nloc.Copy(empty_nodeLoc)
 	}
-	newloc := src.Loc()
-	newnode := src.Node()
 
-	nloc.m.Lock()
-	defer nloc.m.Unlock()
-	nloc.loc = newloc
-	nloc.node = newnode
+	nodeLocGL.Lock()
+	defer nodeLocGL.Unlock()
+	// NOTE: This trick only works because of the global lock. No reason to lock
+	// src independently of nlock.
+	nloc.loc = src.loc
+	nloc.node = src.node
 	return nloc
 }
 
 func (nloc *nodeLoc) isEmpty() bool {
-	return nloc == nil || (nloc.Loc().isEmpty() && nloc.Node() == nil)
+	nodeLocGL.RLock()
+	defer nodeLocGL.RUnlock()
+	return nloc == nil || (nloc.loc.isEmpty() && nloc.node == nil)
 }
 
 func (nloc *nodeLoc) write(o *Store) error {
-	if nloc != nil && nloc.Loc().isEmpty() {
-		node := nloc.Node()
+	loc, node := nloc.LocNode()
+
+	if nloc != nil && loc.isEmpty() {
 		if node == nil {
 			return nil
 		}
@@ -102,11 +111,10 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 	if nloc == nil {
 		return nil, nil
 	}
-	n = nloc.Node()
+	loc, n := nloc.LocNode()
 	if n != nil {
 		return n, nil
 	}
-	loc := nloc.Loc()
 	if loc.isEmpty() {
 		return nil, nil
 	}
