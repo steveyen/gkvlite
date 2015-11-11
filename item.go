@@ -15,10 +15,10 @@ type Item struct {
 	Priority  int32       // Use rand.Int31() for probabilistic balancing.
 }
 
+var itemLocGL = sync.RWMutex{}
+
 // A persistable item and its persistence location.
 type itemLoc struct {
-	m sync.Mutex
-
 	loc  *ploc // can be nil if item is dirty (not yet persisted).
 	item *Item // can be nil if item is not fetched into memory yet.
 }
@@ -49,26 +49,26 @@ func (i *Item) Copy() *Item {
 }
 
 func (i *itemLoc) Loc() *ploc {
-	i.m.Lock()
-	defer i.m.Unlock()
+	itemLocGL.RLock()
+	defer itemLocGL.RUnlock()
 	return i.loc
 }
 
 func (i *itemLoc) setLoc(n *ploc) {
-	i.m.Lock()
-	defer i.m.Unlock()
+	itemLocGL.Lock()
+	defer itemLocGL.Unlock()
 	i.loc = n
 }
 
 func (i *itemLoc) Item() *Item {
-	i.m.Lock()
-	defer i.m.Unlock()
+	itemLocGL.RLock()
+	defer itemLocGL.RUnlock()
 	return i.item
 }
 
 func (i *itemLoc) casItem(o, n *Item) bool {
-	i.m.Lock()
-	defer i.m.Unlock()
+	itemLocGL.Lock()
+	defer itemLocGL.Unlock()
 	if i.item == o {
 		i.item = n
 		return true
@@ -81,13 +81,13 @@ func (i *itemLoc) Copy(src *itemLoc) {
 		i.Copy(empty_itemLoc)
 		return
 	}
-	newloc := src.Loc()
-	newitem := src.Item()
 
-	i.m.Lock()
-	defer i.m.Unlock()
-	i.loc = newloc
-	i.item = newitem
+	itemLocGL.Lock()
+	defer itemLocGL.Unlock()
+	// NOTE: This trick only works because of the global lock. No reason to lock
+	// src independently of i.
+	i.loc = src.loc
+	i.item = src.item
 }
 
 const itemLoc_hdrLength int = 4 + 4 + 4 + 4
