@@ -289,7 +289,6 @@ func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, b
 		nNode = childNode
 	}
 }
-
 func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,
 	withValue bool, visitor ItemVisitorEx, depth uint64,
 	choiceFunc func(int, *node) (bool, *nodeLoc, *nodeLoc)) (bool, error) {
@@ -308,20 +307,47 @@ func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,
 	if nItem == nil {
 		panic(fmt.Sprintf("visitNodes nItem nil: %#v", nNode))
 	}
+
+	save_mem := false
+
 	choice, choiceT, choiceF := choiceFunc(t.compare(target, nItem.Key), nNode)
+
+
 	if choice {
+
+		if save_mem {
+			choiceF = nil
+			nNode = nil
+			nItemLoc = nil
+		}
 		keepGoing, err :=
 			o.visitNodes(t, choiceT, target, withValue, visitor, depth+1, choiceFunc)
 		if err != nil || !keepGoing {
 			return false, err
 		}
+		if save_mem {
+			choiceT = nil
+			nNode, _ = n.read(o)
+			nItemLoc = &nNode.item
+			nNode = nil
+		}
+		// re-read nItem, this time fetching data if needed
 		nItem, err := nItemLoc.read(t, withValue)
 		if err != nil {
+			// we didn't have an error before, we shouldn't now
 			return false, err
 		}
+		// Make sure the visitor is called on the item
+		// ending the recursion if the visitor says to
 		if !visitor(nItem, depth) {
 			return false, nil
 		}
-	}
+		if save_mem {
+			nNode, _ = n.read(o)
+			n = nil
+			_, _, choiceF = choiceFunc(t.compare(target, nItem.Key), nNode)
+		}
+  }
 	return o.visitNodes(t, choiceF, target, withValue, visitor, depth+1, choiceFunc)
+	
 }
