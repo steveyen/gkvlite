@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+  "log"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -11,10 +12,19 @@ import (
 	"runtime"
 	"strconv"
 	"sync/atomic"
+  "sync"
 	"testing"
 	"unsafe"
 )
+func reportRemove (fname string) () {
+  if _, err := os.Stat(fname);err==nil {
 
+  err = os.Remove(fname)
+  if err != nil {
+    log.Fatal("Failed to remove file", fname)
+  }
+  }
+}
 type mockfile struct {
 	f           *os.File
 	readat      func(p []byte, off int64) (n int, err error)
@@ -367,11 +377,13 @@ func TestVisitStoreMem(t *testing.T) {
 
 func TestStoreFile(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, err := os.Create(fname)
 	if err != nil || f == nil {
 		t.Errorf("could not create file: %v", fname)
 	}
+  defer reportRemove(fname)
+  defer f.Close()
 
 	s, err := NewStore(f)
 	if err != nil || s == nil {
@@ -443,6 +455,11 @@ func TestStoreFile(t *testing.T) {
 	// ------------------------------------------------
 
 	f2, err := os.Open(fname) // Test reading the file.
+  if err != nil {
+   t.Errorf("File2 Open error:",err)
+  }
+  defer f2.Close()
+
 	if err != nil || f2 == nil {
 		t.Errorf("could not reopen file: %v", fname)
 	}
@@ -542,6 +559,7 @@ func TestStoreFile(t *testing.T) {
 	if err != nil || f3 == nil {
 		t.Errorf("could not reopen file: %v", fname)
 	}
+  defer f3.Close()
 	s3, err := NewStore(f3)
 	if err != nil || s3 == nil {
 		t.Errorf("expected NewStore(f) to work, err: %v", err)
@@ -583,6 +601,10 @@ func TestStoreFile(t *testing.T) {
 	f.Sync()
 
 	f4, err := os.Open(fname) // Another file reader.
+  if err != nil {
+   t.Errorf("File4 Open error:",err)
+  }
+  defer f4.Close()
 	s4, err := NewStore(f4)
 	x4 := s4.GetCollection("x")
 
@@ -644,6 +666,10 @@ func TestStoreFile(t *testing.T) {
 	f.Sync()
 
 	f5, err := os.Open(fname) // Another file reader.
+  if err != nil {
+    t.Errorf("File5 Open error:", err)
+  }
+  defer f5.Close()
 	s5, err := NewStore(f5)
 	x5 := s5.GetCollection("x")
 
@@ -710,6 +736,11 @@ func TestStoreFile(t *testing.T) {
 
 	// Try some withValue false.
 	f5a, err := os.Open(fname) // Another file reader.
+  if err != nil {
+    t.Errorf("File5a Open error:",err)
+  }
+  defer f5a.Close()
+
 	s5a, err := NewStore(f5a)
 	x5a := s5a.GetCollection("x")
 
@@ -749,6 +780,11 @@ func TestStoreFile(t *testing.T) {
 	f.Sync()
 
 	f6, err := os.Open(fname) // Another file reader.
+  if err != nil {
+   t.Errorf("File6 Open error:",err)
+  }
+  defer f6.Close()
+
 	s6, err := NewStore(f6)
 	x6 := s6.GetCollection("x")
 
@@ -832,10 +868,10 @@ func TestStoreFile(t *testing.T) {
 
 	for ccTestIdx, ccTest := range ccTests {
 		ccName := fmt.Sprintf("tmpCompactCopy-%v.test", ccTestIdx)
-		os.Remove(ccName)
+		reportRemove(ccName)
 		ccFile, err := os.Create(ccName)
 		if err != nil || f == nil {
-			t.Errorf("%v: could not create file: %v", ccTestIdx, fname)
+			t.Errorf("%v: could not create file: %v", ccTestIdx, ccName)
 		}
 		cc, err := ccTest.src.CopyTo(ccFile, ccTest.fevery)
 		if err != nil {
@@ -887,17 +923,23 @@ func TestStoreFile(t *testing.T) {
 			}
 		}
 		ccFile.Close()
-		os.Remove(ccName)
+		reportRemove(ccName)
 	}
+  if f!=nil {
+    f.Close()
+  }
 }
 
 func TestStoreMultipleCollections(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, err := os.Create(fname)
 	if err != nil || f == nil {
 		t.Errorf("could not create file: %v", fname)
 	}
+  defer reportRemove(fname)
+  defer f.Close()
+
 
 	s, err := NewStore(f)
 	if err != nil {
@@ -987,6 +1029,11 @@ func TestStoreMultipleCollections(t *testing.T) {
 	f1.Close()
 
 	f2, err := os.Open(fname)
+  if err != nil {
+    t.Errorf("Open Error on f2:",err)
+  }
+  defer f2.Close()
+
 	s2, err := NewStore(f2)
 	if err != nil {
 		t.Errorf("expected NewStore to work")
@@ -1028,8 +1075,12 @@ func TestStoreMultipleCollections(t *testing.T) {
 
 func TestStoreConcurrentVisits(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
+	reportRemove(fname)
+	f, err := os.Create(fname)
+  if err != nil {
+    t.Errorf("File Create Error", err)
+  }
+
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
@@ -1037,23 +1088,42 @@ func TestStoreConcurrentVisits(t *testing.T) {
 	s.Flush()
 	f.Close()
 
-	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
-	s1, _ := NewStore(f1)
+	f1, err := os.OpenFile(fname, os.O_RDWR, 0666)
+  if err != nil {
+    t.Errorf("File Create Error", err)
+  }
+	s1, err := NewStore(f1)
+  if err != nil {
+    t.Errorf("Unable to create Store",err)
+  }
 	x1 := s1.GetCollection("x")
+  if x1 == nil {
+    t.Errorf("Error loading in collection x1")
+  }
+  visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil) 
+  visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil) 
 
+  log.Println("The collection is salient. What about parallel access?")
+  var wg sync.WaitGroup
+  wg.Add(100)
 	for i := 0; i < 100; i++ {
 		go func() {
 			visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"},
 				func(i *Item) {
 					runtime.Gosched() // Yield to test concurrency.
 				})
+      wg.Done()
 		}()
 	}
+  wg.Wait()
+  f1.Close()
+  reportRemove(fname)
+
 }
 
 func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, _ := os.Create(fname)
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
@@ -1079,11 +1149,13 @@ func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 				toDeleteKey, err)
 		}
 	})
+  f1.Close()
+  reportRemove(fname)
 }
 
 func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, _ := os.Create(fname)
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
@@ -1102,6 +1174,8 @@ func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
 
 	// Concurrent mutations like inserts should not affect a visit()
 	// that's already inflight.
+  var wg sync.WaitGroup
+  wg.Add(len(exp))
 	visitExpectCollection(t, x1, "a", exp, func(i *Item) {
 		go func() {
 			a := atomic.AddInt32(&toAdd, 1)
@@ -1110,9 +1184,13 @@ func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
 				t.Errorf("expected concurrent set to work on key: %v, got: %v",
 					toAddKey, err)
 			}
+      wg.Done()
 		}()
 		runtime.Gosched() // Yield to test concurrency.
 	})
+  wg.Wait()
+  f1.Close()
+  reportRemove(fname)
 }
 
 func TestWasDeleted(t *testing.T) {
@@ -1202,13 +1280,15 @@ func TestPrivateCollection(t *testing.T) {
 
 func TestBadStoreFile(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	ioutil.WriteFile(fname, []byte("not a real store file"), 0600)
-	defer os.Remove(fname)
+	defer reportRemove(fname)
 	f, err := os.Open(fname)
 	if err != nil || f == nil {
 		t.Errorf("could not reopen file: %v", fname)
 	}
+  defer f.Close()
+
 	s, err := NewStore(f)
 	if err == nil {
 		t.Errorf("expected NewStore(f) to fail")
@@ -1220,9 +1300,12 @@ func TestBadStoreFile(t *testing.T) {
 
 func TestEvictSomeItems(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, _ := os.Create(fname)
+  defer reportRemove(fname)
 	s, _ := NewStore(f)
+  defer f.Close()
+
 	x := s.SetCollection("x", nil)
 	numEvicted := uint64(0)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
@@ -1244,9 +1327,11 @@ func TestEvictSomeItems(t *testing.T) {
 
 func TestJoinWithFileErrors(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, _ := os.Create(fname)
-	defer os.Remove(fname)
+
+	defer reportRemove(fname)
+  defer f.Close()
 
 	errAfter := 0x1000000
 	numReads := 0
@@ -1281,9 +1366,11 @@ func TestJoinWithFileErrors(t *testing.T) {
 	}
 
 	fname2 := "tmp2.test"
-	os.Remove(fname2)
+	reportRemove(fname2)
+
+	defer reportRemove(fname2)
 	f2, _ := os.Create(fname2)
-	defer os.Remove(fname2)
+  defer f2.Close()
 
 	sMore, _ := NewStore(f2)
 	xMore := sMore.SetCollection("x", nil)
@@ -1485,22 +1572,29 @@ func TestVisitItemsDescend(t *testing.T) {
 
 func TestKeyCompareForCollectionCallback(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
+	reportRemove(fname)
+	f, err := os.Create(fname)
+  if err != nil {
+    t.Errorf("Unable to create file:",fname)
+  }
+
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
 	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
 	s.Flush()
 	f.Close()
-
+  
 	comparisons := 0
 	myKeyCompare := func(a, b []byte) int {
 		comparisons++
 		return bytes.Compare(a, b)
 	}
 
-	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
+	f1, err:= os.OpenFile(fname, os.O_RDWR, 0666)
+  if err != nil {
+    t.Errorf("Unable to open file:",fname)
+  }
 	s1, err := NewStoreEx(f1, StoreCallbacks{
 		KeyCompareForCollection: func(collName string) KeyCompare {
 			return myKeyCompare
@@ -1520,6 +1614,9 @@ func TestKeyCompareForCollectionCallback(t *testing.T) {
 	if x1.Name() != "x" {
 		t.Errorf("expected same name after reload")
 	}
+  f1.Close()
+  reportRemove(fname)
+
 }
 
 func TestMemoryDeleteEveryItem(t *testing.T) {
@@ -1532,8 +1629,8 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 
 func TestPersistDeleteEveryItem(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
-	defer os.Remove(fname)
+	reportRemove(fname)
+	defer reportRemove(fname)
 	f, _ := os.Create(fname)
 	s, _ := NewStore(f)
 	c := 0
@@ -1856,8 +1953,11 @@ func TestMemoryFlushRevert(t *testing.T) {
 
 func TestFlushRevertEmptyStore(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, _ := os.Create(fname)
+  defer  reportRemove(fname)
+  defer f.Close()
+
 	s, _ := NewStore(f)
 	err := s.FlushRevert()
 	if err != nil {
@@ -1890,8 +1990,10 @@ func TestFlushRevertEmptyStore(t *testing.T) {
 
 func TestFlushRevert(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, err := os.Create(fname)
+  defer reportRemove(fname)
+  defer f.Close()
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	x.SetItem(&Item{
@@ -2014,9 +2116,10 @@ func TestFlushRevert(t *testing.T) {
 
 func TestFlushRevertWithReadError(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, err := os.Create(fname)
-	defer os.Remove(fname)
+	defer reportRemove(fname)
+  defer f.Close()
 
 	readShouldErr := false
 	m := &mockfile{
@@ -2181,9 +2284,10 @@ func TestNodeLocRead(t *testing.T) {
 
 func TestNumInfo(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, err := os.Create(fname)
-	defer os.Remove(fname)
+	defer reportRemove(fname)
+  defer f.Close()
 
 	readShouldErr := false
 	m := &mockfile{
@@ -2222,9 +2326,10 @@ func TestNumInfo(t *testing.T) {
 
 func TestWriteEmptyItemsErr(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, _ := os.Create(fname)
-	defer os.Remove(fname)
+	defer reportRemove(fname)
+  defer f.Close()
 
 	writeShouldErr := false
 	m := &mockfile{
@@ -2247,9 +2352,10 @@ func TestWriteEmptyItemsErr(t *testing.T) {
 
 func TestWriteItemsErr(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, _ := os.Create(fname)
-	defer os.Remove(fname)
+	defer reportRemove(fname)
+  defer f.Close()
 
 	writeShouldErr := false
 	m := &mockfile{
@@ -2288,9 +2394,10 @@ func TestWriteItemsErr(t *testing.T) {
 
 func TestStatErr(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, err := os.Create(fname)
-	defer os.Remove(fname)
+	defer reportRemove(fname)
+  defer f.Close()
 
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
@@ -2302,7 +2409,10 @@ func TestStatErr(t *testing.T) {
 	s.Flush()
 
 	f2, err := os.Open(fname) // Test reading the file.
-
+  if err != nil {
+    t.Errorf("Error opening file:",fname)
+  }
+  defer f2.Close()
 	m := &mockfile{
 		f: f2,
 		stat: func() (fi os.FileInfo, err error) {
@@ -2320,9 +2430,10 @@ func TestStatErr(t *testing.T) {
 
 func TestNodeLocWriteErr(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, _ := os.Create(fname)
-	defer os.Remove(fname)
+	defer reportRemove(fname)
+  defer f.Close()
 
 	writeShouldErr := false
 	m := &mockfile{
@@ -2563,9 +2674,9 @@ func TestStoreRefCountRandom(t *testing.T) {
 
 func TestPersistRefCountRandom(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, _ := os.Create(fname)
-	defer os.Remove(fname)
+	defer reportRemove(fname)
 
 	counts := map[string]int{}
 
@@ -2673,13 +2784,17 @@ func TestPersistRefCountRandom(t *testing.T) {
 		}
 		mustJustOneRef(fmt.Sprintf("i: %d", i))
 	}
+  if f != nil {
+    f.Close()
+  }
 }
 
 func TestEvictRefCountRandom(t *testing.T) {
 	fname := "tmp.test"
-	os.Remove(fname)
+	reportRemove(fname)
 	f, _ := os.Create(fname)
-	defer os.Remove(fname)
+
+	defer reportRemove(fname)
 
 	start := func(f *os.File) (*Store, *Collection, map[string]int) {
 		counts := map[string]int{}
@@ -2803,6 +2918,9 @@ func TestEvictRefCountRandom(t *testing.T) {
 		}
 		mustJustOneRef(fmt.Sprintf("i: %d", i))
 	}
+  if f!= nil{
+    f.Close()
+  }
 }
 
 // perm returns a random permutation of n Int items in the range [0, n).
