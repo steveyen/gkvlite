@@ -321,8 +321,8 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 		return nil, err
 	}
 	coll := *s.getColl()
-  
-  var max_depth uint64
+
+	var max_depth uint64
 	for _, name := range collNames(coll) {
 		srcColl := coll[name]
 		dstColl := dstStore.SetCollection(name, srcColl.compare)
@@ -341,9 +341,9 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 				return false
 			}
 			numItems++
-      if depth>max_depth {
-        max_depth= depth
-      }
+			if depth > max_depth {
+				max_depth = depth
+			}
 			if flushEvery > 0 && numItems%flushEvery == 0 {
 				if errCopyItem = dstStore.Flush(); errCopyItem != nil {
 					return false
@@ -357,7 +357,9 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 		if errCopyItem != nil {
 			return nil, errCopyItem
 		}
-    if false {fmt.Printf("CopyTo cnt = %d, max_depth = %d\n", numItems, max_depth)}
+		if false {
+			fmt.Printf("CopyTo cnt = %d, max_depth = %d\n", numItems, max_depth)
+		}
 	}
 	if flushEvery > 0 {
 		if err = dstStore.Flush(); err != nil {

@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 )
 
+// Package global free lists & locks
+// Allows memory based lists to be global for efficiency
 var freeNodeLock sync.Mutex
 var freeNodes *node
 
@@ -15,6 +17,8 @@ var freeNodeLocs *nodeLoc
 var freeRootNodeLocLock sync.Mutex
 var freeRootNodeLocs *rootNodeLoc
 
+// This is maintained as a package global statistics
+// allows tracking of stats on a collection vs package
 var allocStats AllocStats
 
 type AllocStats struct {

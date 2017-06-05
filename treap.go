@@ -312,7 +312,6 @@ func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,
 
 	choice, choiceT, choiceF := choiceFunc(t.compare(target, nItem.Key), nNode)
 
-
 	if choice {
 
 		if save_mem {
@@ -347,7 +346,7 @@ func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,
 			n = nil
 			_, _, choiceF = choiceFunc(t.compare(target, nItem.Key), nNode)
 		}
-  }
+	}
 	return o.visitNodes(t, choiceF, target, withValue, visitor, depth+1, choiceFunc)
-	
+
 }
