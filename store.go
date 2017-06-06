@@ -166,7 +166,7 @@ func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 		store:    s,
 		compare:  compare,
 		rootLock: &sync.Mutex{},
-		root:     &rootNodeLoc{refs: 1, root: empty_nodeLoc},
+		root:     &rootNodeLoc{refs: 1, root: &empty_nodeLoc},
 	}
 }
 

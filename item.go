@@ -23,7 +23,7 @@ type itemLoc struct {
 	item *Item // can be nil if item is not fetched into memory yet.
 }
 
-var empty_itemLoc = &itemLoc{}
+var empty_itemLoc = itemLoc{}
 
 // Number of Key bytes plus number of Val bytes.
 func (i *Item) NumBytes(c *Collection) int {
@@ -78,7 +78,7 @@ func (i *itemLoc) casItem(o, n *Item) bool {
 
 func (i *itemLoc) Copy(src *itemLoc) {
 	if src == nil {
-		i.Copy(empty_itemLoc)
+		i.Copy(&empty_itemLoc)
 		return
 	}
 	newloc := src.Loc()

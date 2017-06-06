@@ -148,9 +148,13 @@ func (t *Collection) freeNode_unlocked(n *node, reclaimMark *node) {
 	if i != nil {
 		t.store.ItemDecRef(t, i)
 	}
-	n.item = *empty_itemLoc
-	n.left = *empty_nodeLoc
-	n.right = *empty_nodeLoc
+	// TBD These are copies and copy a mutex
+	//n.item = empty_itemLoc
+	//n.left = empty_nodeLoc
+	//n.right = empty_nodeLoc
+	n.item = itemLoc{}
+	n.left = nodeLoc{}
+	n.right = nodeLoc{}
 	n.numNodes = 0
 	n.numBytes = 0
 	n.next = freeNodes
@@ -184,7 +188,7 @@ func (t *Collection) mkNodeLoc(n *node) *nodeLoc {
 
 // Assumes that the caller serializes invocations.
 func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
-	if nloc == nil || nloc == empty_nodeLoc {
+	if nloc == nil || nloc == &empty_nodeLoc {
 		return
 	}
 	if nloc.next != nil {

@@ -34,7 +34,7 @@ type nodeLoc struct {
 	next *nodeLoc // For free-list tracking.
 }
 
-var empty_nodeLoc = &nodeLoc{} // Sentinel.
+var empty_nodeLoc = nodeLoc{} // Sentinel.
 
 func (nloc *nodeLoc) Loc() *ploc {
 	nloc.m.Lock()
@@ -62,7 +62,7 @@ func (nloc *nodeLoc) setNode(n *node) {
 
 func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
 	if src == nil {
-		return nloc.Copy(empty_nodeLoc)
+		return nloc.Copy(&empty_nodeLoc)
 	}
 	newloc := src.Loc()
 	newnode := src.Node()
