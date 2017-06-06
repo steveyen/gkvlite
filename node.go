@@ -15,6 +15,16 @@ type node struct {
 	next               *node // For free-list tracking.
 }
 
+func (n *node) Evict() *Item {
+	if !n.item.Loc().isEmpty() {
+		i := n.item.Item()
+		if i != nil && n.item.casItem(i, nil) {
+			return i
+		}
+	}
+	return nil
+}
+
 // A persistable node and its persistence location.
 type nodeLoc struct {
 	m sync.Mutex

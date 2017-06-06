@@ -216,6 +216,17 @@ func (t *Collection) MaxItem(withValue bool) (*Item, error) {
 		func(n *node) (*nodeLoc, bool) { return &n.right, true })
 }
 
+// TBD move this to the node.go
+func (n *node) EvictSI() *Item {
+	if !n.item.Loc().isEmpty() {
+		i := n.item.Item()
+		if i != nil && n.item.casItem(i, nil) {
+			return i
+		}
+	}
+	return nil
+}
+
 // Evict some clean items found by randomly walking a tree branch.
 // For concurrent users, only the single mutator thread should call
 // EvictSomeItems(), making it serialized with mutations.
@@ -224,12 +235,9 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 		return 0
 	}
 	i, err := t.store.walk(t, false, func(n *node) (*nodeLoc, bool) {
-		if !n.item.Loc().isEmpty() {
-			i := n.item.Item()
-			if i != nil && n.item.casItem(i, nil) {
-				t.store.ItemDecRef(t, i)
-				numEvicted++
-			}
+		if j := n.EvictSI(); j != nil {
+			t.store.ItemDecRef(t, j)
+			numEvicted++
 		}
 		next := &n.left
 		if (rand.Int() & 0x01) == 0x01 {

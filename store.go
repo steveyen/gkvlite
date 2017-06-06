@@ -345,6 +345,9 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 				max_depth = depth
 			}
 			if flushEvery > 0 && numItems%flushEvery == 0 {
+				// Flush out some of the read items cached into memory
+				srcColl.EvictSomeItems()
+				// Flush none persisted items to disk
 				if errCopyItem = dstStore.Flush(); errCopyItem != nil {
 					return false
 				}

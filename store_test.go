@@ -19,7 +19,6 @@ import (
 
 func reportRemove(fname string) {
 	if _, err := os.Stat(fname); err == nil {
-
 		err = os.Remove(fname)
 		if err != nil {
 			log.Fatal("Failed to remove file", fname)
@@ -378,7 +377,7 @@ func TestVisitStoreMem(t *testing.T) {
 }
 
 func TestStoreFile(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	if err != nil || f == nil {
@@ -869,7 +868,7 @@ func TestStoreFile(t *testing.T) {
 	}
 
 	for ccTestIdx, ccTest := range ccTests {
-		ccName := fmt.Sprintf("tmpCompactCopy-%v.test", ccTestIdx)
+		ccName := fmt.Sprintf(os.TempDir()+"tmpCompactCopy-%v.test", ccTestIdx)
 		reportRemove(ccName)
 		ccFile, err := os.Create(ccName)
 		if err != nil || f == nil {
@@ -933,7 +932,7 @@ func TestStoreFile(t *testing.T) {
 }
 
 func TestStoreMultipleCollections(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	if err != nil || f == nil {
@@ -1075,7 +1074,7 @@ func TestStoreMultipleCollections(t *testing.T) {
 }
 
 func TestStoreConcurrentVisits(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	if err != nil {
@@ -1104,7 +1103,6 @@ func TestStoreConcurrentVisits(t *testing.T) {
 	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil)
 	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil)
 
-	log.Println("The collection is salient. What about parallel access?")
 	var wg sync.WaitGroup
 	wg.Add(100)
 	for i := 0; i < 100; i++ {
@@ -1123,7 +1121,7 @@ func TestStoreConcurrentVisits(t *testing.T) {
 }
 
 func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	s, _ := NewStore(f)
@@ -1150,46 +1148,6 @@ func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 				toDeleteKey, err)
 		}
 	})
-	f1.Close()
-	reportRemove(fname)
-}
-
-func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
-	fname := "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
-	s, _ := NewStore(f)
-	x := s.SetCollection("x", nil)
-	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
-	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
-	s.Flush()
-	f.Close()
-
-	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
-	s1, _ := NewStore(f1)
-	x1 := s1.GetCollection("x")
-
-	exp := []string{"a", "b", "c", "d", "e"}
-	add := []string{"A", "1", "E", "2", "C"}
-	toAdd := int32(0)
-
-	// Concurrent mutations like inserts should not affect a visit()
-	// that's already inflight.
-	var wg sync.WaitGroup
-	wg.Add(len(exp))
-	visitExpectCollection(t, x1, "a", exp, func(i *Item) {
-		go func() {
-			a := atomic.AddInt32(&toAdd, 1)
-			toAddKey := []byte(add[a-1])
-			if err := x1.Set(toAddKey, toAddKey); err != nil {
-				t.Errorf("expected concurrent set to work on key: %v, got: %v",
-					toAddKey, err)
-			}
-			wg.Done()
-		}()
-		runtime.Gosched() // Yield to test concurrency.
-	})
-	wg.Wait()
 	f1.Close()
 	reportRemove(fname)
 }
@@ -1280,7 +1238,7 @@ func TestPrivateCollection(t *testing.T) {
 }
 
 func TestBadStoreFile(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	ioutil.WriteFile(fname, []byte("not a real store file"), 0600)
 	defer reportRemove(fname)
@@ -1300,7 +1258,7 @@ func TestBadStoreFile(t *testing.T) {
 }
 
 func TestEvictSomeItems(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -1327,7 +1285,7 @@ func TestEvictSomeItems(t *testing.T) {
 }
 
 func TestJoinWithFileErrors(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 
@@ -1366,7 +1324,7 @@ func TestJoinWithFileErrors(t *testing.T) {
 		t.Errorf("expected 0 truncates, got: %#v", m)
 	}
 
-	fname2 := "tmp2.test"
+	fname2 := os.TempDir() + "tmp2.test"
 	reportRemove(fname2)
 
 	defer reportRemove(fname2)
@@ -1572,7 +1530,7 @@ func TestVisitItemsDescend(t *testing.T) {
 }
 
 func TestKeyCompareForCollectionCallback(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	if err != nil {
@@ -1629,7 +1587,7 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 }
 
 func TestPersistDeleteEveryItem(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	defer reportRemove(fname)
 	f, _ := os.Create(fname)
@@ -1953,7 +1911,7 @@ func TestMemoryFlushRevert(t *testing.T) {
 }
 
 func TestFlushRevertEmptyStore(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -1990,7 +1948,7 @@ func TestFlushRevertEmptyStore(t *testing.T) {
 }
 
 func TestFlushRevert(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	defer reportRemove(fname)
@@ -2116,7 +2074,7 @@ func TestFlushRevert(t *testing.T) {
 }
 
 func TestFlushRevertWithReadError(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	defer reportRemove(fname)
@@ -2284,7 +2242,7 @@ func TestNodeLocRead(t *testing.T) {
 }
 
 func TestNumInfo(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	defer reportRemove(fname)
@@ -2326,7 +2284,7 @@ func TestNumInfo(t *testing.T) {
 }
 
 func TestWriteEmptyItemsErr(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -2352,7 +2310,7 @@ func TestWriteEmptyItemsErr(t *testing.T) {
 }
 
 func TestWriteItemsErr(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -2394,7 +2352,7 @@ func TestWriteItemsErr(t *testing.T) {
 }
 
 func TestStatErr(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	defer reportRemove(fname)
@@ -2430,7 +2388,7 @@ func TestStatErr(t *testing.T) {
 }
 
 func TestNodeLocWriteErr(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -2674,7 +2632,7 @@ func TestStoreRefCountRandom(t *testing.T) {
 }
 
 func TestPersistRefCountRandom(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -2791,7 +2749,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 }
 
 func TestEvictRefCountRandom(t *testing.T) {
-	fname := "tmp.test"
+	fname := os.TempDir() + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 
