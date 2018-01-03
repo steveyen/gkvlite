@@ -377,7 +377,7 @@ func TestVisitStoreMem(t *testing.T) {
 }
 
 func TestStoreFile(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	if err != nil || f == nil {
@@ -868,7 +868,7 @@ func TestStoreFile(t *testing.T) {
 	}
 
 	for ccTestIdx, ccTest := range ccTests {
-		ccName := fmt.Sprintf(os.TempDir()+"tmpCompactCopy-%v.test", ccTestIdx)
+		ccName := fmt.Sprintf(os.TempDir() + "/"+"tmpCompactCopy-%v.test", ccTestIdx)
 		reportRemove(ccName)
 		ccFile, err := os.Create(ccName)
 		if err != nil || f == nil {
@@ -932,7 +932,7 @@ func TestStoreFile(t *testing.T) {
 }
 
 func TestStoreMultipleCollections(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	if err != nil || f == nil {
@@ -1074,7 +1074,7 @@ func TestStoreMultipleCollections(t *testing.T) {
 }
 
 func TestStoreConcurrentVisits(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	if err != nil {
@@ -1121,7 +1121,7 @@ func TestStoreConcurrentVisits(t *testing.T) {
 }
 
 func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	s, _ := NewStore(f)
@@ -1238,7 +1238,7 @@ func TestPrivateCollection(t *testing.T) {
 }
 
 func TestBadStoreFile(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	ioutil.WriteFile(fname, []byte("not a real store file"), 0600)
 	defer reportRemove(fname)
@@ -1258,7 +1258,7 @@ func TestBadStoreFile(t *testing.T) {
 }
 
 func TestEvictSomeItems(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -1285,7 +1285,7 @@ func TestEvictSomeItems(t *testing.T) {
 }
 
 func TestJoinWithFileErrors(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 
@@ -1324,7 +1324,7 @@ func TestJoinWithFileErrors(t *testing.T) {
 		t.Errorf("expected 0 truncates, got: %#v", m)
 	}
 
-	fname2 := os.TempDir() + "tmp2.test"
+	fname2 := os.TempDir() + "/" + "tmp2.test"
 	reportRemove(fname2)
 
 	defer reportRemove(fname2)
@@ -1530,7 +1530,7 @@ func TestVisitItemsDescend(t *testing.T) {
 }
 
 func TestKeyCompareForCollectionCallback(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	if err != nil {
@@ -1587,7 +1587,7 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 }
 
 func TestPersistDeleteEveryItem(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	defer reportRemove(fname)
 	f, _ := os.Create(fname)
@@ -1911,7 +1911,7 @@ func TestMemoryFlushRevert(t *testing.T) {
 }
 
 func TestFlushRevertEmptyStore(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -1948,7 +1948,7 @@ func TestFlushRevertEmptyStore(t *testing.T) {
 }
 
 func TestFlushRevert(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	defer reportRemove(fname)
@@ -2074,7 +2074,7 @@ func TestFlushRevert(t *testing.T) {
 }
 
 func TestFlushRevertWithReadError(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	defer reportRemove(fname)
@@ -2242,7 +2242,7 @@ func TestNodeLocRead(t *testing.T) {
 }
 
 func TestNumInfo(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	defer reportRemove(fname)
@@ -2284,7 +2284,7 @@ func TestNumInfo(t *testing.T) {
 }
 
 func TestWriteEmptyItemsErr(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -2310,7 +2310,7 @@ func TestWriteEmptyItemsErr(t *testing.T) {
 }
 
 func TestWriteItemsErr(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -2352,7 +2352,7 @@ func TestWriteItemsErr(t *testing.T) {
 }
 
 func TestStatErr(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, err := os.Create(fname)
 	defer reportRemove(fname)
@@ -2388,7 +2388,7 @@ func TestStatErr(t *testing.T) {
 }
 
 func TestNodeLocWriteErr(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -2632,7 +2632,7 @@ func TestStoreRefCountRandom(t *testing.T) {
 }
 
 func TestPersistRefCountRandom(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	defer reportRemove(fname)
@@ -2749,7 +2749,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 }
 
 func TestEvictRefCountRandom(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 

@@ -14,7 +14,7 @@ import (
 // The intention being to make sure that the concurrent access is safe.
 // The downside is, it needs to be in its own file to be run in a race-checked sim
 func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
-	fname := os.TempDir() + "tmp.test"
+	fname := os.TempDir() + "/" + "tmp.test"
 	reportRemove(fname)
 	f, _ := os.Create(fname)
 	s, _ := NewStore(f)
