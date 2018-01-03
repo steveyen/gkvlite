@@ -292,8 +292,7 @@ func (o *Store) walk(t *Collection, withValue bool, cfn func(*node) (*nodeLoc, b
 func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,
 	withValue bool, visitor ItemVisitorEx, depth uint64,
 	choiceFunc func(int, *node) (bool, *nodeLoc, *nodeLoc)) (bool, error) {
-	save_mem := false
-	save_mem = true
+	save_mem := true
 	nNode, err := n.read(o)
 	if err != nil {
 		return false, err
@@ -302,7 +301,7 @@ func (o *Store) visitNodes(t *Collection, n *nodeLoc, target []byte,
 		return true, nil
 	}
 	if save_mem {
-		//fer nNode.Evict()
+		//defer nNode.Evict()
 	}
 	nItemLoc := &nNode.item
 	nItem, err := nItemLoc.read(t, false)
