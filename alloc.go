@@ -148,10 +148,6 @@ func (t *Collection) freeNode_unlocked(n *node, reclaimMark *node) {
 	if i != nil {
 		t.store.ItemDecRef(t, i)
 	}
-	// TBD These are copies and copy a mutex
-	//n.item = empty_itemLoc
-	//n.left = empty_nodeLoc
-	//n.right = empty_nodeLoc
 	n.item = itemLoc{}
 	n.left = nodeLoc{}
 	n.right = nodeLoc{}

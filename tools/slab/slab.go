@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/luci/gkvlite"
-	"github.com/steveyen/go-slab"
 )
 
 var maxOps = flag.Int("ops", 0,

@@ -1627,7 +1627,7 @@ func TestPersistDeleteEveryItem(t *testing.T) {
 		return true
 	})
 	if err != nil {
-		t.Errorf("expected Visit to work, err: %v", err)
+		t.Errorf("expected visit to work, err: %v", err)
 	}
 	if m != 0 {
 		t.Errorf("expected 0 items, got: %v", m)
