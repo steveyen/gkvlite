@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 )
 
+// Store defines the store for the nodes
 // A persistable store holding collections of ordered keys & values.
 type Store struct {
 	m sync.Mutex
@@ -52,7 +53,7 @@ func (s *Store) casColl(o, n *map[string]*Collection) bool {
 	return false
 }
 
-// The StoreFile interface is implemented by os.File.  Application
+// StoreFile interface defines the os.File methods we require.  Application
 // specific implementations may add concurrency, caching, stats, etc.
 type StoreFile interface {
 	io.ReaderAt
@@ -60,7 +61,7 @@ type StoreFile interface {
 	Stat() (os.FileInfo, error)
 	Truncate(size int64) error
 }
-
+// StoreCallbacks provides the interface to the callback mechanism
 // Allows applications to override or interpose before/after events.
 type StoreCallbacks struct {
 	BeforeItemWrite, AfterItemRead ItemCallback
@@ -100,21 +101,27 @@ type StoreCallbacks struct {
 	KeyCompareForCollection func(collName string) KeyCompare
 }
 
+// ItemCallback defines the function interface to an item callback
 type ItemCallback func(*Collection, *Item) (*Item, error)
 
+// VERSION of the file format in use
 const VERSION = uint32(4)
 
-var MAGIC_BEG []byte = []byte("0g1t2r")
-var MAGIC_END []byte = []byte("3e4a5p")
+// MAGIC_BEG definest the start magic value
+var MAGIC_BEG = []byte("0g1t2r")
+// MAGIC_END definest the end magic value
+var MAGIC_END = []byte("3e4a5p")
 
-var rootsEndLen int = 8 + 4 + 2*len(MAGIC_END)
-var rootsLen int64 = int64(2*len(MAGIC_BEG) + 4 + 4 + rootsEndLen)
+var rootsEndLen = 8 + 4 + 2*len(MAGIC_END)
+var rootsLen = int64(2*len(MAGIC_BEG) + 4 + 4 + rootsEndLen)
 
+// NewStore return a new store at the requested file
 // Provide a nil StoreFile for in-memory-only (non-persistent) usage.
 func NewStore(file StoreFile) (*Store, error) {
 	return NewStoreEx(file, StoreCallbacks{})
 }
 
+// NewStoreEx as NewStore but Expanded
 func NewStoreEx(file StoreFile,
 	callbacks StoreCallbacks) (*Store, error) {
 	coll := make(map[string]*Collection)
@@ -129,7 +136,7 @@ func NewStoreEx(file StoreFile,
 	return res, nil
 }
 
-// SetCollection() is used to create a named Collection, or to modify
+// SetCollection is used to create a named Collection, or to modify
 // the KeyCompare function on an existing Collection.  In either case,
 // a new Collection to use is returned.  A newly created Collection
 // and any mutations on it won't be persisted until you do a Flush().
@@ -156,7 +163,7 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 	}
 }
 
-// Returns a new, unregistered (non-named) collection.  This allows
+// MakePrivateCollection returns a new, unregistered (non-named) collection.  This allows
 // advanced users to manage collections of private collections.
 func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 	if compare == nil {
@@ -170,11 +177,12 @@ func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 	}
 }
 
-// Retrieves a named Collection.
+// GetCollection retrieves a named Collection.
 func (s *Store) GetCollection(name string) *Collection {
 	return (*s.getColl())[name]
 }
 
+// GetCollectionNames returns the named collections within the store
 func (s *Store) GetCollectionNames() []string {
 	return collNames(*s.getColl())
 }
@@ -188,6 +196,7 @@ func collNames(coll map[string]*Collection) []string {
 	return res
 }
 
+// RemoveCollection by name from store
 // The Collection removal won't be reflected into persistence until
 // you do a Flush().  Invoking RemoveCollection(x) and then
 // SetCollection(x) is a fast way to empty a Collection.
@@ -212,6 +221,7 @@ func copyColl(orig map[string]*Collection) map[string]*Collection {
 	return res
 }
 
+// Flush stale data to disk
 // Writes (appends) any dirty, unpersisted data to file.  As a
 // greater-window-of-data-loss versus higher-performance tradeoff,
 // consider having many mutations (Set()'s & Delete()'s) and then
@@ -245,7 +255,7 @@ func (s *Store) Flush() error {
 	return s.writeRoots(rnls)
 }
 
-// Reverts the last Flush(), bringing the Store back to its state at
+// FlushRevert Revert the last Flush(), bringing the Store back to its state at
 // its next-to-last Flush() or to an empty Store (with no Collections)
 // if there were no next-to-last Flush().  This call will truncate the
 // Store file.
@@ -273,6 +283,7 @@ func (s *Store) FlushRevert() error {
 	return s.file.Truncate(atomic.LoadInt64(&s.size))
 }
 
+// Snapshot a read only copy of current store
 // Returns a read-only snapshot, including any mutations on the
 // original Store that have not been Flush()'ed to disk yet.  The
 // snapshot has its mutations and Flush() operations disabled because
@@ -297,7 +308,7 @@ func (s *Store) Snapshot() (snapshot *Store) {
 	}
 	return res
 }
-
+// Close the store after use
 func (s *Store) Close() {
 	s.file = nil
 	cptr := s.getColl()
@@ -309,7 +320,7 @@ func (s *Store) Close() {
 		coll[name].closeCollection()
 	}
 }
-
+// CopyTo copies the store to another file
 // Copy all active collections and their items to a different file.
 // If flushEvery > 0, then during the item copying, Flush() will be
 // invoked at every flushEvery'th item and at the end of the item
@@ -335,7 +346,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 		}
 		defer s.ItemDecRef(srcColl, minItem)
 		numItems := 0
-		var errCopyItem error = nil
+		var errCopyItem error
 		err = srcColl.VisitItemsAscendEx(minItem.Key, true, func(i *Item, depth uint64) bool {
 			if errCopyItem = dstColl.SetItem(i); errCopyItem != nil {
 				return false
@@ -372,7 +383,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 	return dstStore, nil
 }
 
-// Updates the provided map with statistics.
+// Stats updates the provided map with statistics.
 func (s *Store) Stats(out map[string]uint64) {
 	out["fileSize"] = uint64(atomic.LoadInt64(&s.size))
 	out["nodeAllocs"] = atomic.LoadUint64(&s.nodeAllocs)
@@ -491,26 +502,26 @@ func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
 		atomic.AddInt64(&o.size, -1) // Roots were wrong, so keep scanning.
 	}
 }
-
+// ItemAlloc allocates an item in the requested collection
 func (o *Store) ItemAlloc(c *Collection, keyLength uint32) *Item {
 	if o.callbacks.ItemAlloc != nil {
 		return o.callbacks.ItemAlloc(c, keyLength)
 	}
 	return &Item{Key: make([]byte, keyLength)}
 }
-
+// ItemAddRef allows callbacks to be called on item add
 func (o *Store) ItemAddRef(c *Collection, i *Item) {
 	if o.callbacks.ItemAddRef != nil {
 		o.callbacks.ItemAddRef(c, i)
 	}
 }
-
+// ItemDecRef allows callbacks to be called on item remove
 func (o *Store) ItemDecRef(c *Collection, i *Item) {
 	if o.callbacks.ItemDecRef != nil {
 		o.callbacks.ItemDecRef(c, i)
 	}
 }
-
+// ItemValRead reads the value of an item
 func (o *Store) ItemValRead(c *Collection, i *Item,
 	r io.ReaderAt, offset int64, valLength uint32) error {
 	if o.callbacks.ItemValRead != nil {
@@ -520,7 +531,7 @@ func (o *Store) ItemValRead(c *Collection, i *Item,
 	_, err := r.ReadAt(i.Val, offset)
 	return err
 }
-
+// ItemValWrite writes the value to an item
 func (o *Store) ItemValWrite(c *Collection, i *Item, w io.WriterAt, offset int64) error {
 	if o.callbacks.ItemValWrite != nil {
 		return o.callbacks.ItemValWrite(c, i, w, offset)

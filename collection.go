@@ -8,11 +8,12 @@ import (
 	"sync"
 )
 
+// KeyCompare defines a function for custom key comparison
 // User-supplied key comparison func should return 0 if a == b,
 // -1 if a < b, and +1 if a > b.  For example: bytes.Compare()
 type KeyCompare func(a, b []byte) int
 
-// A persistable collection of ordered key-values (Item's).
+// Collection implements a persistable ordered key-values (Item's).
 type Collection struct {
 	name    string // May be "" for a private collection.
 	store   *Store
@@ -44,7 +45,7 @@ type rootNodeLoc struct {
 	// But they might be repeated, so we scan for them during reclaimation.
 	reclaimLater [3]*node
 }
-
+// Name returns as a string the name of the collection
 func (t *Collection) Name() string {
 	return t.name
 }
@@ -63,7 +64,8 @@ func (t *Collection) closeCollection() { // Just "close" is a keyword.
 	}
 }
 
-// Retrieve an item by its key.  Use withValue of false if you don't
+// GetItem from the collection by key
+// Use withValue of false if you don't
 // need the item's value (Item.Val may be nil), which might be able
 // to save on I/O and memory resources, especially for large values.
 // The returned Item should be treated as immutable.
@@ -101,7 +103,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 		}
 	}
 }
-
+// Get value by key
 // Retrieve a value by its key.  Returns nil if the item is not in the
 // collection.  The returned value should be treated as immutable.
 func (t *Collection) Get(key []byte) (val []byte, err error) {
@@ -115,6 +117,7 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 	return nil, nil
 }
 
+// SetItem in a collection
 // Replace or insert an item of a given key.
 // A random item Priority (e.g., rand.Int31()) will usually work well,
 // but advanced users may consider using non-random item priorities
@@ -153,13 +156,13 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	t.rootDecRef(rnl)
 	return nil
 }
-
+// Set a key and value
 // Replace or insert an item of a given key.
 func (t *Collection) Set(key []byte, val []byte) error {
 	return t.SetItem(&Item{Key: key, Val: val, Priority: rand.Int31()})
 }
 
-// Deletes an item of a given key.
+// Delete an item of a given key.
 func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if t.store.readOnly {
 		return false, errors.New("store is read only")
@@ -202,6 +205,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	return true, nil
 }
 
+// MinItem returns the minimum item
 // Retrieves the item with the "smallest" key.
 // The returned item should be treated as immutable.
 func (t *Collection) MinItem(withValue bool) (*Item, error) {
@@ -209,6 +213,7 @@ func (t *Collection) MinItem(withValue bool) (*Item, error) {
 		func(n *node) (*nodeLoc, bool) { return &n.left, true })
 }
 
+// MaxItem returns the maximum item
 // Retrieves the item with the "largest" key.
 // The returned item should be treated as immutable.
 func (t *Collection) MaxItem(withValue bool) (*Item, error) {
@@ -216,6 +221,7 @@ func (t *Collection) MaxItem(withValue bool) (*Item, error) {
 		func(n *node) (*nodeLoc, bool) { return &n.right, true })
 }
 
+// EvictSomeItems from the tree trading performance for memory
 // Evict some clean items found by randomly walking a tree branch.
 // For concurrent users, only the single mutator thread should call
 // EvictSomeItems(), making it serialized with mutations.
@@ -242,23 +248,29 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 	}
 	return numEvicted
 }
-
+// ItemVisitor is a function type for things that can visit an item
+// return true if you wish to keep visiting
 type ItemVisitor func(i *Item) bool
+// ItemVisitorEx is a function type for things that can visit an item
+// as ItemVisitor but with current depth information provided
+// return true if you wish to keep visiting
 type ItemVisitorEx func(i *Item, depth uint64) bool
 
-// Visit items greater-than-or-equal to the target key in ascending order.
+// VisitItemsAscend visits the collection's items in ascending order
+// Specifically visit items greater-than-or-equal to the target key in ascending order.
 func (t *Collection) VisitItemsAscend(target []byte, withValue bool, v ItemVisitor) error {
 	return t.VisitItemsAscendEx(target, withValue,
 		func(i *Item, depth uint64) bool { return v(i) })
 }
 
-// Visit items less-than the target key in descending order.
+// VisitItemsDescend visits the collection's items in descending order
+// Specifically visit items less-than the target key in descending order.
 func (t *Collection) VisitItemsDescend(target []byte, withValue bool, v ItemVisitor) error {
 	return t.VisitItemsDescendEx(target, withValue,
 		func(i *Item, depth uint64) bool { return v(i) })
 }
 
-// Visit items greater-than-or-equal to the target key in ascending order; with depth info.
+// VisitItemsAscendEx items greater-than-or-equal to the target key in ascending order; with depth info.
 func (t *Collection) VisitItemsAscendEx(target []byte, withValue bool,
 	visitor ItemVisitorEx) error {
 	rnl := t.rootAddRef()
@@ -286,7 +298,7 @@ func (t *Collection) VisitItemsAscendEx(target []byte, withValue bool,
 	return err
 }
 
-// Visit items less-than the target key in descending order; with depth info.
+// VisitItemsDescendEx items less-than the target key in descending order; with depth info.
 func (t *Collection) VisitItemsDescendEx(target []byte, withValue bool,
 	visitor ItemVisitorEx) error {
 	rnl := t.rootAddRef()
@@ -305,7 +317,7 @@ func descendChoice(cmp int, n *node) (bool, *nodeLoc, *nodeLoc) {
 	return cmp > 0, &n.right, &n.left
 }
 
-// Returns total number of items and total key bytes plus value bytes.
+// GetTotals returns total number of items and total key bytes plus value bytes.
 func (t *Collection) GetTotals() (numItems uint64, numBytes uint64, err error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
@@ -317,6 +329,7 @@ func (t *Collection) GetTotals() (numItems uint64, numBytes uint64, err error) {
 	return nNode.numNodes, nNode.numBytes, nil
 }
 
+// MarshalJSON is a standard JSON marshaller
 // Returns JSON representation of root node file location.
 func (t *Collection) MarshalJSON() ([]byte, error) {
 	rnl := t.rootAddRef()
@@ -324,6 +337,7 @@ func (t *Collection) MarshalJSON() ([]byte, error) {
 	return rnl.MarshalJSON()
 }
 
+// MarshalJSON is a standard JSON marshaller
 // Returns JSON representation of root node file location.
 func (rnl *rootNodeLoc) MarshalJSON() ([]byte, error) {
 	loc := rnl.root.Loc()
@@ -333,6 +347,7 @@ func (rnl *rootNodeLoc) MarshalJSON() ([]byte, error) {
 	return json.Marshal(loc)
 }
 
+// UnmarshalJSON is a standard JSON unmarshaller
 // Unmarshals JSON representation of root node file location.
 func (t *Collection) UnmarshalJSON(d []byte) error {
 	p := ploc{}
@@ -345,17 +360,18 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 	nloc := t.mkNodeLoc(nil)
 	nloc.loc = &p
 	if !t.rootCAS(nil, t.mkRootNodeLoc(nloc)) {
-		return errors.New("concurrent mutation during UnmarshalJSON().")
+		return errors.New("Concurrent mutation during UnmarshalJSON()")
 	}
 	return nil
 }
 
+// AllocStats returns the allocation stats for the collection
 func (t *Collection) AllocStats() (res AllocStats) {
 	withAllocLocks(func() { res = t.allocStats })
 	return res
 }
 
-// Writes dirty items of a collection BUT (WARNING) does NOT write new
+// Write dirty items of a collection BUT (WARNING) does NOT write new
 // root records.  Use Store.Flush() to write root records, which would
 // make these writes visible to the next file re-opening/re-loading.
 func (t *Collection) Write() error {

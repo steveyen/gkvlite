@@ -21,6 +21,7 @@ var freeRootNodeLocs *rootNodeLoc
 // allows tracking of stats on a collection vs package
 var allocStats AllocStats
 
+// AllocStats holds allocation statistics for profiling
 type AllocStats struct {
 	MkNodes      int64
 	FreeNodes    int64 // Number of invocations of the freeNode() API.

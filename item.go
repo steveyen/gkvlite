@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 )
 
-// A persistable item.
+// Item defines A persistable item.
 type Item struct {
 	Transient interface{} // For any ephemeral data.
 	Key, Val  []byte      // Val may be nil if not fetched into memory yet.
@@ -25,11 +25,13 @@ type itemLoc struct {
 
 var empty_itemLoc = itemLoc{}
 
+// NumBytes required by the structure
 // Number of Key bytes plus number of Val bytes.
 func (i *Item) NumBytes(c *Collection) int {
 	return len(i.Key) + i.NumValBytes(c)
 }
 
+// NumValBytes returns the bumber of bytes required by the item value
 func (i *Item) NumValBytes(c *Collection) int {
 	if c.store.callbacks.ItemValLength != nil {
 		return c.store.callbacks.ItemValLength(c, i)
@@ -37,6 +39,7 @@ func (i *Item) NumValBytes(c *Collection) int {
 	return len(i.Val)
 }
 
+// Copy returns a copy of the item
 // The returned Item will not have been allocated through the optional
 // StoreCallbacks.ItemAlloc() callback.
 func (i *Item) Copy() *Item {
@@ -47,7 +50,7 @@ func (i *Item) Copy() *Item {
 		Transient: i.Transient,
 	}
 }
-
+// Loc return the location of the item
 func (i *itemLoc) Loc() *ploc {
 	i.m.Lock()
 	defer i.m.Unlock()
@@ -59,7 +62,7 @@ func (i *itemLoc) setLoc(n *ploc) {
 	defer i.m.Unlock()
 	i.loc = n
 }
-
+// Item returns an item from its location
 func (i *itemLoc) Item() *Item {
 	i.m.Lock()
 	defer i.m.Unlock()
@@ -76,6 +79,7 @@ func (i *itemLoc) casItem(o, n *Item) bool {
 	return false
 }
 
+// Copy returns a copy of the items location
 func (i *itemLoc) Copy(src *itemLoc) {
 	if src == nil {
 		i.Copy(&empty_itemLoc)
@@ -207,7 +211,7 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 	}
 	return icur, nil
 }
-
+// NumBytes return the number of bytes needed for the collection
 func (iloc *itemLoc) NumBytes(c *Collection) int {
 	loc := iloc.Loc()
 	if loc.isEmpty() {
