@@ -275,6 +275,104 @@ func (t *Collection) VisitItemsDescend(target []byte, withValue bool, v ItemVisi
 		func(i *Item, depth uint64) bool { return v(i) })
 }
 
+// MaxBlockCnt is the maximum number of blocks we will split the collection into
+const MaxBlockCnt = 1024
+
+// BlockMangler will possibly re-arrange the order of the blocks
+type BlockMangler func([][]byte) [][]byte
+
+// VisitItemsAscendBlockEx divides the collection keys into blocks
+// and visits the items in those
+// This is useful not for speed, but if you need a none linear visit order
+func (t *Collection) VisitItemsAscendBlockEx(
+	withValue bool,
+	blockMan BlockMangler,
+	visitor ItemVisitorEx,
+) error {
+	numBlocks, lenBlock, err := t.determineBlocks()
+	if err != nil {
+		return err
+	}
+	if (lenBlock < 1) || (numBlocks < 1) {
+		return fmt.Errorf("Impossible block sizes,%d,%d", lenBlock, numBlocks)
+	}
+	blockStore := make([][]byte, 0, numBlocks)
+
+	var j int
+	v := func(i *Item, depth uint64) bool {
+		if j == 0 {
+			blockStore = append(blockStore, i.Key)
+			j = 1
+		} else if j >= lenBlock {
+			j = 0
+		} else {
+			j++
+		}
+		return true
+	}
+	si, err := t.MinItem(false)
+	if err != nil {
+		return err
+	}
+	err = t.VisitItemsAscendEx(si.Key, false, v)
+	if err != nil {
+		return err
+	}
+	if blockMan != nil {
+		blockStore = blockMan(blockStore)
+	}
+	for _, si := range blockStore {
+		j := 0
+		vis := func(i *Item, depth uint64) bool {
+			if j >= lenBlock {
+				panic("impossible")
+				return false
+			} else if j == (lenBlock - 1) {
+				visitor(i, depth)
+				return false
+			}
+			j++
+			return visitor(i, depth)
+		}
+		err = t.VisitItemsAscendEx(si, withValue, vis)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (t *Collection) determineBlocks() (num, leng int, err error) {
+	var cnt int64
+	cnt, err = t.Len()
+	if err != nil {
+		return 0, 0, err
+	}
+	if cnt > MaxBlockCnt {
+		size := cnt / MaxBlockCnt
+		if cnt%MaxBlockCnt != 0 {
+			size++
+		}
+		return MaxBlockCnt, int(size), nil
+	}
+	return int(cnt), 1, nil
+}
+
+// Len returns the number of items in the collection
+// beware this requires walking the whole structure
+// Len is lengthy
+func (t *Collection) Len() (l int64, err error) {
+	visitor := func(i *Item, depth uint64) bool {
+		l++
+		return true
+	}
+	si, err := t.MinItem(false)
+	if err != nil {
+		return
+	}
+	err = t.VisitItemsAscendEx(si.Key, false, visitor)
+	return
+}
+
 // VisitItemsAscendEx items greater-than-or-equal to the target key in ascending order; with depth info.
 func (t *Collection) VisitItemsAscendEx(target []byte, withValue bool,
 	visitor ItemVisitorEx) error {

@@ -25,8 +25,10 @@ type itemLoc struct {
 }
 
 var empty_itemLoc = itemLoc{}
+
 // The Key pointer type
 type keyP uint32
+
 const keyPSize = 4 // Number of bytes needed to store above
 
 // NumBytes required by the structure
@@ -122,11 +124,11 @@ func (i *itemLoc) write(c *Collection) (err error) {
 		pos := 0
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(ilength))
 		pos += 4
-    if keyPSize == 2 {
-	  	binary.BigEndian.PutUint16(b[pos:pos+keyPSize], uint16(len(iItem.Key)))
-    } else {
-  		binary.BigEndian.PutUint32(b[pos:pos+keyPSize], uint32(len(iItem.Key)))
-    }
+		if keyPSize == 2 {
+			binary.BigEndian.PutUint16(b[pos:pos+keyPSize], uint16(len(iItem.Key)))
+		} else {
+			binary.BigEndian.PutUint32(b[pos:pos+keyPSize], uint32(len(iItem.Key)))
+		}
 		pos += keyPSize
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(vlength))
 		pos += 4
@@ -172,12 +174,12 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 		length := binary.BigEndian.Uint32(b[pos : pos+4])
 		pos += 4
 
-    var keyLength keyP
-    if keyPSize == 2 {
-      keyLength = keyP(binary.BigEndian.Uint16(b[pos : pos+keyPSize]))
-    } else {
-      keyLength = keyP(binary.BigEndian.Uint32(b[pos : pos+keyPSize]))
-    }
+		var keyLength keyP
+		if keyPSize == 2 {
+			keyLength = keyP(binary.BigEndian.Uint16(b[pos : pos+keyPSize]))
+		} else {
+			keyLength = keyP(binary.BigEndian.Uint32(b[pos : pos+keyPSize]))
+		}
 		pos += keyPSize
 
 		valLength := binary.BigEndian.Uint32(b[pos : pos+4])
