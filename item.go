@@ -20,9 +20,9 @@ type itemLoc struct {
 	loc  unsafe.Pointer // *ploc - can be nil if item is dirty (not yet persisted).
 	item unsafe.Pointer // *Item - can be nil if item is not fetched into memory yet.
 }
-
 var empty_itemLoc = &itemLoc{}
-
+type keyP uint32
+const keyPSize = 4
 // Number of Key bytes plus number of Val bytes.
 func (i *Item) NumBytes(c *Collection) int {
 	return len(i.Key) + i.NumValBytes(c)
@@ -63,7 +63,7 @@ func (i *itemLoc) Copy(src *itemLoc) {
 	atomic.StorePointer(&i.item, unsafe.Pointer(src.Item()))
 }
 
-const itemLoc_hdrLength int = 4 + 4 + 4 + 4
+const itemLoc_hdrLength int = 4 + keyPSize + 4 + 4
 
 func (i *itemLoc) write(c *Collection) (err error) {
 	if i.Loc().isEmpty() {
@@ -85,8 +85,12 @@ func (i *itemLoc) write(c *Collection) (err error) {
 		pos := 0
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(ilength))
 		pos += 4
-		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(len(iItem.Key)))
-		pos += 4
+    if keyPSize == 2 {
+	  	binary.BigEndian.PutUint16(b[pos:pos+keyPSize], uint16(len(iItem.Key)))
+    } else {
+  		binary.BigEndian.PutUint32(b[pos:pos+keyPSize], uint32(len(iItem.Key)))
+    }
+		pos += keyPSize
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(vlength))
 		pos += 4
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(iItem.Priority))
@@ -131,8 +135,15 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 		pos := 0
 		length := binary.BigEndian.Uint32(b[pos : pos+4])
 		pos += 4
-		keyLength := binary.BigEndian.Uint32(b[pos : pos+4])
-		pos += 4
+
+    var keyLength keyP
+    if keyPSize == 2 {
+      keyLength = keyP(binary.BigEndian.Uint16(b[pos : pos+keyPSize]))
+    } else {
+      keyLength = keyP(binary.BigEndian.Uint32(b[pos : pos+keyPSize]))
+    }
+		pos += keyPSize
+
 		valLength := binary.BigEndian.Uint32(b[pos : pos+4])
 		pos += 4
 		i := c.store.ItemAlloc(c, keyLength)

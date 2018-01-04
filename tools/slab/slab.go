@@ -159,7 +159,7 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		i.Val = b
 		return nil
 	}
-	itemAlloc := func(c *gkvlite.Collection, keyLength uint32) *gkvlite.Item {
+	itemAlloc := func(c *gkvlite.Collection, keyLength keyP) *gkvlite.Item {
 		var n *ItemNode
 		if freeItemNodes != nil {
 			n = freeItemNodes
@@ -290,7 +290,7 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 			pri := rand.Int31()
 			var it *gkvlite.Item
 			if scb.ItemAlloc != nil {
-				it = scb.ItemAlloc(x, uint32(len(k)))
+				it = scb.ItemAlloc(x, keyP(len(k)))
 			} else {
 				it = &gkvlite.Item{Key: make([]byte, len(k))}
 			}

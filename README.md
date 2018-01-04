@@ -28,7 +28,7 @@ Key concepts
 * A Store can have zero or more Collections.
 * A Collection can have zero or more Items.
 * An Item is a key and value.
-* A key is a []byte, max length 4GB (length is uint32).
+* A key is a []byte, max length 4GB/64kB (length is uint32/uint16).
 * A value is a []byte, max length 4GB (length is uint32).
 
 ACID properties
