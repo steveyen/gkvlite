@@ -19,7 +19,7 @@ type Collection struct {
 	store   *Store
 	compare KeyCompare
 
-	rootLock *sync.Mutex  // REVISIT make an RWMutex
+	rootLock *sync.Mutex
 	root     *rootNodeLoc // Protected by rootLock.
 
 	allocStats AllocStats // User must serialize access (e.g., see locks in alloc.go).
