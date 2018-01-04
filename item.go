@@ -59,47 +59,47 @@ func (i *Item) Copy() *Item {
 }
 
 // Loc return the location of the item
-func (i *itemLoc) Loc() *ploc {
+func (iloc *itemLoc) Loc() *ploc {
 	if itemLocMutex {
 		itemLocGL.RLock()
 		defer itemLocGL.RUnlock()
 	}
-	return i.loc
+	return iloc.loc
 }
 
-func (i *itemLoc) setLoc(n *ploc) {
+func (iloc *itemLoc) setLoc(n *ploc) {
 	if itemLocMutex {
 		itemLocGL.Lock()
 		defer itemLocGL.Unlock()
 	}
-	i.loc = n
+	iloc.loc = n
 }
 
 // Item returns an item from its location
-func (i *itemLoc) Item() *Item {
+func (iloc *itemLoc) Item() *Item {
 	if itemLocMutex {
 		itemLocGL.RLock()
 		defer itemLocGL.RUnlock()
 	}
-	return i.item
+	return iloc.item
 }
 
-func (i *itemLoc) casItem(o, n *Item) bool {
+func (iloc *itemLoc) casItem(o, n *Item) bool {
 	if itemLocMutex {
 		itemLocGL.Lock()
 		defer itemLocGL.Unlock()
 	}
-	if i.item == o {
-		i.item = n
+	if iloc.item == o {
+		iloc.item = n
 		return true
 	}
 	return false
 }
 
 // Copy returns a copy of the items location
-func (i *itemLoc) Copy(src *itemLoc) {
+func (iloc *itemLoc) Copy(src *itemLoc) {
 	if src == nil {
-		i.Copy(&emptyItemLoc)
+		iloc.Copy(&emptyItemLoc)
 		return
 	}
 
@@ -109,15 +109,15 @@ func (i *itemLoc) Copy(src *itemLoc) {
 	}
 	// NOTE: This trick only works because of the global lock. No reason to lock
 	// src independently of i.
-	i.loc = src.loc
-	i.item = src.item
+	iloc.loc = src.loc
+	iloc.item = src.item
 }
 
 const itemLocHdrLength int = 4 + keyPSize + 4 + 4
 
-func (i *itemLoc) write(c *Collection) (err error) {
-	if i.Loc().isEmpty() {
-		iItem := i.Item()
+func (iloc *itemLoc) write(c *Collection) (err error) {
+	if iloc.Loc().isEmpty() {
+		iItem := iloc.Item()
 		if iItem == nil {
 			return errors.New("itemLoc.write with nil item")
 		}
@@ -158,7 +158,7 @@ func (i *itemLoc) write(c *Collection) (err error) {
 			return err
 		}
 		atomic.StoreInt64(&c.store.size, offset+int64(ilength))
-		i.setLoc(&ploc{Offset: offset, Length: uint32(ilength)})
+		iloc.setLoc(&ploc{Offset: offset, Length: uint32(ilength)})
 	}
 	return nil
 }
