@@ -34,16 +34,16 @@ func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
 
 	// Concurrent mutations like inserts should not affect a visit()
 	// that's already inflight.
-  // However only a single agent may mutate at a time
+	// However only a single agent may mutate at a time
 	var wg sync.WaitGroup
-  var mutate sync.Mutex
+	var mutate sync.Mutex
 	wg.Add(len(exp))
 	visitExpectCollection(t, x1, "a", exp, func(i *Item) {
 		go func() {
 			a := atomic.AddInt32(&toAdd, 1)
 			toAddKey := []byte(add[a-1])
-      mutate.Lock()
-      defer mutate.Unlock()
+			mutate.Lock()
+			defer mutate.Unlock()
 			if err := x1.Set(toAddKey, toAddKey); err != nil {
 				t.Errorf("expected concurrent set to work on key: %v, got: %v",
 					toAddKey, err)

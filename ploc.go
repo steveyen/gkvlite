@@ -12,7 +12,7 @@ type ploc struct {
 
 const ploc_length int = 8 + 4
 
-var ploc_empty *ploc = &ploc{} // Sentinel.
+var ploc_empty = &ploc{} // Sentinel.
 
 func (p *ploc) isEmpty() bool {
 	return p == nil || (p.Offset == int64(0) && p.Length == uint32(0))
