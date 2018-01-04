@@ -20,7 +20,7 @@ import (
 // Store defines the store for the nodes
 // A persistable store holding collections of ordered keys & values.
 type Store struct {
-	m sync.Mutex // REVISIT make an RWMutex
+	m sync.RWMutex 
 
 	// Atomic CAS'ed int64/uint64's must be at the top for 32-bit compatibility.
 	size       int64                   // Atomic protected; file size or next write position.
@@ -38,8 +38,8 @@ func (s *Store) setColl(n *map[string]*Collection) {
 }
 
 func (s *Store) getColl() *map[string]*Collection {
-	s.m.Lock()
-	defer s.m.Unlock()
+	s.m.RLock()
+	defer s.m.RUnlock()
 	return s.coll
 }
 
