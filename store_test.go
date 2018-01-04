@@ -868,7 +868,7 @@ func TestStoreFile(t *testing.T) {
 	}
 
 	for ccTestIdx, ccTest := range ccTests {
-		ccName := fmt.Sprintf(os.TempDir() + "/"+"tmpCompactCopy-%v.test", ccTestIdx)
+		ccName := fmt.Sprintf(os.TempDir()+"/"+"tmpCompactCopy-%v.test", ccTestIdx)
 		reportRemove(ccName)
 		ccFile, err := os.Create(ccName)
 		if err != nil || f == nil {

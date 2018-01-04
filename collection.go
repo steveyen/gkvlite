@@ -19,7 +19,7 @@ type Collection struct {
 	store   *Store
 	compare KeyCompare
 
-	rootLock *sync.Mutex
+	rootLock *sync.Mutex  // REVISIT make an RWMutex
 	root     *rootNodeLoc // Protected by rootLock.
 
 	allocStats AllocStats // User must serialize access (e.g., see locks in alloc.go).
@@ -45,6 +45,7 @@ type rootNodeLoc struct {
 	// But they might be repeated, so we scan for them during reclaimation.
 	reclaimLater [3]*node
 }
+
 // Name returns as a string the name of the collection
 func (t *Collection) Name() string {
 	return t.name
@@ -103,6 +104,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 		}
 	}
 }
+
 // Get value by key
 // Retrieve a value by its key.  Returns nil if the item is not in the
 // collection.  The returned value should be treated as immutable.
@@ -156,6 +158,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	t.rootDecRef(rnl)
 	return nil
 }
+
 // Set a key and value
 // Replace or insert an item of a given key.
 func (t *Collection) Set(key []byte, val []byte) error {
@@ -248,9 +251,11 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 	}
 	return numEvicted
 }
+
 // ItemVisitor is a function type for things that can visit an item
 // return true if you wish to keep visiting
 type ItemVisitor func(i *Item) bool
+
 // ItemVisitorEx is a function type for things that can visit an item
 // as ItemVisitor but with current depth information provided
 // return true if you wish to keep visiting

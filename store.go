@@ -20,7 +20,7 @@ import (
 // Store defines the store for the nodes
 // A persistable store holding collections of ordered keys & values.
 type Store struct {
-	m sync.Mutex
+	m sync.Mutex // REVISIT make an RWMutex
 
 	// Atomic CAS'ed int64/uint64's must be at the top for 32-bit compatibility.
 	size       int64                   // Atomic protected; file size or next write position.
@@ -61,6 +61,7 @@ type StoreFile interface {
 	Stat() (os.FileInfo, error)
 	Truncate(size int64) error
 }
+
 // StoreCallbacks provides the interface to the callback mechanism
 // Allows applications to override or interpose before/after events.
 type StoreCallbacks struct {
@@ -109,6 +110,7 @@ const VERSION = uint32(4)
 
 // MAGIC_BEG definest the start magic value
 var MAGIC_BEG = []byte("0g1t2r")
+
 // MAGIC_END definest the end magic value
 var MAGIC_END = []byte("3e4a5p")
 
@@ -308,6 +310,7 @@ func (s *Store) Snapshot() (snapshot *Store) {
 	}
 	return res
 }
+
 // Close the store after use
 func (s *Store) Close() {
 	s.file = nil
@@ -320,6 +323,7 @@ func (s *Store) Close() {
 		coll[name].closeCollection()
 	}
 }
+
 // CopyTo copies the store to another file
 // Copy all active collections and their items to a different file.
 // If flushEvery > 0, then during the item copying, Flush() will be
@@ -502,6 +506,7 @@ func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
 		atomic.AddInt64(&o.size, -1) // Roots were wrong, so keep scanning.
 	}
 }
+
 // ItemAlloc allocates an item in the requested collection
 func (o *Store) ItemAlloc(c *Collection, keyLength uint32) *Item {
 	if o.callbacks.ItemAlloc != nil {
@@ -509,18 +514,21 @@ func (o *Store) ItemAlloc(c *Collection, keyLength uint32) *Item {
 	}
 	return &Item{Key: make([]byte, keyLength)}
 }
+
 // ItemAddRef allows callbacks to be called on item add
 func (o *Store) ItemAddRef(c *Collection, i *Item) {
 	if o.callbacks.ItemAddRef != nil {
 		o.callbacks.ItemAddRef(c, i)
 	}
 }
+
 // ItemDecRef allows callbacks to be called on item remove
 func (o *Store) ItemDecRef(c *Collection, i *Item) {
 	if o.callbacks.ItemDecRef != nil {
 		o.callbacks.ItemDecRef(c, i)
 	}
 }
+
 // ItemValRead reads the value of an item
 func (o *Store) ItemValRead(c *Collection, i *Item,
 	r io.ReaderAt, offset int64, valLength uint32) error {
@@ -531,6 +539,7 @@ func (o *Store) ItemValRead(c *Collection, i *Item,
 	_, err := r.ReadAt(i.Val, offset)
 	return err
 }
+
 // ItemValWrite writes the value to an item
 func (o *Store) ItemValWrite(c *Collection, i *Item, w io.WriterAt, offset int64) error {
 	if o.callbacks.ItemValWrite != nil {
