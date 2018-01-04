@@ -35,7 +35,7 @@ type nodeLoc struct {
 	next *nodeLoc // For free-list tracking.
 }
 
-var empty_nodeLoc = nodeLoc{} // Sentinel.
+var emptyNodeLoc = nodeLoc{} // Sentinel.
 
 func (nloc *nodeLoc) Loc() *ploc {
 	nodeLocGL.RLock()
@@ -69,7 +69,7 @@ func (nloc *nodeLoc) LocNode() (*ploc, *node) {
 
 func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
 	if src == nil {
-		return nloc.Copy(&empty_nodeLoc)
+		return nloc.Copy(&emptyNodeLoc)
 	}
 
 	nodeLocGL.Lock()
@@ -95,7 +95,7 @@ func (nloc *nodeLoc) write(o *Store) error {
 			return nil
 		}
 		offset := atomic.LoadInt64(&o.size)
-		length := ploc_length + ploc_length + ploc_length + 8 + 8
+		length := plocLength + plocLength + plocLength + 8 + 8
 		b := make([]byte, length)
 		pos := 0
 		pos = node.item.Loc().write(b, pos)
@@ -129,9 +129,9 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 	if loc.isEmpty() {
 		return nil, nil
 	}
-	if loc.Length != uint32(ploc_length+ploc_length+ploc_length+8+8) {
+	if loc.Length != uint32(plocLength+plocLength+plocLength+8+8) {
 		return nil, fmt.Errorf("unexpected node loc.Length: %v != %v",
-			loc.Length, ploc_length+ploc_length+ploc_length+8+8)
+			loc.Length, plocLength+plocLength+plocLength+8+8)
 	}
 	b := make([]byte, loc.Length)
 	if _, err := o.file.ReadAt(b, loc.Offset); err != nil {

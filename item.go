@@ -24,9 +24,11 @@ type itemLoc struct {
 	item *Item // can be nil if item is not fetched into memory yet.
 }
 
-var empty_itemLoc = itemLoc{}
+var emptyItemLoc = itemLoc{}
+
 // The Key pointer type
 type keyP uint32
+
 const keyPSize = 4 // Number of bytes needed to store above
 
 // NumBytes required by the structure
@@ -88,7 +90,7 @@ func (i *itemLoc) casItem(o, n *Item) bool {
 // Copy returns a copy of the items location
 func (i *itemLoc) Copy(src *itemLoc) {
 	if src == nil {
-		i.Copy(&empty_itemLoc)
+		i.Copy(&emptyItemLoc)
 		return
 	}
 
@@ -100,7 +102,7 @@ func (i *itemLoc) Copy(src *itemLoc) {
 	i.item = src.item
 }
 
-const itemLoc_hdrLength int = 4 + keyPSize + 4 + 4
+const itemLocHdrLength int = 4 + keyPSize + 4 + 4
 
 func (i *itemLoc) write(c *Collection) (err error) {
 	if i.Loc().isEmpty() {
@@ -115,18 +117,18 @@ func (i *itemLoc) write(c *Collection) (err error) {
 			}
 		}
 		offset := atomic.LoadInt64(&c.store.size)
-		hlength := itemLoc_hdrLength + len(iItem.Key)
+		hlength := itemLocHdrLength + len(iItem.Key)
 		vlength := iItem.NumValBytes(c)
 		ilength := hlength + vlength
 		b := make([]byte, hlength)
 		pos := 0
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(ilength))
 		pos += 4
-    if keyPSize == 2 {
-	  	binary.BigEndian.PutUint16(b[pos:pos+keyPSize], uint16(len(iItem.Key)))
-    } else {
-  		binary.BigEndian.PutUint32(b[pos:pos+keyPSize], uint32(len(iItem.Key)))
-    }
+		if keyPSize == 2 {
+			binary.BigEndian.PutUint16(b[pos:pos+keyPSize], uint16(len(iItem.Key)))
+		} else {
+			binary.BigEndian.PutUint32(b[pos:pos+keyPSize], uint32(len(iItem.Key)))
+		}
 		pos += keyPSize
 		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(vlength))
 		pos += 4
@@ -160,11 +162,11 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 		if loc.isEmpty() {
 			return nil, nil
 		}
-		if loc.Length < uint32(itemLoc_hdrLength) {
+		if loc.Length < uint32(itemLocHdrLength) {
 			return nil, fmt.Errorf("unexpected item loc.Length: %v < %v",
-				loc.Length, itemLoc_hdrLength)
+				loc.Length, itemLocHdrLength)
 		}
-		b := make([]byte, itemLoc_hdrLength)
+		b := make([]byte, itemLocHdrLength)
 		if _, err := c.store.file.ReadAt(b, loc.Offset); err != nil {
 			return nil, err
 		}
@@ -172,12 +174,12 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 		length := binary.BigEndian.Uint32(b[pos : pos+4])
 		pos += 4
 
-    var keyLength keyP
-    if keyPSize == 2 {
-      keyLength = keyP(binary.BigEndian.Uint16(b[pos : pos+keyPSize]))
-    } else {
-      keyLength = keyP(binary.BigEndian.Uint32(b[pos : pos+keyPSize]))
-    }
+		var keyLength keyP
+		if keyPSize == 2 {
+			keyLength = keyP(binary.BigEndian.Uint16(b[pos : pos+keyPSize]))
+		} else {
+			keyLength = keyP(binary.BigEndian.Uint32(b[pos : pos+keyPSize]))
+		}
 		pos += keyPSize
 
 		valLength := binary.BigEndian.Uint32(b[pos : pos+4])
@@ -188,23 +190,23 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 		}
 		i.Priority = int32(binary.BigEndian.Uint32(b[pos : pos+4]))
 		pos += 4
-		if length != uint32(itemLoc_hdrLength)+uint32(keyLength)+valLength {
+		if length != uint32(itemLocHdrLength)+uint32(keyLength)+valLength {
 			c.store.ItemDecRef(c, i)
 			return nil, errors.New("mismatched itemLoc lengths")
 		}
-		if pos != itemLoc_hdrLength {
+		if pos != itemLocHdrLength {
 			c.store.ItemDecRef(c, i)
 			return nil, fmt.Errorf("read pos != itemLoc_hdrLength, %v != %v",
-				pos, itemLoc_hdrLength)
+				pos, itemLocHdrLength)
 		}
 		if _, err := c.store.file.ReadAt(i.Key,
-			loc.Offset+int64(itemLoc_hdrLength)); err != nil {
+			loc.Offset+int64(itemLocHdrLength)); err != nil {
 			c.store.ItemDecRef(c, i)
 			return nil, err
 		}
 		if withValue {
 			err := c.store.ItemValRead(c, i, c.store.file,
-				loc.Offset+int64(itemLoc_hdrLength)+int64(keyLength), valLength)
+				loc.Offset+int64(itemLocHdrLength)+int64(keyLength), valLength)
 			if err != nil {
 				c.store.ItemDecRef(c, i)
 				return nil, err
@@ -239,5 +241,5 @@ func (iloc *itemLoc) NumBytes(c *Collection) int {
 		}
 		return i.NumBytes(c)
 	}
-	return int(loc.Length) - itemLoc_hdrLength
+	return int(loc.Length) - itemLocHdrLength
 }

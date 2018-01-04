@@ -105,17 +105,17 @@ type StoreCallbacks struct {
 // ItemCallback defines the function interface to an item callback
 type ItemCallback func(*Collection, *Item) (*Item, error)
 
-// VERSION of the file format in use
-const VERSION = uint32(4)
+// Version of the file format in use
+const Version = uint32(4)
 
-// MAGIC_BEG definest the start magic value
-var MAGIC_BEG = []byte("0g1t2r")
+// MagicBeg defines the start magic value
+var MagicBeg = []byte("0g1t2r")
 
-// MAGIC_END definest the end magic value
-var MAGIC_END = []byte("3e4a5p")
+// MagicEnd defines the end magic value
+var MagicEnd = []byte("3e4a5p")
 
-var rootsEndLen = 8 + 4 + 2*len(MAGIC_END)
-var rootsLen = int64(2*len(MAGIC_BEG) + 4 + 4 + rootsEndLen)
+var rootsEndLen = 8 + 4 + 2*len(MagicEnd)
+var rootsLen = int64(2*len(MagicBeg) + 4 + 4 + rootsEndLen)
 
 // NewStore return a new store at the requested file
 // Provide a nil StoreFile for in-memory-only (non-persistent) usage.
@@ -175,7 +175,7 @@ func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 		store:    s,
 		compare:  compare,
 		rootLock: &sync.Mutex{},
-		root:     &rootNodeLoc{refs: 1, root: &empty_nodeLoc},
+		root:     &rootNodeLoc{refs: 1, root: &emptyNodeLoc},
 	}
 }
 
@@ -337,7 +337,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 	}
 	coll := *s.getColl()
 
-	var max_depth uint64
+	var maxDepth uint64
 	for _, name := range collNames(coll) {
 		srcColl := coll[name]
 		dstColl := dstStore.SetCollection(name, srcColl.compare)
@@ -356,8 +356,8 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 				return false
 			}
 			numItems++
-			if depth > max_depth {
-				max_depth = depth
+			if depth > maxDepth {
+				maxDepth = depth
 			}
 			if flushEvery > 0 && numItems%flushEvery == 0 {
 				// Flush out some of the read items cached into memory
@@ -376,7 +376,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 			return nil, errCopyItem
 		}
 		if false {
-			fmt.Printf("CopyTo cnt = %d, max_depth = %d\n", numItems, max_depth)
+			fmt.Printf("CopyTo cnt = %d, max_depth = %d\n", numItems, maxDepth)
 		}
 	}
 	if flushEvery > 0 {
@@ -399,17 +399,17 @@ func (o *Store) writeRoots(rnls map[string]*rootNodeLoc) error {
 		return err
 	}
 	offset := atomic.LoadInt64(&o.size)
-	length := 2*len(MAGIC_BEG) + 4 + 4 + len(sJSON) + 8 + 4 + 2*len(MAGIC_END)
+	length := 2*len(MagicBeg) + 4 + 4 + len(sJSON) + 8 + 4 + 2*len(MagicEnd)
 	b := bytes.NewBuffer(make([]byte, length)[:0])
-	b.Write(MAGIC_BEG)
-	b.Write(MAGIC_BEG)
-	binary.Write(b, binary.BigEndian, uint32(VERSION))
+	b.Write(MagicBeg)
+	b.Write(MagicBeg)
+	binary.Write(b, binary.BigEndian, uint32(Version))
 	binary.Write(b, binary.BigEndian, uint32(length))
 	b.Write(sJSON)
 	binary.Write(b, binary.BigEndian, int64(offset))
 	binary.Write(b, binary.BigEndian, uint32(length))
-	b.Write(MAGIC_END)
-	b.Write(MAGIC_END)
+	b.Write(MagicEnd)
+	b.Write(MagicEnd)
 	if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 		return err
 	}
@@ -444,8 +444,8 @@ func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
 				atomic.LoadInt64(&o.size)-int64(len(rootsEnd))); err != nil {
 				return err
 			}
-			if bytes.Equal(MAGIC_END, rootsEnd[8+4:8+4+len(MAGIC_END)]) &&
-				bytes.Equal(MAGIC_END, rootsEnd[8+4+len(MAGIC_END):]) {
+			if bytes.Equal(MagicEnd, rootsEnd[8+4:8+4+len(MagicEnd)]) &&
+				bytes.Equal(MagicEnd, rootsEnd[8+4+len(MagicEnd):]) {
 				break
 			}
 			atomic.AddInt64(&o.size, -1) // TODO: optimizations to scan backwards faster.
@@ -467,26 +467,26 @@ func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
 			if _, err := o.file.ReadAt(data, offset); err != nil {
 				return err
 			}
-			if bytes.Equal(MAGIC_BEG, data[:len(MAGIC_BEG)]) &&
-				bytes.Equal(MAGIC_BEG, data[len(MAGIC_BEG):2*len(MAGIC_BEG)]) {
+			if bytes.Equal(MagicBeg, data[:len(MagicBeg)]) &&
+				bytes.Equal(MagicBeg, data[len(MagicBeg):2*len(MagicBeg)]) {
 				var version, length0 uint32
-				b := bytes.NewBuffer(data[2*len(MAGIC_BEG):])
+				b := bytes.NewBuffer(data[2*len(MagicBeg):])
 				if err = binary.Read(b, binary.BigEndian, &version); err != nil {
 					return err
 				}
 				if err = binary.Read(b, binary.BigEndian, &length0); err != nil {
 					return err
 				}
-				if version != VERSION {
+				if version != Version {
 					return fmt.Errorf("version mismatch: "+
-						"current version: %v != found version: %v", VERSION, version)
+						"current version: %v != found version: %v", Version, version)
 				}
 				if length0 != length {
 					return fmt.Errorf("length mismatch: "+
 						"wanted length: %v != found length: %v", length0, length)
 				}
 				m := make(map[string]*Collection)
-				if err = json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m); err != nil {
+				if err = json.Unmarshal(data[2*len(MagicBeg)+4+4:], &m); err != nil {
 					return err
 				}
 				for collName, t := range m {

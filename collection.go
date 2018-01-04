@@ -347,7 +347,7 @@ func (t *Collection) MarshalJSON() ([]byte, error) {
 func (rnl *rootNodeLoc) MarshalJSON() ([]byte, error) {
 	loc := rnl.root.Loc()
 	if loc.isEmpty() {
-		return json.Marshal(ploc_empty)
+		return json.Marshal(plocEmpty)
 	}
 	return json.Marshal(loc)
 }
@@ -466,23 +466,23 @@ func (t *Collection) rootAddRef() *rootNodeLoc {
 func (t *Collection) rootDecRef(r *rootNodeLoc) {
 	t.rootLock.Lock()
 	freeNodeLock.Lock()
-	t.rootDecRef_unlocked(r)
+	t.rootDecRefUnlocked(r)
 	freeNodeLock.Unlock()
 	t.rootLock.Unlock()
 }
 
-func (t *Collection) rootDecRef_unlocked(r *rootNodeLoc) {
+func (t *Collection) rootDecRefUnlocked(r *rootNodeLoc) {
 	r.refs--
 	if r.refs > 0 {
 		return
 	}
 	if r.chainedCollection != nil && r.chainedRootNodeLoc != nil {
-		r.chainedCollection.rootDecRef_unlocked(r.chainedRootNodeLoc)
+		r.chainedCollection.rootDecRefUnlocked(r.chainedRootNodeLoc)
 	}
-	t.reclaimNodes_unlocked(r.root.Node(), &r.reclaimLater, &r.reclaimMark)
+	t.reclaimNodesUnlocked(r.root.Node(), &r.reclaimLater, &r.reclaimMark)
 	for i := 0; i < len(r.reclaimLater); i++ {
 		if r.reclaimLater[i] != nil {
-			t.reclaimNodes_unlocked(r.reclaimLater[i], nil, &r.reclaimMark)
+			t.reclaimNodesUnlocked(r.reclaimLater[i], nil, &r.reclaimMark)
 			r.reclaimLater[i] = nil
 		}
 	}

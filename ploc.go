@@ -10,9 +10,9 @@ type ploc struct {
 	Length uint32 `json:"l"` // Number of bytes.
 }
 
-const ploc_length int = 8 + 4
+const plocLength int = 8 + 4
 
-var ploc_empty *ploc = &ploc{} // Sentinel.
+var plocEmpty = &ploc{} // Sentinel.
 
 func (p *ploc) isEmpty() bool {
 	return p == nil || (p.Offset == int64(0) && p.Length == uint32(0))
@@ -20,7 +20,7 @@ func (p *ploc) isEmpty() bool {
 
 func (p *ploc) write(b []byte, pos int) int {
 	if p == nil {
-		return ploc_empty.write(b, pos)
+		return plocEmpty.write(b, pos)
 	}
 	binary.BigEndian.PutUint64(b[pos:pos+8], uint64(p.Offset))
 	pos += 8

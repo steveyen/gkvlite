@@ -76,7 +76,7 @@ func (t *Collection) reclaimMarkUpdate(nloc *nodeLoc,
 	return n
 }
 
-func (t *Collection) reclaimNodes_unlocked(n *node,
+func (t *Collection) reclaimNodesUnlocked(n *node,
 	reclaimLater *[3]*node, reclaimMark *node) int64 {
 	if n == nil {
 		return 0
@@ -99,9 +99,9 @@ func (t *Collection) reclaimNodes_unlocked(n *node,
 	if !n.right.isEmpty() {
 		right = n.right.Node()
 	}
-	t.freeNode_unlocked(n, reclaimMark)
-	numLeft := t.reclaimNodes_unlocked(left, reclaimLater, reclaimMark)
-	numRight := t.reclaimNodes_unlocked(right, reclaimLater, reclaimMark)
+	t.freeNodeUnlocked(n, reclaimMark)
+	numLeft := t.reclaimNodesUnlocked(left, reclaimLater, reclaimMark)
+	numRight := t.reclaimNodesUnlocked(right, reclaimLater, reclaimMark)
 	return 1 + numLeft + numRight
 }
 
@@ -138,7 +138,7 @@ func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 	return n
 }
 
-func (t *Collection) freeNode_unlocked(n *node, reclaimMark *node) {
+func (t *Collection) freeNodeUnlocked(n *node, reclaimMark *node) {
 	if n == nil || n == reclaimMark {
 		return
 	}
@@ -185,7 +185,7 @@ func (t *Collection) mkNodeLoc(n *node) *nodeLoc {
 
 // Assumes that the caller serializes invocations.
 func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
-	if nloc == nil || nloc == &empty_nodeLoc {
+	if nloc == nil || nloc == &emptyNodeLoc {
 		return
 	}
 	if nloc.next != nil {
