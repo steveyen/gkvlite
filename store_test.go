@@ -1513,6 +1513,67 @@ func TestVisitItemsAscendEx(t *testing.T) {
 			maxDepth, n)
 	}
 }
+func TestVisitItemsRandom(t *testing.T) {
+	tf := func (x *Collection, br func (i *Item, depth uint64) bool) error {
+		return x.VisitItemsRandom(br)
+	}
+	err := testBlockHarness(tf)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+func TestVisitItemsAscendBlockEx(t *testing.T) {
+	tf := func (x *Collection, br func (i *Item, depth uint64) bool) error {
+		return x.VisitItemsAscendBlockEx(true, RandBm, br)
+	}
+	err := testBlockHarness(tf)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func testBlockHarness (runner func (*Collection, func (i *Item, depth uint64) bool) error) error {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		return fmt.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	n := 40
+	for i := 0; i < n; i++ {
+		k := fmt.Sprintf("%v", i)
+		x.Set([]byte(k), []byte{})
+	}
+
+	tstMap := make(map[int]struct{})
+	for i := 0; i < n; i++ {
+		tstMap[i] = struct{}{}
+	}
+	 blockRun:= func(i *Item, depth uint64) bool {
+
+		ib := i.Key
+		ii, err0 := strconv.Atoi(string(ib))
+		if err0 == nil {
+		if _, ok := tstMap[ii]; ok {
+		fmt.Println("Item is:", ii)
+		delete(tstMap, ii)
+	} else {
+		log.Fatal("Map error", ii)
+	}
+	} else {
+		log.Fatal("Err in integer conversion:", ii, err0)
+	}
+		return true
+	}
+
+	err = runner(x, blockRun)
+	if err != nil {
+		return fmt.Errorf("expected visit ex to work, got: %v", err)
+	}
+	if len(tstMap) != 0 {
+		return fmt.Errorf("Excess Map", tstMap)
+	}
+	return nil
+}
 
 func TestVisitItemsDescend(t *testing.T) {
 	s, err := NewStore(nil)

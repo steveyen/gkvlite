@@ -281,6 +281,68 @@ const MaxBlockCnt = 1024
 // BlockMangler will possibly re-arrange the order of the blocks
 type BlockMangler func([][]byte) [][]byte
 
+
+func (t *Collection) VisitItemsRandom (
+	visitor ItemVisitorEx,
+) error {
+	numBlocks, lenBlock, err := t.determineBlocks()
+	//log.Println("There are ", numBlocks, " of Length ", lenBlock)
+	if err != nil {
+		return err
+	}
+	if (lenBlock < 1) || (numBlocks < 1) {
+		return fmt.Errorf("Impossible block sizes,%d,%d", lenBlock, numBlocks)
+	}
+	blockStore := make([][]byte, 0, numBlocks)
+
+	var j int
+	v := func(i *Item, depth uint64) bool {
+		if j == 0 {
+			blockStore = append(blockStore, i.Key)
+			j = 1
+		} else if j >= lenBlock {
+			j = 0
+		} else {
+			j++
+		}
+		return true
+	}
+	si, err := t.MinItem(false)
+	if err != nil {
+		return err
+	}
+	err = t.VisitItemsAscendEx(si.Key, false, v)
+	if err != nil {
+		return err
+	}
+  blockStore = RandBm(blockStore)
+
+
+  fmt.Println("lenBlock -s:",lenBlock)
+  for j := lenBlock+1; j>0; j-- {
+	for i, si := range blockStore {
+    first := true
+		vis := func(itm *Item, depth uint64) bool {
+
+      if first {
+        first = false
+        return visitor(itm, depth)
+      } 
+      first = true
+      blockStore[i] = itm.Key
+      return false
+		}
+		//ii, _ := strconv.Atoi(string(si))
+		//log.Println("Starting a visit at:", ii)
+		err = t.VisitItemsAscendEx(si, true, vis)
+		if err != nil {
+			return err
+		}
+	}
+  }
+	return nil
+}
+
 // VisitItemsAscendBlockEx divides the collection keys into blocks
 // and visits the items in those
 // This is useful not for speed, but if you need a none linear visit order
@@ -290,6 +352,7 @@ func (t *Collection) VisitItemsAscendBlockEx(
 	visitor ItemVisitorEx,
 ) error {
 	numBlocks, lenBlock, err := t.determineBlocks()
+	//log.Println("There are ", numBlocks, " of Length ", lenBlock)
 	if err != nil {
 		return err
 	}
@@ -324,16 +387,18 @@ func (t *Collection) VisitItemsAscendBlockEx(
 	for _, si := range blockStore {
 		j := 0
 		vis := func(i *Item, depth uint64) bool {
-			if j >= lenBlock {
+			if j > lenBlock {
 				panic("impossible")
 				return false
-			} else if j == (lenBlock - 1) {
+			} else if j == (lenBlock) {
 				visitor(i, depth)
 				return false
 			}
 			j++
 			return visitor(i, depth)
 		}
+		//ii, _ := strconv.Atoi(string(si))
+		//log.Println("Starting a visit at:", ii)
 		err = t.VisitItemsAscendEx(si, withValue, vis)
 		if err != nil {
 			return err
@@ -355,6 +420,13 @@ func (t *Collection) determineBlocks() (num, leng int, err error) {
 		return MaxBlockCnt, int(size), nil
 	}
 	return int(cnt), 1, nil
+}
+func RandBm(slice [][]byte) [][]byte {
+	for i := range slice {
+		j := rand.Intn(i + 1)
+		slice[i], slice[j] = slice[j], slice[i]
+	}
+	return slice
 }
 
 // Len returns the number of items in the collection

@@ -2,6 +2,7 @@
 *~
 *.test
 *.tmp
+.idea
 tmp
 tools/view/view
 tools/slab/slab
