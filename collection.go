@@ -281,8 +281,7 @@ const MaxBlockCnt = 1024
 // BlockMangler will possibly re-arrange the order of the blocks
 type BlockMangler func([][]byte) [][]byte
 
-
-func (t *Collection) VisitItemsRandom (
+func (t *Collection) VisitItemsRandom(
 	visitor ItemVisitorEx,
 ) error {
 	numBlocks, lenBlock, err := t.determineBlocks()
@@ -315,31 +314,30 @@ func (t *Collection) VisitItemsRandom (
 	if err != nil {
 		return err
 	}
-  blockStore = RandBm(blockStore)
+	blockStore = RandBm(blockStore)
 
+	fmt.Println("lenBlock -s:", lenBlock)
+	for j := lenBlock + 1; j > 0; j-- {
+		for i, si := range blockStore {
+			first := true
+			vis := func(itm *Item, depth uint64) bool {
 
-  fmt.Println("lenBlock -s:",lenBlock)
-  for j := lenBlock+1; j>0; j-- {
-	for i, si := range blockStore {
-    first := true
-		vis := func(itm *Item, depth uint64) bool {
-
-      if first {
-        first = false
-        return visitor(itm, depth)
-      } 
-      first = true
-      blockStore[i] = itm.Key
-      return false
-		}
-		//ii, _ := strconv.Atoi(string(si))
-		//log.Println("Starting a visit at:", ii)
-		err = t.VisitItemsAscendEx(si, true, vis)
-		if err != nil {
-			return err
+				if first {
+					first = false
+					return visitor(itm, depth)
+				}
+				first = true
+				blockStore[i] = itm.Key
+				return false
+			}
+			//ii, _ := strconv.Atoi(string(si))
+			//log.Println("Starting a visit at:", ii)
+			err = t.VisitItemsAscendEx(si, true, vis)
+			if err != nil {
+				return err
+			}
 		}
 	}
-  }
 	return nil
 }
 

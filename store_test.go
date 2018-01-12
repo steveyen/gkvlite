@@ -17,6 +17,8 @@ import (
 	"unsafe"
 )
 
+const useTestParallel = true
+
 func reportRemove(fname string) {
 	if _, err := os.Stat(fname); err == nil {
 		err = os.Remove(fname)
@@ -377,15 +379,16 @@ func TestVisitStoreMem(t *testing.T) {
 }
 
 func TestStoreFile(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, err := os.Create(fname)
-	if err != nil || f == nil {
-		t.Errorf("could not create file: %v", fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
 	}
-	defer reportRemove(fname)
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
-
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, err := NewStore(f)
 	if err != nil || s == nil {
 		t.Errorf("expected NewStore(f) to work, err: %v", err)
@@ -932,14 +935,16 @@ func TestStoreFile(t *testing.T) {
 }
 
 func TestStoreMultipleCollections(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, err := os.Create(fname)
-	if err != nil || f == nil {
-		t.Errorf("could not create file: %v", fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
 	}
-	defer reportRemove(fname)
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
+	if useTestParallel {
+		t.Parallel()
+	}
 
 	s, err := NewStore(f)
 	if err != nil {
@@ -1074,11 +1079,14 @@ func TestStoreMultipleCollections(t *testing.T) {
 }
 
 func TestStoreConcurrentVisits(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, err := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer os.Remove(fname)
 	if err != nil {
 		t.Error("File Create Error", err)
+	}
+	if useTestParallel {
+		t.Parallel()
 	}
 
 	s, _ := NewStore(f)
@@ -1121,9 +1129,15 @@ func TestStoreConcurrentVisits(t *testing.T) {
 }
 
 func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer os.Remove(fname)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
@@ -1238,7 +1252,10 @@ func TestPrivateCollection(t *testing.T) {
 }
 
 func TestBadStoreFile(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
+	if useTestParallel {
+		t.Parallel()
+	}
+	fname := os.TempDir() + "/" + "tmp_bad_store.test"
 	reportRemove(fname)
 	ioutil.WriteFile(fname, []byte("not a real store file"), 0600)
 	defer reportRemove(fname)
@@ -1258,12 +1275,17 @@ func TestBadStoreFile(t *testing.T) {
 }
 
 func TestEvictSomeItems(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
-	defer reportRemove(fname)
-	s, _ := NewStore(f)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
+	if useTestParallel {
+		t.Parallel()
+	}
+	s, _ := NewStore(f)
 
 	x := s.SetCollection("x", nil)
 	numEvicted := uint64(0)
@@ -1285,13 +1307,13 @@ func TestEvictSomeItems(t *testing.T) {
 }
 
 func TestJoinWithFileErrors(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
-
-	defer reportRemove(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
-
+	if useTestParallel {
+		t.Parallel()
+	}
 	errAfter := 0x1000000
 	numReads := 0
 
@@ -1323,12 +1345,13 @@ func TestJoinWithFileErrors(t *testing.T) {
 	if m.numTruncate != 0 {
 		t.Errorf("expected 0 truncates, got: %#v", m)
 	}
-
-	fname2 := os.TempDir() + "/" + "tmp2.test"
-	reportRemove(fname2)
-
-	defer reportRemove(fname2)
-	f2, _ := os.Create(fname2)
+	var f2 *os.File
+	f2, err = ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname2 := f2.Name()
+	defer os.Remove(fname2)
 	defer f2.Close()
 
 	sMore, _ := NewStore(f2)
@@ -1337,7 +1360,6 @@ func TestJoinWithFileErrors(t *testing.T) {
 	sMore.Flush()
 
 	var res *nodeLoc
-	var err error
 
 	// ----------------------------------------
 
@@ -1514,7 +1536,7 @@ func TestVisitItemsAscendEx(t *testing.T) {
 	}
 }
 func TestVisitItemsRandom(t *testing.T) {
-	tf := func (x *Collection, br func (i *Item, depth uint64) bool) error {
+	tf := func(x *Collection, br func(i *Item, depth uint64) bool) error {
 		return x.VisitItemsRandom(br)
 	}
 	err := testBlockHarness(tf)
@@ -1523,7 +1545,7 @@ func TestVisitItemsRandom(t *testing.T) {
 	}
 }
 func TestVisitItemsAscendBlockEx(t *testing.T) {
-	tf := func (x *Collection, br func (i *Item, depth uint64) bool) error {
+	tf := func(x *Collection, br func(i *Item, depth uint64) bool) error {
 		return x.VisitItemsAscendBlockEx(true, RandBm, br)
 	}
 	err := testBlockHarness(tf)
@@ -1532,7 +1554,7 @@ func TestVisitItemsAscendBlockEx(t *testing.T) {
 	}
 }
 
-func testBlockHarness (runner func (*Collection, func (i *Item, depth uint64) bool) error) error {
+func testBlockHarness(runner func(*Collection, func(i *Item, depth uint64) bool) error) error {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
 		return fmt.Errorf("expected memory-only NewStore to work")
@@ -1548,20 +1570,20 @@ func testBlockHarness (runner func (*Collection, func (i *Item, depth uint64) bo
 	for i := 0; i < n; i++ {
 		tstMap[i] = struct{}{}
 	}
-	 blockRun:= func(i *Item, depth uint64) bool {
+	blockRun := func(i *Item, depth uint64) bool {
 
 		ib := i.Key
 		ii, err0 := strconv.Atoi(string(ib))
 		if err0 == nil {
-		if _, ok := tstMap[ii]; ok {
-		fmt.Println("Item is:", ii)
-		delete(tstMap, ii)
-	} else {
-		log.Fatal("Map error", ii)
-	}
-	} else {
-		log.Fatal("Err in integer conversion:", ii, err0)
-	}
+			if _, ok := tstMap[ii]; ok {
+				fmt.Println("Item is:", ii)
+				delete(tstMap, ii)
+			} else {
+				log.Fatal("Map error", ii)
+			}
+		} else {
+			log.Fatal("Err in integer conversion:", ii, err0)
+		}
 		return true
 	}
 
@@ -1591,13 +1613,15 @@ func TestVisitItemsDescend(t *testing.T) {
 }
 
 func TestKeyCompareForCollectionCallback(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, err := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer os.Remove(fname)
 	if err != nil {
 		t.Error("Unable to create file:", fname)
 	}
-
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
@@ -1648,10 +1672,16 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 }
 
 func TestPersistDeleteEveryItem(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	defer reportRemove(fname)
-	f, _ := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer os.Remove(fname)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if useTestParallel {
+		t.Parallel()
+	}
+
 	s, _ := NewStore(f)
 	c := 0
 	testDeleteEveryItem(t, s, 10000, 100, func() {
@@ -1664,7 +1694,7 @@ func TestPersistDeleteEveryItem(t *testing.T) {
 	if c == 0 {
 		t.Error("expected cb to get invoked")
 	}
-	err := s.Flush()
+	err = s.Flush()
 	if err != nil {
 		t.Errorf("expected last Flush to work, err: %v", err)
 	}
@@ -1972,14 +2002,15 @@ func TestMemoryFlushRevert(t *testing.T) {
 }
 
 func TestFlushRevertEmptyStore(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
-	defer reportRemove(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
-
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, _ := NewStore(f)
-	err := s.FlushRevert()
+	err = s.FlushRevert()
 	if err != nil {
 		t.Errorf("expected flush revert on empty store to work, err: %v", err)
 	}
@@ -2009,11 +2040,14 @@ func TestFlushRevertEmptyStore(t *testing.T) {
 }
 
 func TestFlushRevert(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, err := os.Create(fname)
-	defer reportRemove(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
+	if useTestParallel {
+		t.Parallel()
+	}
+
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	x.SetItem(&Item{
@@ -2135,12 +2169,13 @@ func TestFlushRevert(t *testing.T) {
 }
 
 func TestFlushRevertWithReadError(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, err := os.Create(fname)
-	defer reportRemove(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
-
+	if useTestParallel {
+		t.Parallel()
+	}
 	readShouldErr := false
 	m := &mockfile{
 		f: f,
@@ -2269,6 +2304,9 @@ func TestDoubleFreeNodeLoc(t *testing.T) {
 }
 
 func TestDoubleFreeRootNodeLoc(t *testing.T) {
+	if useTestParallel {
+		t.SkipNow()
+	}
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
 		t.Errorf("expected memory-only NewStore to work")
@@ -2303,12 +2341,16 @@ func TestNodeLocRead(t *testing.T) {
 }
 
 func TestNumInfo(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, err := os.Create(fname)
-	defer reportRemove(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
-
+	if useTestParallel {
+		t.Parallel()
+	}
 	readShouldErr := false
 	m := &mockfile{
 		f: f,
@@ -2345,12 +2387,16 @@ func TestNumInfo(t *testing.T) {
 }
 
 func TestWriteEmptyItemsErr(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
-	defer reportRemove(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
-
+	if useTestParallel {
+		t.Parallel()
+	}
 	writeShouldErr := false
 	m := &mockfile{
 		f: f,
@@ -2371,12 +2417,16 @@ func TestWriteEmptyItemsErr(t *testing.T) {
 }
 
 func TestWriteItemsErr(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
-	defer reportRemove(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
-
+	if useTestParallel {
+		t.Parallel()
+	}
 	writeShouldErr := false
 	m := &mockfile{
 		f: f,
@@ -2413,12 +2463,16 @@ func TestWriteItemsErr(t *testing.T) {
 }
 
 func TestStatErr(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, err := os.Create(fname)
-	defer reportRemove(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
-
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	x.SetItem(&Item{
@@ -2449,12 +2503,16 @@ func TestStatErr(t *testing.T) {
 }
 
 func TestNodeLocWriteErr(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
-	defer reportRemove(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer os.Remove(fname)
 	defer f.Close()
-
+	if useTestParallel {
+		t.Parallel()
+	}
 	writeShouldErr := false
 	m := &mockfile{
 		f: f,
@@ -2693,11 +2751,16 @@ func TestStoreRefCountRandom(t *testing.T) {
 }
 
 func TestPersistRefCountRandom(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
-	defer reportRemove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer os.Remove(fname)
+	defer f.Close()
+	if useTestParallel {
+		t.Parallel()
+	}
 	counts := map[string]int{}
 
 	itemAddRef := func(c *Collection, i *Item) {
@@ -2810,12 +2873,16 @@ func TestPersistRefCountRandom(t *testing.T) {
 }
 
 func TestEvictRefCountRandom(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
-
-	defer reportRemove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer os.Remove(fname)
+	defer f.Close()
+	if useTestParallel {
+		t.Parallel()
+	}
 	start := func(f *os.File) (*Store, *Collection, map[string]int) {
 		counts := map[string]int{}
 		var s *Store

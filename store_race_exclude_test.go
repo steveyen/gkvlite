@@ -3,6 +3,8 @@
 package gkvlite
 
 import (
+	"io/ioutil"
+	"log"
 	"os"
 	"runtime"
 	"sync"
@@ -14,9 +16,15 @@ import (
 // The intention being to make sure that the concurrent access is safe.
 // The downside is, it needs to be in its own file to be run in a race-checked sim
 func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
-	fname := os.TempDir() + "/" + "tmp.test"
-	reportRemove(fname)
-	f, _ := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	if useTestParallel {
+		t.Parallel()
+	}
+
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
