@@ -20,7 +20,7 @@ import (
 // Store defines the store for the nodes
 // A persistable store holding collections of ordered keys & values.
 type Store struct {
-	m sync.Mutex // REVISIT make an RWMutex
+	m sync.RWMutex
 
 	// Atomic CAS'ed int64/uint64's must be at the top for 32-bit compatibility.
 	size       int64                   // Atomic protected; file size or next write position.
@@ -38,8 +38,8 @@ func (s *Store) setColl(n *map[string]*Collection) {
 }
 
 func (s *Store) getColl() *map[string]*Collection {
-	s.m.Lock()
-	defer s.m.Unlock()
+	s.m.RLock()
+	defer s.m.RUnlock()
 	return s.coll
 }
 
@@ -105,17 +105,17 @@ type StoreCallbacks struct {
 // ItemCallback defines the function interface to an item callback
 type ItemCallback func(*Collection, *Item) (*Item, error)
 
-// VERSION of the file format in use
-const VERSION = uint32(4)
+// Version of the file format in use
+const Version = uint32(4)
 
-// MAGIC_BEG definest the start magic value
-var MAGIC_BEG = []byte("0g1t2r")
+// MagicBeg defines the start magic value
+var MagicBeg = []byte("0g1t2r")
 
-// MAGIC_END definest the end magic value
-var MAGIC_END = []byte("3e4a5p")
+// MagicEnd defines the end magic value
+var MagicEnd = []byte("3e4a5p")
 
-var rootsEndLen = 8 + 4 + 2*len(MAGIC_END)
-var rootsLen = int64(2*len(MAGIC_BEG) + 4 + 4 + rootsEndLen)
+var rootsEndLen = 8 + 4 + 2*len(MagicEnd)
+var rootsLen = int64(2*len(MagicBeg) + 4 + 4 + rootsEndLen)
 
 // NewStore return a new store at the requested file
 // Provide a nil StoreFile for in-memory-only (non-persistent) usage.
@@ -175,7 +175,7 @@ func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 		store:    s,
 		compare:  compare,
 		rootLock: &sync.Mutex{},
-		root:     &rootNodeLoc{refs: 1, root: &empty_nodeLoc},
+		root:     &rootNodeLoc{refs: 1, root: &emptyNodeLoc},
 	}
 }
 
@@ -337,7 +337,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 	}
 	coll := *s.getColl()
 
-	var max_depth uint64
+	var maxDepth uint64
 	for _, name := range collNames(coll) {
 		srcColl := coll[name]
 		dstColl := dstStore.SetCollection(name, srcColl.compare)
@@ -356,8 +356,8 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 				return false
 			}
 			numItems++
-			if depth > max_depth {
-				max_depth = depth
+			if depth > maxDepth {
+				maxDepth = depth
 			}
 			if flushEvery > 0 && numItems%flushEvery == 0 {
 				// Flush out some of the read items cached into memory
@@ -376,7 +376,7 @@ func (s *Store) CopyTo(dstFile StoreFile, flushEvery int) (res *Store, err error
 			return nil, errCopyItem
 		}
 		if false {
-			fmt.Printf("CopyTo cnt = %d, max_depth = %d\n", numItems, max_depth)
+			fmt.Printf("CopyTo cnt = %d, max_depth = %d\n", numItems, maxDepth)
 		}
 	}
 	if flushEvery > 0 {
@@ -393,62 +393,62 @@ func (s *Store) Stats(out map[string]uint64) {
 	out["nodeAllocs"] = atomic.LoadUint64(&s.nodeAllocs)
 }
 
-func (o *Store) writeRoots(rnls map[string]*rootNodeLoc) error {
+func (s *Store) writeRoots(rnls map[string]*rootNodeLoc) error {
 	sJSON, err := json.Marshal(rnls)
 	if err != nil {
 		return err
 	}
-	offset := atomic.LoadInt64(&o.size)
-	length := 2*len(MAGIC_BEG) + 4 + 4 + len(sJSON) + 8 + 4 + 2*len(MAGIC_END)
+	offset := atomic.LoadInt64(&s.size)
+	length := 2*len(MagicBeg) + 4 + 4 + len(sJSON) + 8 + 4 + 2*len(MagicEnd)
 	b := bytes.NewBuffer(make([]byte, length)[:0])
-	b.Write(MAGIC_BEG)
-	b.Write(MAGIC_BEG)
-	binary.Write(b, binary.BigEndian, uint32(VERSION))
+	b.Write(MagicBeg)
+	b.Write(MagicBeg)
+	binary.Write(b, binary.BigEndian, uint32(Version))
 	binary.Write(b, binary.BigEndian, uint32(length))
 	b.Write(sJSON)
 	binary.Write(b, binary.BigEndian, int64(offset))
 	binary.Write(b, binary.BigEndian, uint32(length))
-	b.Write(MAGIC_END)
-	b.Write(MAGIC_END)
-	if _, err := o.file.WriteAt(b.Bytes()[:length], offset); err != nil {
+	b.Write(MagicEnd)
+	b.Write(MagicEnd)
+	if _, err := s.file.WriteAt(b.Bytes()[:length], offset); err != nil {
 		return err
 	}
-	atomic.StoreInt64(&o.size, offset+int64(length))
+	atomic.StoreInt64(&s.size, offset+int64(length))
 	return nil
 }
 
-func (o *Store) readRoots() error {
-	finfo, err := o.file.Stat()
+func (s *Store) readRoots() error {
+	finfo, err := s.file.Stat()
 	if err != nil {
 		return err
 	}
-	atomic.StoreInt64(&o.size, finfo.Size())
-	if o.size <= 0 {
+	atomic.StoreInt64(&s.size, finfo.Size())
+	if s.size <= 0 {
 		return nil
 	}
-	return o.readRootsScan(false)
+	return s.readRootsScan(false)
 }
 
-func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
+func (s *Store) readRootsScan(defaultToEmpty bool) (err error) {
 	rootsEnd := make([]byte, rootsEndLen)
 	for {
 		for { // Scan backwards for MAGIC_END.
-			if atomic.LoadInt64(&o.size) <= rootsLen {
+			if atomic.LoadInt64(&s.size) <= rootsLen {
 				if defaultToEmpty {
-					atomic.StoreInt64(&o.size, 0)
+					atomic.StoreInt64(&s.size, 0)
 					return nil
 				}
 				return errors.New("couldn't find roots; file corrupted or wrong?")
 			}
-			if _, err := o.file.ReadAt(rootsEnd,
-				atomic.LoadInt64(&o.size)-int64(len(rootsEnd))); err != nil {
+			if _, err := s.file.ReadAt(rootsEnd,
+				atomic.LoadInt64(&s.size)-int64(len(rootsEnd))); err != nil {
 				return err
 			}
-			if bytes.Equal(MAGIC_END, rootsEnd[8+4:8+4+len(MAGIC_END)]) &&
-				bytes.Equal(MAGIC_END, rootsEnd[8+4+len(MAGIC_END):]) {
+			if bytes.Equal(MagicEnd, rootsEnd[8+4:8+4+len(MagicEnd)]) &&
+				bytes.Equal(MagicEnd, rootsEnd[8+4+len(MagicEnd):]) {
 				break
 			}
-			atomic.AddInt64(&o.size, -1) // TODO: optimizations to scan backwards faster.
+			atomic.AddInt64(&s.size, -1) // TODO: optimizations to scan backwards faster.
 		}
 		// Read and check the roots.
 		var offset int64
@@ -461,79 +461,79 @@ func (o *Store) readRootsScan(defaultToEmpty bool) (err error) {
 		if err = binary.Read(endBuf, binary.BigEndian, &length); err != nil {
 			return err
 		}
-		if offset >= 0 && offset < atomic.LoadInt64(&o.size)-int64(rootsLen) &&
-			length == uint32(atomic.LoadInt64(&o.size)-offset) {
-			data := make([]byte, atomic.LoadInt64(&o.size)-offset-int64(len(rootsEnd)))
-			if _, err := o.file.ReadAt(data, offset); err != nil {
+		if offset >= 0 && offset < atomic.LoadInt64(&s.size)-int64(rootsLen) &&
+			length == uint32(atomic.LoadInt64(&s.size)-offset) {
+			data := make([]byte, atomic.LoadInt64(&s.size)-offset-int64(len(rootsEnd)))
+			if _, err := s.file.ReadAt(data, offset); err != nil {
 				return err
 			}
-			if bytes.Equal(MAGIC_BEG, data[:len(MAGIC_BEG)]) &&
-				bytes.Equal(MAGIC_BEG, data[len(MAGIC_BEG):2*len(MAGIC_BEG)]) {
+			if bytes.Equal(MagicBeg, data[:len(MagicBeg)]) &&
+				bytes.Equal(MagicBeg, data[len(MagicBeg):2*len(MagicBeg)]) {
 				var version, length0 uint32
-				b := bytes.NewBuffer(data[2*len(MAGIC_BEG):])
+				b := bytes.NewBuffer(data[2*len(MagicBeg):])
 				if err = binary.Read(b, binary.BigEndian, &version); err != nil {
 					return err
 				}
 				if err = binary.Read(b, binary.BigEndian, &length0); err != nil {
 					return err
 				}
-				if version != VERSION {
+				if version != Version {
 					return fmt.Errorf("version mismatch: "+
-						"current version: %v != found version: %v", VERSION, version)
+						"current version: %v != found version: %v", Version, version)
 				}
 				if length0 != length {
 					return fmt.Errorf("length mismatch: "+
 						"wanted length: %v != found length: %v", length0, length)
 				}
 				m := make(map[string]*Collection)
-				if err = json.Unmarshal(data[2*len(MAGIC_BEG)+4+4:], &m); err != nil {
+				if err = json.Unmarshal(data[2*len(MagicBeg)+4+4:], &m); err != nil {
 					return err
 				}
 				for collName, t := range m {
 					t.name = collName
-					t.store = o
-					if o.callbacks.KeyCompareForCollection != nil {
-						t.compare = o.callbacks.KeyCompareForCollection(collName)
+					t.store = s
+					if s.callbacks.KeyCompareForCollection != nil {
+						t.compare = s.callbacks.KeyCompareForCollection(collName)
 					}
 					if t.compare == nil {
 						t.compare = bytes.Compare
 					}
 				}
-				o.setColl(&m)
+				s.setColl(&m)
 				return nil
 			} // else, perhaps value was unlucky in having MAGIC_END's.
-		} // else, perhaps a gkvlite file was stored as a value.
-		atomic.AddInt64(&o.size, -1) // Roots were wrong, so keep scanning.
+		}                            // else, perhaps a gkvlite file was stored as a value.
+		atomic.AddInt64(&s.size, -1) // Roots were wrong, so keep scanning.
 	}
 }
 
 // ItemAlloc allocates an item in the requested collection
-func (o *Store) ItemAlloc(c *Collection, keyLength keyP) *Item {
-	if o.callbacks.ItemAlloc != nil {
-		return o.callbacks.ItemAlloc(c, keyLength)
+func (s *Store) ItemAlloc(c *Collection, keyLength keyP) *Item {
+	if s.callbacks.ItemAlloc != nil {
+		return s.callbacks.ItemAlloc(c, keyLength)
 	}
 	return &Item{Key: make([]byte, keyLength)}
 }
 
 // ItemAddRef allows callbacks to be called on item add
-func (o *Store) ItemAddRef(c *Collection, i *Item) {
-	if o.callbacks.ItemAddRef != nil {
-		o.callbacks.ItemAddRef(c, i)
+func (s *Store) ItemAddRef(c *Collection, i *Item) {
+	if s.callbacks.ItemAddRef != nil {
+		s.callbacks.ItemAddRef(c, i)
 	}
 }
 
 // ItemDecRef allows callbacks to be called on item remove
-func (o *Store) ItemDecRef(c *Collection, i *Item) {
-	if o.callbacks.ItemDecRef != nil {
-		o.callbacks.ItemDecRef(c, i)
+func (s *Store) ItemDecRef(c *Collection, i *Item) {
+	if s.callbacks.ItemDecRef != nil {
+		s.callbacks.ItemDecRef(c, i)
 	}
 }
 
 // ItemValRead reads the value of an item
-func (o *Store) ItemValRead(c *Collection, i *Item,
+func (s *Store) ItemValRead(c *Collection, i *Item,
 	r io.ReaderAt, offset int64, valLength uint32) error {
-	if o.callbacks.ItemValRead != nil {
-		return o.callbacks.ItemValRead(c, i, r, offset, valLength)
+	if s.callbacks.ItemValRead != nil {
+		return s.callbacks.ItemValRead(c, i, r, offset, valLength)
 	}
 	i.Val = make([]byte, valLength)
 	_, err := r.ReadAt(i.Val, offset)
@@ -541,9 +541,9 @@ func (o *Store) ItemValRead(c *Collection, i *Item,
 }
 
 // ItemValWrite writes the value to an item
-func (o *Store) ItemValWrite(c *Collection, i *Item, w io.WriterAt, offset int64) error {
-	if o.callbacks.ItemValWrite != nil {
-		return o.callbacks.ItemValWrite(c, i, w, offset)
+func (s *Store) ItemValWrite(c *Collection, i *Item, w io.WriterAt, offset int64) error {
+	if s.callbacks.ItemValWrite != nil {
+		return s.callbacks.ItemValWrite(c, i, w, offset)
 	}
 	_, err := w.WriteAt(i.Val, offset)
 	return err

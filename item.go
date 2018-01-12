@@ -15,8 +15,9 @@ type Item struct {
 	Priority  int32       // Use rand.Int31() for probabilistic balancing.
 }
 
-// REVISIT a global item lock is really bad
 var itemLocGL = sync.RWMutex{}
+
+const itemLocMutex = false
 
 // A persistable item and its persistence location.
 type itemLoc struct {
@@ -24,7 +25,7 @@ type itemLoc struct {
 	item *Item // can be nil if item is not fetched into memory yet.
 }
 
-var empty_itemLoc = itemLoc{}
+var emptyItemLoc = itemLoc{}
 
 // The Key pointer type
 type keyP uint32
@@ -58,55 +59,65 @@ func (i *Item) Copy() *Item {
 }
 
 // Loc return the location of the item
-func (i *itemLoc) Loc() *ploc {
-	itemLocGL.RLock()
-	defer itemLocGL.RUnlock()
-	return i.loc
+func (iloc *itemLoc) Loc() *ploc {
+	if itemLocMutex {
+		itemLocGL.RLock()
+		defer itemLocGL.RUnlock()
+	}
+	return iloc.loc
 }
 
-func (i *itemLoc) setLoc(n *ploc) {
-	itemLocGL.Lock()
-	defer itemLocGL.Unlock()
-	i.loc = n
+func (iloc *itemLoc) setLoc(n *ploc) {
+	if itemLocMutex {
+		itemLocGL.Lock()
+		defer itemLocGL.Unlock()
+	}
+	iloc.loc = n
 }
 
 // Item returns an item from its location
-func (i *itemLoc) Item() *Item {
-	itemLocGL.RLock()
-	defer itemLocGL.RUnlock()
-	return i.item
+func (iloc *itemLoc) Item() *Item {
+	if itemLocMutex {
+		itemLocGL.RLock()
+		defer itemLocGL.RUnlock()
+	}
+	return iloc.item
 }
 
-func (i *itemLoc) casItem(o, n *Item) bool {
-	itemLocGL.Lock()
-	defer itemLocGL.Unlock()
-	if i.item == o {
-		i.item = n
+func (iloc *itemLoc) casItem(o, n *Item) bool {
+	if itemLocMutex {
+		itemLocGL.Lock()
+		defer itemLocGL.Unlock()
+	}
+	if iloc.item == o {
+		iloc.item = n
 		return true
 	}
 	return false
 }
 
 // Copy returns a copy of the items location
-func (i *itemLoc) Copy(src *itemLoc) {
+func (iloc *itemLoc) Copy(src *itemLoc) {
 	if src == nil {
-		i.Copy(&empty_itemLoc)
+		iloc.Copy(&emptyItemLoc)
 		return
 	}
 
-	itemLocGL.Lock()
-	defer itemLocGL.Unlock()
+	if itemLocMutex {
+		itemLocGL.Lock()
+		defer itemLocGL.Unlock()
+	}
 	// NOTE: This trick only works because of the global lock. No reason to lock
 	// src independently of i.
-	i.loc = src.loc
-	i.item = src.item
+	iloc.loc = src.loc
+	iloc.item = src.item
 }
 
-const itemLoc_hdrLength int = 4 + keyPSize + 4 + 4
+const itemLocHdrLength int = 4 + keyPSize + 4 + 4
 
-func (i *itemLoc) write(c *Collection) (err error) {
-	if i.Loc().isEmpty() {
-		iItem := i.Item()
+func (iloc *itemLoc) write(c *Collection) (err error) {
+	if iloc.Loc().isEmpty() {
+		iItem := iloc.Item()
 		if iItem == nil {
 			return errors.New("itemLoc.write with nil item")
 		}
@@ -117,7 +128,7 @@ func (i *itemLoc) write(c *Collection) (err error) {
 			}
 		}
 		offset := atomic.LoadInt64(&c.store.size)
-		hlength := itemLoc_hdrLength + len(iItem.Key)
+		hlength := itemLocHdrLength + len(iItem.Key)
 		vlength := iItem.NumValBytes(c)
 		ilength := hlength + vlength
 		b := make([]byte, hlength)
@@ -147,7 +158,7 @@ func (i *itemLoc) write(c *Collection) (err error) {
 			return err
 		}
 		atomic.StoreInt64(&c.store.size, offset+int64(ilength))
-		i.setLoc(&ploc{Offset: offset, Length: uint32(ilength)})
+		iloc.setLoc(&ploc{Offset: offset, Length: uint32(ilength)})
 	}
 	return nil
 }
@@ -162,11 +173,11 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 		if loc.isEmpty() {
 			return nil, nil
 		}
-		if loc.Length < uint32(itemLoc_hdrLength) {
+		if loc.Length < uint32(itemLocHdrLength) {
 			return nil, fmt.Errorf("unexpected item loc.Length: %v < %v",
-				loc.Length, itemLoc_hdrLength)
+				loc.Length, itemLocHdrLength)
 		}
-		b := make([]byte, itemLoc_hdrLength)
+		b := make([]byte, itemLocHdrLength)
 		if _, err := c.store.file.ReadAt(b, loc.Offset); err != nil {
 			return nil, err
 		}
@@ -190,23 +201,23 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 		}
 		i.Priority = int32(binary.BigEndian.Uint32(b[pos : pos+4]))
 		pos += 4
-		if length != uint32(itemLoc_hdrLength)+uint32(keyLength)+valLength {
+		if length != uint32(itemLocHdrLength)+uint32(keyLength)+valLength {
 			c.store.ItemDecRef(c, i)
 			return nil, errors.New("mismatched itemLoc lengths")
 		}
-		if pos != itemLoc_hdrLength {
+		if pos != itemLocHdrLength {
 			c.store.ItemDecRef(c, i)
 			return nil, fmt.Errorf("read pos != itemLoc_hdrLength, %v != %v",
-				pos, itemLoc_hdrLength)
+				pos, itemLocHdrLength)
 		}
 		if _, err := c.store.file.ReadAt(i.Key,
-			loc.Offset+int64(itemLoc_hdrLength)); err != nil {
+			loc.Offset+int64(itemLocHdrLength)); err != nil {
 			c.store.ItemDecRef(c, i)
 			return nil, err
 		}
 		if withValue {
 			err := c.store.ItemValRead(c, i, c.store.file,
-				loc.Offset+int64(itemLoc_hdrLength)+int64(keyLength), valLength)
+				loc.Offset+int64(itemLocHdrLength)+int64(keyLength), valLength)
 			if err != nil {
 				c.store.ItemDecRef(c, i)
 				return nil, err
@@ -241,5 +252,5 @@ func (iloc *itemLoc) NumBytes(c *Collection) int {
 		}
 		return i.NumBytes(c)
 	}
-	return int(loc.Length) - itemLoc_hdrLength
+	return int(loc.Length) - itemLocHdrLength
 }

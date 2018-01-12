@@ -25,8 +25,9 @@ func (n *node) Evict() *Item {
 	return nil
 }
 
-// REVISIT a global lock on all nodes is REALLY bad
 var nodeLocGL = sync.RWMutex{}
+
+const nodeMutex = false
 
 // A persistable node and its persistence location.
 type nodeLoc struct {
@@ -35,45 +36,57 @@ type nodeLoc struct {
 	next *nodeLoc // For free-list tracking.
 }
 
-var empty_nodeLoc = nodeLoc{} // Sentinel.
+var emptyNodeLoc = nodeLoc{} // Sentinel.
 
 func (nloc *nodeLoc) Loc() *ploc {
-	nodeLocGL.RLock()
-	defer nodeLocGL.RUnlock()
+	if nodeMutex {
+		nodeLocGL.RLock()
+		defer nodeLocGL.RUnlock()
+	}
 	return nloc.loc
 }
 
 func (nloc *nodeLoc) setLoc(n *ploc) {
-	nodeLocGL.Lock()
-	defer nodeLocGL.Unlock()
+	if nodeMutex {
+		nodeLocGL.Lock()
+		defer nodeLocGL.Unlock()
+	}
 	nloc.loc = n
 }
 
 func (nloc *nodeLoc) Node() *node {
-	nodeLocGL.RLock()
-	defer nodeLocGL.RUnlock()
+	if nodeMutex {
+		nodeLocGL.RLock()
+		defer nodeLocGL.RUnlock()
+	}
 	return nloc.node
 }
 
 func (nloc *nodeLoc) setNode(n *node) {
-	nodeLocGL.Lock()
-	defer nodeLocGL.Unlock()
+	if nodeMutex {
+		nodeLocGL.Lock()
+		defer nodeLocGL.Unlock()
+	}
 	nloc.node = n
 }
 
 func (nloc *nodeLoc) LocNode() (*ploc, *node) {
-	nodeLocGL.RLock()
-	defer nodeLocGL.RUnlock()
+	if nodeMutex {
+		nodeLocGL.RLock()
+		defer nodeLocGL.RUnlock()
+	}
 	return nloc.loc, nloc.node
 }
 
 func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
 	if src == nil {
-		return nloc.Copy(&empty_nodeLoc)
+		return nloc.Copy(&emptyNodeLoc)
 	}
 
-	nodeLocGL.Lock()
-	defer nodeLocGL.Unlock()
+	if nodeMutex {
+		nodeLocGL.Lock()
+		defer nodeLocGL.Unlock()
+	}
 	// NOTE: This trick only works because of the global lock. No reason to lock
 	// src independently of nlock.
 	nloc.loc = src.loc
@@ -82,8 +95,10 @@ func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
 }
 
 func (nloc *nodeLoc) isEmpty() bool {
-	nodeLocGL.RLock()
-	defer nodeLocGL.RUnlock()
+	if nodeMutex {
+		nodeLocGL.RLock()
+		defer nodeLocGL.RUnlock()
+	}
 	return nloc == nil || (nloc.loc.isEmpty() && nloc.node == nil)
 }
 
@@ -95,7 +110,7 @@ func (nloc *nodeLoc) write(o *Store) error {
 			return nil
 		}
 		offset := atomic.LoadInt64(&o.size)
-		length := ploc_length + ploc_length + ploc_length + 8 + 8
+		length := plocLength + plocLength + plocLength + 8 + 8
 		b := make([]byte, length)
 		pos := 0
 		pos = node.item.Loc().write(b, pos)
@@ -129,9 +144,9 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 	if loc.isEmpty() {
 		return nil, nil
 	}
-	if loc.Length != uint32(ploc_length+ploc_length+ploc_length+8+8) {
+	if loc.Length != uint32(plocLength+plocLength+plocLength+8+8) {
 		return nil, fmt.Errorf("unexpected node loc.Length: %v != %v",
-			loc.Length, ploc_length+ploc_length+ploc_length+8+8)
+			loc.Length, plocLength+plocLength+plocLength+8+8)
 	}
 	b := make([]byte, loc.Length)
 	if _, err := o.file.ReadAt(b, loc.Offset); err != nil {

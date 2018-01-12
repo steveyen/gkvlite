@@ -1387,7 +1387,7 @@ func TestJoinWithFileErrors(t *testing.T) {
 	errAfter = 0x10000000 // Attempt with no errors.
 	numReads = 0
 
-	res, err = s2.join(x2, root, &empty_nodeLoc, nil)
+	res, err = s2.join(x2, root, &emptyNodeLoc, nil)
 	if err != nil {
 		t.Errorf("expected no error")
 	}
@@ -1788,9 +1788,9 @@ func TestCurFreeNodes(t *testing.T) {
 		t.Error("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	n := x.mkNode(&empty_itemLoc, &empty_nodeLoc, &empty_nodeLoc, 0, 0)
+	n := x.mkNode(&emptyItemLoc, &emptyNodeLoc, &emptyNodeLoc, 0, 0)
 	f := allocStats
-	x.freeNode_unlocked(n, nil)
+	x.freeNodeUnlocked(n, nil)
 	if f.FreeNodes+1 != allocStats.FreeNodes {
 		t.Errorf("expected freeNodes to increment")
 	}
@@ -2210,11 +2210,11 @@ func TestCollectionMisc(t *testing.T) {
 	}
 	x := s.SetCollection("x", bytes.Compare)
 
-	e0, e1, e2, err := s.split(x, &empty_nodeLoc, nil, nil)
+	e0, e1, e2, err := s.split(x, &emptyNodeLoc, nil, nil)
 	if err != nil ||
-		e0 != &empty_nodeLoc ||
-		e1 != &empty_nodeLoc ||
-		e2 != &empty_nodeLoc {
+		e0 != &emptyNodeLoc ||
+		e1 != &emptyNodeLoc ||
+		e2 != &emptyNodeLoc {
 		t.Errorf("expected split of empty node loc to be empty")
 	}
 
@@ -2269,11 +2269,11 @@ func TestDoubleFreeNode(t *testing.T) {
 		}
 	}()
 	withAllocLocks(func() {
-		x.freeNode_unlocked(nil, nil)
+		x.freeNodeUnlocked(nil, nil)
 		c++
-		x.freeNode_unlocked(n, nil)
+		x.freeNodeUnlocked(n, nil)
 		c++
-		x.freeNode_unlocked(n, nil)
+		x.freeNodeUnlocked(n, nil)
 		c++
 	})
 }
@@ -2376,11 +2376,11 @@ func TestNumInfo(t *testing.T) {
 	rnl := x.rootAddRef()
 	rnl.root.node = nil // Evict node from memory to force reading.
 
-	_, _, _, _, err = numInfo(s, rnl.root, &empty_nodeLoc)
+	_, _, _, _, err = numInfo(s, rnl.root, &emptyNodeLoc)
 	if err == nil {
 		t.Errorf("expected numInfo to error")
 	}
-	_, _, _, _, err = numInfo(s, &empty_nodeLoc, rnl.root)
+	_, _, _, _, err = numInfo(s, &emptyNodeLoc, rnl.root)
 	if err == nil {
 		t.Errorf("expected numInfo to error")
 	}
