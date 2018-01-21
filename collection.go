@@ -285,7 +285,6 @@ func (t *Collection) VisitItemsRandom(
 	visitor ItemVisitorEx,
 ) error {
 	numBlocks, lenBlock, err := t.determineBlocks()
-	//log.Println("There are ", numBlocks, " of Length ", lenBlock)
 	if err != nil {
 		return err
 	}
@@ -316,7 +315,6 @@ func (t *Collection) VisitItemsRandom(
 	}
 	blockStore = RandBm(blockStore)
 
-	fmt.Println("lenBlock -s:", lenBlock)
 	for j := lenBlock + 1; j > 0; j-- {
 		for i, si := range blockStore {
 			first := true
@@ -330,8 +328,6 @@ func (t *Collection) VisitItemsRandom(
 				blockStore[i] = itm.Key
 				return false
 			}
-			//ii, _ := strconv.Atoi(string(si))
-			//log.Println("Starting a visit at:", ii)
 			err = t.VisitItemsAscendEx(si, true, vis)
 			if err != nil {
 				return err

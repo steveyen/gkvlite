@@ -1,7 +1,6 @@
 package gkvlite
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"sync"
@@ -131,21 +130,17 @@ func (iloc *itemLoc) write(c *Collection) (err error) {
 		hlength := itemLocHdrLength + len(iItem.Key)
 		vlength := iItem.NumValBytes(c)
 		ilength := hlength + vlength
-		b := make([]byte, hlength)
-		pos := 0
-		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(ilength))
-		pos += 4
-		if keyPSize == 2 {
-			binary.BigEndian.PutUint16(b[pos:pos+keyPSize], uint16(len(iItem.Key)))
-		} else {
-			binary.BigEndian.PutUint32(b[pos:pos+keyPSize], uint32(len(iItem.Key)))
+
+		ds := itemBa{
+			length:    uint32(ilength),
+			keyLength: keyP(len(iItem.Key)),
+			valLength: uint32(vlength),
+			priority:  iItem.Priority,
 		}
-		pos += keyPSize
-		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(vlength))
-		pos += 4
-		binary.BigEndian.PutUint32(b[pos:pos+4], uint32(iItem.Priority))
-		pos += 4
-		pos += copy(b[pos:], iItem.Key)
+		b := ds.render(hlength)
+		var pos int
+		pos = priSz
+		pos += copy(b[priSz:], iItem.Key)
 		if pos != hlength {
 			return fmt.Errorf("itemLoc.write() pos: %v didn't match hlength: %v",
 				pos, hlength)
@@ -181,34 +176,25 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 		if _, err := c.store.file.ReadAt(b, loc.Offset); err != nil {
 			return nil, err
 		}
-		pos := 0
-		length := binary.BigEndian.Uint32(b[pos : pos+4])
-		pos += 4
+		var ds itemBa
+		ds.populate(b)
+		keyLength := ds.getKeyLength()
 
-		var keyLength keyP
-		if keyPSize == 2 {
-			keyLength = keyP(binary.BigEndian.Uint16(b[pos : pos+keyPSize]))
-		} else {
-			keyLength = keyP(binary.BigEndian.Uint32(b[pos : pos+keyPSize]))
-		}
-		pos += keyPSize
-
-		valLength := binary.BigEndian.Uint32(b[pos : pos+4])
-		pos += 4
 		i := c.store.ItemAlloc(c, keyLength)
 		if i == nil {
 			return nil, errors.New("ItemAlloc() failed")
 		}
-		i.Priority = int32(binary.BigEndian.Uint32(b[pos : pos+4]))
-		pos += 4
-		if length != uint32(itemLocHdrLength)+uint32(keyLength)+valLength {
+		i.Priority = ds.getPriority()
+
+		valLength := ds.getValLength()
+		if ds.getLength() != uint32(itemLocHdrLength)+uint32(keyLength)+valLength {
 			c.store.ItemDecRef(c, i)
 			return nil, errors.New("mismatched itemLoc lengths")
 		}
-		if pos != itemLocHdrLength {
+		if priSz != itemLocHdrLength {
 			c.store.ItemDecRef(c, i)
 			return nil, fmt.Errorf("read pos != itemLoc_hdrLength, %v != %v",
-				pos, itemLocHdrLength)
+				priSz, itemLocHdrLength)
 		}
 		if _, err := c.store.file.ReadAt(i.Key,
 			loc.Offset+int64(itemLocHdrLength)); err != nil {

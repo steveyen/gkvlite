@@ -42,7 +42,12 @@ func (s *Store) getColl() *map[string]*Collection {
 	defer s.m.RUnlock()
 	return s.coll
 }
-
+func (o *Store) setSize(sz int64) {
+	atomic.StoreInt64(&o.size, sz)
+}
+func (o *Store) getSize() int64 {
+	return atomic.LoadInt64(&o.size)
+}
 func (s *Store) casColl(o, n *map[string]*Collection) bool {
 	s.m.Lock()
 	defer s.m.Unlock()
@@ -502,7 +507,7 @@ func (s *Store) readRootsScan(defaultToEmpty bool) (err error) {
 				s.setColl(&m)
 				return nil
 			} // else, perhaps value was unlucky in having MAGIC_END's.
-		}                            // else, perhaps a gkvlite file was stored as a value.
+		} // else, perhaps a gkvlite file was stored as a value.
 		atomic.AddInt64(&s.size, -1) // Roots were wrong, so keep scanning.
 	}
 }

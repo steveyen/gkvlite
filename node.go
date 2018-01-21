@@ -77,6 +77,12 @@ func (nloc *nodeLoc) LocNode() (*ploc, *node) {
 	}
 	return nloc.loc, nloc.node
 }
+func (n *node) setNumBytes(b []byte, pos int) {
+	n.numBytes = binary.BigEndian.Uint64(b[pos : pos+8])
+}
+func (n *node) setNumNodes(b []byte, pos int) {
+	n.numNodes = binary.BigEndian.Uint64(b[pos : pos+8])
+}
 
 func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
 	if src == nil {
@@ -109,30 +115,66 @@ func (nloc *nodeLoc) write(o *Store) error {
 		if node == nil {
 			return nil
 		}
-		offset := atomic.LoadInt64(&o.size)
+		// Load current size from store
+		offset := o.getSize()
 		length := plocLength + plocLength + plocLength + 8 + 8
-		b := make([]byte, length)
-		pos := 0
-		pos = node.item.Loc().write(b, pos)
-		pos = node.left.Loc().write(b, pos)
-		pos = node.right.Loc().write(b, pos)
-		binary.BigEndian.PutUint64(b[pos:pos+8], node.numNodes)
-		pos += 8
-		binary.BigEndian.PutUint64(b[pos:pos+8], node.numBytes)
-		pos += 8
-		if pos != length {
-			return fmt.Errorf("nodeLoc.write() pos: %v didn't match length: %v",
-				pos, length)
+		b, err := node.populateDiskStruct(length)
+		if err != nil {
+			return err
 		}
 		if _, err := o.file.WriteAt(b, offset); err != nil {
 			return err
 		}
-		atomic.StoreInt64(&o.size, offset+int64(length))
+		o.setSize(offset + int64(length))
 		nloc.setLoc(&ploc{Offset: offset, Length: uint32(length)})
 	}
 	return nil
 }
 
+// populateDiskStruct Created a byte array to write to the disk
+// This is popluated from the current node data
+func (nd node) populateDiskStruct(length int) (b []byte, err error) {
+	b = make([]byte, length)
+	var pos int
+	pos = nd.item.Loc().write(b, pos)
+	pos = nd.left.Loc().write(b, pos)
+	pos = nd.right.Loc().write(b, pos)
+	binary.BigEndian.PutUint64(b[pos:pos+8], nd.numNodes)
+	pos += 8
+	binary.BigEndian.PutUint64(b[pos:pos+8], nd.numBytes)
+	pos += 8
+	if pos != length {
+		return b, fmt.Errorf("nodeLoc.write() pos: %v didn't match length: %v",
+			pos, length)
+	}
+	return
+}
+
+// Populate a new node structure from the byte array supplied
+// The byte array contains the data read from the disk
+func populateNode(b []byte) (n *node, err error) {
+	n = &node{}
+	var p *ploc
+	var pos int
+	p = &ploc{}
+	p, pos = p.read(b, pos)
+	n.item.loc = p
+	p = &ploc{}
+	p, pos = p.read(b, pos)
+	n.left.loc = p
+	p = &ploc{}
+	p, pos = p.read(b, pos)
+	n.right.loc = p
+	n.setNumNodes(b, pos)
+	pos += 8
+	n.setNumBytes(b, pos)
+	pos += 8
+	if pos != len(b) {
+		return nil, fmt.Errorf("nodeLoc.read() pos: %v didn't match length: %v",
+			pos, len(b))
+	}
+	return n, nil
+}
 func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 	if nloc == nil {
 		return nil, nil
@@ -152,27 +194,14 @@ func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
 	if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
 		return nil, err
 	}
-	pos := 0
+
 	atomic.AddUint64(&o.nodeAllocs, 1)
-	n = &node{}
-	var p *ploc
-	p = &ploc{}
-	p, pos = p.read(b, pos)
-	n.item.loc = p
-	p = &ploc{}
-	p, pos = p.read(b, pos)
-	n.left.loc = p
-	p = &ploc{}
-	p, pos = p.read(b, pos)
-	n.right.loc = p
-	n.numNodes = binary.BigEndian.Uint64(b[pos : pos+8])
-	pos += 8
-	n.numBytes = binary.BigEndian.Uint64(b[pos : pos+8])
-	pos += 8
-	if pos != len(b) {
-		return nil, fmt.Errorf("nodeLoc.read() pos: %v didn't match length: %v",
-			pos, len(b))
+
+	n, err = populateNode(b)
+	if err != nil {
+		return n, err
 	}
+
 	nloc.setNode(n)
 	return n, nil
 }
