@@ -6,8 +6,31 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+	"strconv"
+	"log"
 )
+// ByteAble is a type that
+// can be turned into a byte array
+type ByteAble interface {
+	ToBa() []byte
+}
+func toBa(st interface{}) []byte {
+	var bs []byte
+	switch v := st.(type) {
+	case int:
+		bs = []byte(strconv.Itoa(v))
+	case string:
+		bs = []byte(v)
+	case []byte:
+		bs = v
+	case ByteAble:
+		bs = v.ToBa()
+	default:
+		log.Fatalf("Unknown Type in toBa Conversion %T\n", st)
+	}
 
+	return bs
+}
 // KeyCompare defines a function for custom key comparison
 // User-supplied key comparison func should return 0 if a == b,
 // -1 if a < b, and +1 if a > b.  For example: bytes.Compare()
@@ -104,6 +127,9 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 		}
 	}
 }
+func (t *Collection) GetAny(key interface{}) (val []byte, err error) {
+	return t.GetAny(key)
+}
 
 // Get value by key
 // Retrieve a value by its key.  Returns nil if the item is not in the
@@ -158,11 +184,18 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	t.rootDecRef(rnl)
 	return nil
 }
-
+// SetAny a key and value in a compatable data type
+func (t *Collection) SetAny(key , val interface{}) error {
+	return t.SetAny(key, val)
+}
 // Set a key and value
 // Replace or insert an item of a given key.
 func (t *Collection) Set(key []byte, val []byte) error {
 	return t.SetItem(&Item{Key: key, Val: val, Priority: rand.Int31()})
+}
+
+func (t *Collection) DeleteAny(key interface{}) (wasDeleted bool, err error) {
+	return t.DeleteAny(key)
 }
 
 // Delete an item of a given key.

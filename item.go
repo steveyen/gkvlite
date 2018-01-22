@@ -138,9 +138,7 @@ func (iloc *itemLoc) write(c *Collection) (err error) {
 			priority:  iItem.Priority,
 		}
 		b := ds.render(hlength)
-		var pos int
-		pos = priSz
-		pos += copy(b[priSz:], iItem.Key)
+		pos := priSz + copy(b[priSz:], iItem.Key)
 		if pos != hlength {
 			return fmt.Errorf("itemLoc.write() pos: %v didn't match hlength: %v",
 				pos, hlength)
@@ -177,8 +175,8 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 			return nil, err
 		}
 		var ds itemBa
-		ds.populate(b)
-		keyLength := ds.getKeyLength()
+
+		keyLength := ds.populate(b).getKeyLength()
 
 		i := c.store.ItemAlloc(c, keyLength)
 		if i == nil {

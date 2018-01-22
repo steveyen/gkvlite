@@ -18,7 +18,7 @@ type itemBa struct {
 	priority  int32
 }
 // populate the structure from a byte array
-func (ds *itemBa) populate(b []byte) {
+func (ds *itemBa) populate(b []byte) *itemBa {
 	ds.length = binary.BigEndian.Uint32(b[lenLoc : keyLoc])
 	if keyPSize == 2 {
 		ds.keyLength = keyP(binary.BigEndian.Uint16(b[keyLoc : valLoc]))
@@ -28,6 +28,7 @@ func (ds *itemBa) populate(b []byte) {
 
 	ds.valLength = binary.BigEndian.Uint32(b[valLoc : priLoc])
 	ds.priority = int32(binary.BigEndian.Uint32(b[priLoc : priSz]))
+	return ds
 }
 func (ds itemBa) getLength() uint32 {
 	return ds.length
