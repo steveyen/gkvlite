@@ -42,11 +42,11 @@ func (s *Store) getColl() *map[string]*Collection {
 	defer s.m.RUnlock()
 	return s.coll
 }
-func (o *Store) setSize(sz int64) {
-	atomic.StoreInt64(&o.size, sz)
+func (s *Store) setSize(sz int64) {
+	atomic.StoreInt64(&s.size, sz)
 }
-func (o *Store) getSize() int64 {
-	return atomic.LoadInt64(&o.size)
+func (s *Store) getSize() int64 {
+	return atomic.LoadInt64(&s.size)
 }
 func (s *Store) casColl(o, n *map[string]*Collection) bool {
 	s.m.Lock()

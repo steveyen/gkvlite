@@ -19,6 +19,14 @@ func toBa(st interface{}) []byte {
 	switch v := st.(type) {
 	case int:
 		bs = []byte(strconv.Itoa(v))
+  case []int:
+    var st string
+    var comma string
+    for _,j := range v {
+      st += comma + strconv.Itoa(j)
+      comma = ","
+    }
+    bs = []byte(st)
 	case string:
 		bs = []byte(v)
 	case []byte:
@@ -127,8 +135,9 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 		}
 	}
 }
+// GetAny get value by any compatable key
 func (t *Collection) GetAny(key interface{}) (val []byte, err error) {
-	return t.GetAny(key)
+	return t.Get(toBa(key))
 }
 
 // Get value by key
@@ -144,7 +153,15 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 	}
 	return nil, nil
 }
-
+// ExistAny returns true of the key (of any supported datatyp) exists
+func (t *Collection) ExistAny (key interface{}) bool {
+  return t.Exist(toBa(key))
+}
+// Exist returns true if the key exists in the collection
+func (t *Collection) Exist (key []byte) bool {
+  val, _ := t.GetItem(key, false)
+  return val != nil
+}
 // SetItem in a collection
 // Replace or insert an item of a given key.
 // A random item Priority (e.g., rand.Int31()) will usually work well,
@@ -186,16 +203,16 @@ func (t *Collection) SetItem(item *Item) (err error) {
 }
 // SetAny a key and value in a compatable data type
 func (t *Collection) SetAny(key , val interface{}) error {
-	return t.SetAny(key, val)
+	return t.Set(toBa(key), toBa(val))
 }
 // Set a key and value
 // Replace or insert an item of a given key.
 func (t *Collection) Set(key []byte, val []byte) error {
 	return t.SetItem(&Item{Key: key, Val: val, Priority: rand.Int31()})
 }
-
+// DeleteAny will delete any key of a compatable type
 func (t *Collection) DeleteAny(key interface{}) (wasDeleted bool, err error) {
-	return t.DeleteAny(key)
+	return t.Delete(toBa(key))
 }
 
 // Delete an item of a given key.
@@ -314,6 +331,11 @@ const MaxBlockCnt = 1024
 // BlockMangler will possibly re-arrange the order of the blocks
 type BlockMangler func([][]byte) [][]byte
 
+// VisitItemsRandom Visit Items in collection in Random order
+// Warning this takes way more work as we have to do 2 full passes
+// through the collection to sort it into bins
+// Suggest you make careful use of locks outside this and
+// within the visitor to prevent deadlocks
 func (t *Collection) VisitItemsRandom(
 	visitor ItemVisitorEx,
 ) error {
@@ -350,6 +372,9 @@ func (t *Collection) VisitItemsRandom(
 
 	for j := lenBlock + 1; j > 0; j-- {
 		for i, si := range blockStore {
+      // The behaviour we want is to visit the first item in each of blockStore
+      // then on the second item update blockStore to point to that second item
+      // repeat for each item in the block
 			first := true
 			vis := func(itm *Item, depth uint64) bool {
 
@@ -416,7 +441,7 @@ func (t *Collection) VisitItemsAscendBlockEx(
 		vis := func(i *Item, depth uint64) bool {
 			if j > lenBlock {
 				panic("impossible")
-				return false
+				//return false
 			} else if j == (lenBlock) {
 				visitor(i, depth)
 				return false
@@ -448,6 +473,8 @@ func (t *Collection) determineBlocks() (num, leng int, err error) {
 	}
 	return int(cnt), 1, nil
 }
+// RandBm Random Block Munging
+// a demonstration prototype for the random sorting of Blocks
 func RandBm(slice [][]byte) [][]byte {
 	for i := range slice {
 		j := rand.Intn(i + 1)

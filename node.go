@@ -133,15 +133,15 @@ func (nloc *nodeLoc) write(o *Store) error {
 
 // populateDiskStruct Created a byte array to write to the disk
 // This is popluated from the current node data
-func (nd node) populateDiskStruct(length int) (b []byte, err error) {
+func (n node) populateDiskStruct(length int) (b []byte, err error) {
 	b = make([]byte, length)
 	var pos int
-	pos = nd.item.Loc().write(b, pos)
-	pos = nd.left.Loc().write(b, pos)
-	pos = nd.right.Loc().write(b, pos)
-	binary.BigEndian.PutUint64(b[pos:pos+8], nd.numNodes)
+	pos = n.item.Loc().write(b, pos)
+	pos = n.left.Loc().write(b, pos)
+	pos = n.right.Loc().write(b, pos)
+	binary.BigEndian.PutUint64(b[pos:pos+8], n.numNodes)
 	pos += 8
-	binary.BigEndian.PutUint64(b[pos:pos+8], nd.numBytes)
+	binary.BigEndian.PutUint64(b[pos:pos+8], n.numBytes)
 	pos += 8
 	if pos != length {
 		return b, fmt.Errorf("nodeLoc.write() pos: %v didn't match length: %v",

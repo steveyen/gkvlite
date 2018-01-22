@@ -1592,7 +1592,7 @@ func testBlockHarness(runner func(*Collection, func(i *Item, depth uint64) bool)
 		return fmt.Errorf("expected visit ex to work, got: %v", err)
 	}
 	if len(tstMap) != 0 {
-		return fmt.Errorf("Excess Map", tstMap)
+		return fmt.Errorf("Excess Map %v", tstMap)
 	}
 	return nil
 }
