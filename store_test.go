@@ -384,7 +384,7 @@ func TestStoreFile(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -940,7 +940,7 @@ func TestStoreMultipleCollections(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -1081,7 +1081,7 @@ func TestStoreMultipleCollections(t *testing.T) {
 func TestStoreConcurrentVisits(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	if err != nil {
 		t.Error("File Create Error", err)
 	}
@@ -1131,7 +1131,7 @@ func TestStoreConcurrentVisits(t *testing.T) {
 func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -1280,7 +1280,7 @@ func TestEvictSomeItems(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -1309,7 +1309,7 @@ func TestEvictSomeItems(t *testing.T) {
 func TestJoinWithFileErrors(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -1351,7 +1351,7 @@ func TestJoinWithFileErrors(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname2 := f2.Name()
-	defer os.Remove(fname2)
+defer reportRemove(fname2)
 	defer f2.Close()
 
 	sMore, _ := NewStore(f2)
@@ -1615,7 +1615,7 @@ func TestVisitItemsDescend(t *testing.T) {
 func TestKeyCompareForCollectionCallback(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	if err != nil {
 		t.Error("Unable to create file:", fname)
 	}
@@ -1674,7 +1674,7 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 func TestPersistDeleteEveryItem(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -2004,7 +2004,7 @@ func TestMemoryFlushRevert(t *testing.T) {
 func TestFlushRevertEmptyStore(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -2042,7 +2042,7 @@ func TestFlushRevertEmptyStore(t *testing.T) {
 func TestFlushRevert(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -2171,7 +2171,7 @@ func TestFlushRevert(t *testing.T) {
 func TestFlushRevertWithReadError(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -2346,7 +2346,7 @@ func TestNumInfo(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -2392,7 +2392,7 @@ func TestWriteEmptyItemsErr(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -2422,7 +2422,7 @@ func TestWriteItemsErr(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -2468,7 +2468,7 @@ func TestStatErr(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -2508,7 +2508,7 @@ func TestNodeLocWriteErr(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -2756,7 +2756,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
@@ -2878,7 +2878,7 @@ func TestEvictRefCountRandom(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer os.Remove(fname)
+defer reportRemove(fname)
 	defer f.Close()
 	if useTestParallel {
 		t.Parallel()
