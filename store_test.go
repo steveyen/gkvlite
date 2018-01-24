@@ -17,7 +17,7 @@ import (
 	"unsafe"
 )
 
-const useTestParallel = false
+const useTestParallel = true
 
 func reportRemove(fname string) {
 	if _, err := os.Stat(fname); err == nil {
@@ -166,7 +166,7 @@ func TestStoreMem(t *testing.T) {
 					testIdx, test.exp, i.Key)
 			}
 		case "ups":
-			err := x.SetItem(&Item{
+			err = x.SetItem(&Item{
 				Key:      []byte(test.val),
 				Val:      []byte(test.val),
 				Priority: int32(test.pri),
@@ -203,6 +203,9 @@ func TestStoreMem(t *testing.T) {
 			}
 		case "ups":
 			err := xx.Set([]byte(test.val), []byte(test.val))
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
 			if err != nil {
 				t.Errorf("test: %v, expected ups nil error, got: %v",
 					testIdx, err)
@@ -248,11 +251,14 @@ func TestStoreMem(t *testing.T) {
 
 func loadCollection(x *Collection, arr []string) {
 	for i, s := range arr {
-		x.SetItem(&Item{
+		err := x.SetItem(&Item{
 			Key:      []byte(s),
 			Val:      []byte(s),
 			Priority: int32(i),
 		})
+		if err != nil {
+			log.Fatal("Set error", err)
+		}
 	}
 }
 
@@ -439,7 +445,10 @@ func TestStoreFile(t *testing.T) {
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected single key Flush() to have no error, err: %v", err)
 	}
-	f.Sync()
+	err = f.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 
 	i, err := x.GetItem([]byte("a"), true)
 	if err != nil {
@@ -529,7 +538,10 @@ func TestStoreFile(t *testing.T) {
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected Flush() to have no error, err: %v", err)
 	}
-	f.Sync()
+	err = f.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 
 	i, err = x2.GetItem([]byte("b"), true)
 	if i != nil || err != nil {
@@ -573,7 +585,12 @@ func TestStoreFile(t *testing.T) {
 	if err != nil || f3 == nil {
 		t.Errorf("could not reopen file: %v", fname)
 	}
-	defer f3.Close()
+	defer func() {
+		err := f3.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
 	s3, err := NewStore(f3)
 	if err != nil || s3 == nil {
 		t.Errorf("expected NewStore(f) to work, err: %v", err)
@@ -612,13 +629,21 @@ func TestStoreFile(t *testing.T) {
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected Flush() to have no error, err: %v", err)
 	}
-	f.Sync()
+	err = f.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 
 	f4, err := os.Open(fname) // Another file reader.
 	if err != nil {
 		t.Error("File4 Open error:", err)
 	}
-	defer f4.Close()
+	defer func() {
+		err := f4.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
 	s4, err := NewStore(f4)
 	x4 := s4.GetCollection("x")
 
@@ -677,13 +702,21 @@ func TestStoreFile(t *testing.T) {
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected Flush() to have no error, err: %v", err)
 	}
-	f.Sync()
+	err = f.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 
 	f5, err := os.Open(fname) // Another file reader.
 	if err != nil {
 		t.Error("File5 Open error:", err)
 	}
-	defer f5.Close()
+	defer func() {
+		err := f5.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
 	s5, err := NewStore(f5)
 	x5 := s5.GetCollection("x")
 
@@ -753,7 +786,12 @@ func TestStoreFile(t *testing.T) {
 	if err != nil {
 		t.Error("File5a Open error:", err)
 	}
-	defer f5a.Close()
+	defer func() {
+		err := f5a.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
 
 	s5a, err := NewStore(f5a)
 	x5a := s5a.GetCollection("x")
@@ -791,13 +829,21 @@ func TestStoreFile(t *testing.T) {
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected Flush() to have no error, err: %v", err)
 	}
-	f.Sync()
+	err = f.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 
 	f6, err := os.Open(fname) // Another file reader.
 	if err != nil {
 		t.Error("File6 Open error:", err)
 	}
-	defer f6.Close()
+	defer func() {
+		err := f6.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
 
 	s6, err := NewStore(f6)
 	x6 := s6.GetCollection("x")
@@ -912,8 +958,10 @@ func TestStoreFile(t *testing.T) {
 					ccTestIdx, err)
 			}
 		}
-		ccFile.Close()
-
+		err = ccFile.Close()
+		if err != nil {
+			log.Fatal("Close error", err)
+		}
 		// Reopen the snapshot and see that it's right.
 		ccFile, err = os.Open(ccName)
 		cc, err = NewStore(ccFile)
@@ -936,7 +984,10 @@ func TestStoreFile(t *testing.T) {
 					finfoSrc.Size(), finfoCpy.Size())
 			}
 		}
-		ccFile.Close()
+		err = ccFile.Close()
+		if err != nil {
+			log.Fatal("Close error", err)
+		}
 		reportRemove(ccName)
 	}
 }
@@ -1041,7 +1092,10 @@ func TestStoreMultipleCollections(t *testing.T) {
 	if err != nil {
 		t.Error("expected flush to work")
 	}
-	f1.Sync()
+	err = f1.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 	err = f1.Close()
 	if err != nil {
 		log.Fatal("Close Error", err)
@@ -1248,7 +1302,10 @@ func BenchmarkSets(b *testing.B) {
 	v := []byte("")
 	b.ResetTimer() // Ignore time from above.
 	for i := 0; i < b.N; i++ {
-		x.Set(keys[i%len(keys)], v)
+		err := x.Set(keys[i%len(keys)], v)
+		if err != nil {
+			log.Fatal("Set Error", err)
+		}
 	}
 }
 
@@ -1257,11 +1314,17 @@ func BenchmarkGets(b *testing.B) {
 	x := s.SetCollection("x", nil)
 	v := []byte("")
 	for i := 0; i < b.N; i++ {
-		x.Set([]byte(strconv.Itoa(i)), v)
+		err := x.Set([]byte(strconv.Itoa(i)), v)
+		if err != nil {
+			log.Fatal("Set Error", err)
+		}
 	}
 	b.ResetTimer() // Ignore time from above.
 	for i := 0; i < b.N; i++ {
-		x.Get([]byte(strconv.Itoa(i)))
+		_, err := x.Get([]byte(strconv.Itoa(i)))
+		if err != nil {
+			log.Fatal("Get Error", err)
+		}
 	}
 }
 
@@ -1294,7 +1357,10 @@ func TestBadStoreFile(t *testing.T) {
 	}
 	fname := os.TempDir() + "/" + "tmp_bad_store.test"
 	reportRemove(fname)
-	ioutil.WriteFile(fname, []byte("not a real store file"), 0600)
+	err := ioutil.WriteFile(fname, []byte("not a real store file"), 0600)
+	if err != nil {
+		log.Fatal("Writefile error", err)
+	}
 	defer reportRemove(fname)
 	f, err := os.Open(fname)
 	if err != nil || f == nil {
@@ -1396,7 +1462,10 @@ func TestJoinWithFileErrors(t *testing.T) {
 	}
 
 	loadCollection(xOrig, []string{"a", "b", "c", "d", "e", "f"})
-	sOrig.Flush()
+	err = sOrig.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
 	if m.numStat != 1 {
 		t.Errorf("expected 1 numStat, got: %#v", m)
 	}
@@ -1420,7 +1489,10 @@ func TestJoinWithFileErrors(t *testing.T) {
 	sMore, _ := NewStore(f2)
 	xMore := sMore.SetCollection("x", nil)
 	loadCollection(xMore, []string{"5", "4", "3", "2", "1", "0"})
-	sMore.Flush()
+	err = sMore.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
 
 	var res *nodeLoc
 
@@ -1538,7 +1610,10 @@ func TestStoreStats(t *testing.T) {
 		t.Errorf("expected 0 nodeAllocs, got: %v", m["nodeAllocs"])
 	}
 
-	x.Set([]byte("hello"), []byte("world"))
+	err = x.Set([]byte("hello"), []byte("world"))
+	if err != nil {
+		log.Fatal("Set Error", err)
+	}
 	s.Stats(n)
 	if n["fileSize"] != m["fileSize"] {
 		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
@@ -1547,7 +1622,10 @@ func TestStoreStats(t *testing.T) {
 		t.Errorf("expected 1 nodeAllocs, got: %#v, %#v", n, m)
 	}
 
-	x.Set([]byte("hello"), []byte("there"))
+	err = x.Set([]byte("hello"), []byte("there"))
+	if err != nil {
+		log.Fatal("Set Error", err)
+	}
 	s.Stats(n)
 	if n["fileSize"] != m["fileSize"] {
 		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
@@ -1578,7 +1656,10 @@ func TestVisitItemsAscendEx(t *testing.T) {
 	n := 40
 	for i := 0; i < n; i++ {
 		k := fmt.Sprintf("%v", i)
-		x.Set([]byte(k), []byte(k))
+		err := x.Set([]byte(k), []byte(k))
+		if err != nil {
+			log.Fatal("Set Error", err)
+		}
 	}
 	maxDepth := uint64(0)
 	t.Logf("dumping tree for manual balancedness check")
@@ -1629,7 +1710,10 @@ func testBlockHarness(runner func(*Collection, func(i *Item, depth uint64) bool)
 	n := 40
 	for i := 0; i < n; i++ {
 		k := fmt.Sprintf("%v", i)
-		x.Set([]byte(k), []byte{})
+		err := x.Set([]byte(k), []byte{})
+		if err != nil {
+			log.Fatal("Set Error", err)
+		}
 	}
 
 	tstMap := make(map[int]struct{})
@@ -1721,8 +1805,14 @@ func TestKeyCompareForCollectionCallback(t *testing.T) {
 	}
 	x1 := s1.GetCollection("x")
 	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil)
-	x1.Get([]byte("a"))
-	x1.Get([]byte("b"))
+	_, err = x1.Get([]byte("a"))
+	if err != nil {
+		log.Fatal("Get Error", err)
+	}
+	_, err = x1.Get([]byte("b"))
+	if err != nil {
+		log.Fatal("Get Error", err)
+	}
 
 	if comparisons == 0 {
 		t.Errorf("expected invocations of myKeyCompare")
@@ -1813,6 +1903,9 @@ func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
 	for i := 0; i < n; i++ {
 		err := x.Set([]byte(fmt.Sprintf("%d", i)), []byte{})
 		if err != nil {
+			log.Fatal("Set Error", err)
+		}
+		if err != nil {
 			t.Errorf("expected SetItem to work, %v", i)
 		}
 		if i%every == 0 {
@@ -1820,10 +1913,13 @@ func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
 		}
 	}
 	m := 0
-	x.VisitItemsAscend(nil, true, func(i *Item) bool {
+	err := x.VisitItemsAscend(nil, true, func(i *Item) bool {
 		m++
 		return true
 	})
+	if err != nil {
+		log.Fatal("Ascend Error", err)
+	}
 	if m != n {
 		t.Errorf("expected %v items, got: %v", n, m)
 	}
@@ -1840,10 +1936,13 @@ func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
 		}
 	}
 	m = 0
-	x.VisitItemsAscend(nil, true, func(i *Item) bool {
+	err = x.VisitItemsAscend(nil, true, func(i *Item) bool {
 		m++
 		return true
 	})
+	if err != nil {
+		log.Fatal("Ascend Error", err)
+	}
 	if m != 0 {
 		t.Errorf("expected 0 items, got: %v", m)
 	}
@@ -1979,28 +2078,40 @@ func TestReclaimRootChain(t *testing.T) {
 		t.Error("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
-	x.SetItem(&Item{
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbb"),
 		Priority: 200,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	s2 := s.Snapshot()
 	x2 := s2.GetCollection("x")
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbbb"),
 		Priority: 200,
 	})
-	x.SetItem(&Item{
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaaa"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	v, err := x.Get([]byte("a"))
 	if v == nil || !bytes.Equal(v, []byte("aaaa")) {
 		t.Errorf("expected aaaa, got: %v\n", v)
@@ -2017,30 +2128,42 @@ func TestReclaimRootChainMultipleMutations(t *testing.T) {
 		t.Error("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
-	x.SetItem(&Item{
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbb"),
 		Priority: 200,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	s2 := s.Snapshot()
 	x2 := s2.GetCollection("x")
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbbb"),
 		Priority: 200,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	s3 := s.Snapshot()
 	x3 := s3.GetCollection("x")
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaaa"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	v, err := x.Get([]byte("a"))
 	if v == nil || !bytes.Equal(v, []byte("aaaa")) {
 		t.Errorf("expected aaaa, got: %v\n", v)
@@ -2071,11 +2194,14 @@ func TestMemoryFlushRevert(t *testing.T) {
 		t.Error("expected memory-only FlushRevert to fail")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	err = s.FlushRevert()
 	if err == nil {
 		t.Error("expected memory-only FlushRevert to fail")
@@ -2144,11 +2270,14 @@ func TestFlushRevert(t *testing.T) {
 
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	err = s.Flush()
 	if err != nil {
 		log.Fatal("Flush Error", err)
@@ -2160,11 +2289,14 @@ func TestFlushRevert(t *testing.T) {
 	if stat0.Size() <= rootsLen {
 		t.Errorf("expected file size to be >0, got: %v", stat0.Size())
 	}
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbb"),
 		Priority: 200,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	err = s.Flush()
 	if err != nil {
 		log.Fatal("Flush Error", err)
@@ -2294,11 +2426,14 @@ func TestFlushRevertWithReadError(t *testing.T) {
 
 	s, _ := NewStore(m)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	err = s.Flush()
 	if err != nil {
 		log.Fatal("Flush Error", err)
@@ -2351,7 +2486,10 @@ func TestCollectionMisc(t *testing.T) {
 		Val:      []byte("aaa"),
 		Priority: 100,
 	}
-	x.SetItem(i)
+	err = x.SetItem(i)
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	i.Key = nil // Introduce bad condition.
 	_, err = x.Get([]byte("a"))
 	if err == nil {
@@ -2477,11 +2615,14 @@ func TestNumInfo(t *testing.T) {
 
 	s, _ := NewStore(m)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	err = s.Flush()
 	if err != nil {
 		log.Fatal("Flush Error", err)
@@ -2566,21 +2707,30 @@ func TestWriteItemsErr(t *testing.T) {
 
 	s, _ := NewStore(m)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbb"),
 		Priority: 100,
 	})
-	x.SetItem(&Item{
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = x.SetItem(&Item{
 		Key:      []byte("c"),
 		Val:      []byte("ccc"),
 		Priority: 10,
 	})
-	x.SetItem(&Item{
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 10,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 
 	writeShouldErr = true
 	if s.Flush() == nil {
@@ -2606,11 +2756,14 @@ func TestStatErr(t *testing.T) {
 	}
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	err = s.Flush()
 	if err != nil {
 		log.Fatal("Flush Error", err)
@@ -2670,11 +2823,14 @@ func TestNodeLocWriteErr(t *testing.T) {
 
 	s, _ := NewStore(m)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbb"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	rnl := x.rootAddRef()
 
 	writeShouldErr = true
@@ -2869,7 +3025,7 @@ func TestStoreRefCountRandom(t *testing.T) {
 				numSets++
 				v := fmt.Sprintf("%d", numSets)
 				pri := rand.Int31()
-				err := x.SetItem(&Item{
+				err = x.SetItem(&Item{
 					Key:      k,
 					Val:      []byte(v),
 					Priority: pri,
@@ -2990,7 +3146,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 				numSets++
 				v := fmt.Sprintf("%d", numSets)
 				pri := rand.Int31()
-				err := x.SetItem(&Item{
+				err = x.SetItem(&Item{
 					Key:      k,
 					Val:      []byte(v),
 					Priority: pri,
@@ -3127,7 +3283,7 @@ func TestEvictRefCountRandom(t *testing.T) {
 				numSets++
 				v := fmt.Sprintf("%d", numSets)
 				pri := rand.Int31()
-				err := x.SetItem(&Item{
+				err = x.SetItem(&Item{
 					Key:      k,
 					Val:      []byte(v),
 					Priority: pri,
@@ -3191,6 +3347,9 @@ func BenchmarkRandInsert(b *testing.B) {
 			if err != nil {
 				log.Fatal("Set Error", err)
 			}
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
 			i++
 			if i >= b.N {
 				return
@@ -3211,6 +3370,9 @@ func BenchmarkRandDelete(b *testing.B) {
 		x := tr.SetCollection("x", nil)
 		for _, item := range insertP {
 			err := x.Set(item, item)
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
 			if err != nil {
 				log.Fatal("Set Error", err)
 			}
@@ -3241,6 +3403,9 @@ func BenchmarkRandGet(b *testing.B) {
 		x := tr.SetCollection("x", nil)
 		for _, item := range insertP {
 			err := x.Set(item, item)
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
 			if err != nil {
 				log.Fatal("Set Error", err)
 			}

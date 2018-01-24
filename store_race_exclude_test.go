@@ -29,8 +29,14 @@ func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
 	x := s.SetCollection("x", nil)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
 	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
-	s.Flush()
-	f.Close()
+	err = s.Flush()
+	if err != nil {
+		log.Fatal("Flush error", err)
+	}
+	err = f.Close()
+	if err != nil {
+		log.Fatal("Close error", err)
+	}
 
 	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
 	s1, _ := NewStore(f1)
@@ -61,6 +67,9 @@ func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
 		runtime.Gosched() // Yield to test concurrency.
 	})
 	wg.Wait()
-	f1.Close()
+	err = f1.Close()
+	if err != nil {
+		log.Fatal("Close error", err)
+	}
 	reportRemove(fname)
 }

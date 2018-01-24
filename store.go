@@ -408,11 +408,24 @@ func (s *Store) writeRoots(rnls map[string]*rootNodeLoc) error {
 	b := bytes.NewBuffer(make([]byte, length)[:0])
 	b.Write(MagicBeg)
 	b.Write(MagicBeg)
-	binary.Write(b, binary.BigEndian, uint32(Version))
-	binary.Write(b, binary.BigEndian, uint32(length))
+
+	err = binary.Write(b, binary.BigEndian, uint32(Version))
+	if err != nil {
+		return err
+	}
+	err = binary.Write(b, binary.BigEndian, uint32(length))
+	if err != nil {
+		return err
+	}
 	b.Write(sJSON)
-	binary.Write(b, binary.BigEndian, int64(offset))
-	binary.Write(b, binary.BigEndian, uint32(length))
+	err = binary.Write(b, binary.BigEndian, int64(offset))
+	if err != nil {
+		return err
+	}
+	err = binary.Write(b, binary.BigEndian, uint32(length))
+	if err != nil {
+		return err
+	}
 	b.Write(MagicEnd)
 	b.Write(MagicEnd)
 	if _, err := s.file.WriteAt(b.Bytes()[:length], offset); err != nil {
