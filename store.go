@@ -106,7 +106,7 @@ func NewStoreEx(file StoreFile,
 	return res, nil
 }
 
-// SetCollection() is used to create a named Collection, or to modify
+// SetCollection is used to create a named Collection, or to modify
 // the KeyCompare function on an existing Collection.  In either case,
 // a new Collection to use is returned.  A newly created Collection
 // and any mutations on it won't be persisted until you do a Flush().
@@ -133,7 +133,7 @@ func (s *Store) SetCollection(name string, compare KeyCompare) *Collection {
 	}
 }
 
-// Returns a new, unregistered (non-named) collection.  This allows
+// MakePrivateCollection returns a new, unregistered (non-named) collection.  This allows
 // advanced users to manage collections of private collections.
 func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 	if compare == nil {
@@ -147,7 +147,7 @@ func (s *Store) MakePrivateCollection(compare KeyCompare) *Collection {
 	}
 }
 
-// Retrieves a named Collection.
+// GetCollection retrieves a named Collection.
 func (s *Store) GetCollection(name string) *Collection {
 	coll := *(*map[string]*Collection)(atomic.LoadPointer(&s.coll))
 	return coll[name]
@@ -190,7 +190,7 @@ func copyColl(orig map[string]*Collection) map[string]*Collection {
 	return res
 }
 
-// Writes (appends) any dirty, unpersisted data to file.  As a
+// Flush writes (appends) any dirty, unpersisted data to file.  As a
 // greater-window-of-data-loss versus higher-performance tradeoff,
 // consider having many mutations (Set()'s & Delete()'s) and then
 // have a less occasional Flush() instead of Flush()'ing after every
@@ -251,7 +251,7 @@ func (s *Store) FlushRevert() error {
 	return s.file.Truncate(atomic.LoadInt64(&s.size))
 }
 
-// Returns a read-only snapshot, including any mutations on the
+// Snapshot returns a read-only snapshot, including any mutations on the
 // original Store that have not been Flush()'ed to disk yet.  The
 // snapshot has its mutations and Flush() operations disabled because
 // the original store "owns" writes to the StoreFile.

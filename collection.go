@@ -65,7 +65,7 @@ func (t *Collection) closeCollection() { // Just "close" is a keyword.
 	}
 }
 
-// Retrieve an item by its key.  Use withValue of false if you don't
+// GetItem retrieves an item by its key.  Use withValue of false if you don't
 // need the item's value (Item.Val may be nil), which might be able
 // to save on I/O and memory resources, especially for large values.
 // The returned Item should be treated as immutable.
@@ -104,7 +104,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 	}
 }
 
-// Retrieve a value by its key.  Returns nil if the item is not in the
+// Get retrieves a value by its key.  Returns nil if the item is not in the
 // collection.  The returned value should be treated as immutable.
 func (t *Collection) Get(key []byte) (val []byte, err error) {
 	i, err := t.GetItem(key, true)
@@ -117,7 +117,7 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 	return nil, nil
 }
 
-// Replace or insert an item of a given key.
+// SetItem replaces or insert an item of a given key.
 // A random item Priority (e.g., rand.Int31()) will usually work well,
 // but advanced users may consider using non-random item priorities
 // at the risk of unbalancing the lookup tree.  The input Item instance
@@ -156,7 +156,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	return nil
 }
 
-// Replace or insert an item of a given key.
+// Set replaces or insert an item of a given key.
 func (t *Collection) Set(key []byte, val []byte) error {
 	return t.SetItem(&Item{Key: key, Val: val, Priority: rand.Int31()})
 }
@@ -204,14 +204,14 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	return true, nil
 }
 
-// Retrieves the item with the "smallest" key.
+// MinItem retrieves the item with the "smallest" key.
 // The returned item should be treated as immutable.
 func (t *Collection) MinItem(withValue bool) (*Item, error) {
 	return t.store.walk(t, withValue,
 		func(n *node) (*nodeLoc, bool) { return &n.left, true })
 }
 
-// Retrieves the item with the "largest" key.
+// MaxItem retrieves the item with the "largest" key.
 // The returned item should be treated as immutable.
 func (t *Collection) MaxItem(withValue bool) (*Item, error) {
 	return t.store.walk(t, withValue,
@@ -311,7 +311,7 @@ func descendChoice(cmp int, n *node) (bool, *nodeLoc, *nodeLoc) {
 	return cmp > 0, &n.right, &n.left
 }
 
-// Returns total number of items and total key bytes plus value bytes.
+// GetTotals returns total number of items and total key bytes plus value bytes.
 func (t *Collection) GetTotals() (numItems uint64, numBytes uint64, err error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
@@ -323,14 +323,14 @@ func (t *Collection) GetTotals() (numItems uint64, numBytes uint64, err error) {
 	return nNode.numNodes, nNode.numBytes, nil
 }
 
-// Returns JSON representation of root node file location.
+// MarshalJSON returns JSON representation of root node file location.
 func (t *Collection) MarshalJSON() ([]byte, error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
 	return rnl.MarshalJSON()
 }
 
-// Returns JSON representation of root node file location.
+// MarshalJSON returns JSON representation of root node file location.
 func (rnl *rootNodeLoc) MarshalJSON() ([]byte, error) {
 	loc := rnl.root.Loc()
 	if loc.isEmpty() {
@@ -361,7 +361,7 @@ func (t *Collection) AllocStats() (res AllocStats) {
 	return res
 }
 
-// Writes dirty items of a collection BUT (WARNING) does NOT write new
+// Write writes dirty items of a collection BUT (WARNING) does NOT write new
 // root records.  Use Store.Flush() to write root records, which would
 // make these writes visible to the next file re-opening/re-loading.
 func (t *Collection) Write() error {
