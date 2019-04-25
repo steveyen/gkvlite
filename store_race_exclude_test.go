@@ -71,5 +71,5 @@ func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
 	if err != nil {
 		log.Fatal("Close error", err)
 	}
-	reportRemove(fname)
+	reportRemove(fname, t)
 }

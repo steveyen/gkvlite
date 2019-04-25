@@ -19,11 +19,11 @@ import (
 
 const useTestParallel = true
 
-func reportRemove(fname string) {
+func reportRemove(fname string, t *testing.T) {
 	if _, err := os.Stat(fname); err == nil {
 		err = os.Remove(fname)
 		if err != nil {
-			log.Fatal("Failed to remove file", fname)
+			t.Fatal("Failed to remove file", fname)
 		}
 	}
 }
@@ -390,7 +390,7 @@ func TestStoreFile(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -928,7 +928,7 @@ func TestStoreFile(t *testing.T) {
 
 	for ccTestIdx, ccTest := range ccTests {
 		ccName := fmt.Sprintf(os.TempDir()+"/"+"tmpCompactCopy-%v.test", ccTestIdx)
-		reportRemove(ccName)
+		reportRemove(ccName, t)
 		ccFile, err := os.Create(ccName)
 		if err != nil || f == nil {
 			t.Errorf("%v: could not create file: %v", ccTestIdx, ccName)
@@ -988,7 +988,7 @@ func TestStoreFile(t *testing.T) {
 		if err != nil {
 			log.Fatal("Close error", err)
 		}
-		reportRemove(ccName)
+		reportRemove(ccName, t)
 	}
 }
 
@@ -998,7 +998,7 @@ func TestStoreMultipleCollections(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -1154,7 +1154,7 @@ func TestStoreMultipleCollections(t *testing.T) {
 func TestStoreConcurrentVisits(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	if err != nil {
 		t.Error("File Create Error", err)
 	}
@@ -1206,14 +1206,14 @@ func TestStoreConcurrentVisits(t *testing.T) {
 	if err != nil {
 		log.Fatal("Close Error", err)
 	}
-	reportRemove(fname)
+	reportRemove(fname, t)
 
 }
 
 func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -1254,7 +1254,7 @@ func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 	if err != nil {
 		log.Fatal("Close Error", err)
 	}
-	reportRemove(fname)
+	reportRemove(fname, t)
 }
 
 func TestWasDeleted(t *testing.T) {
@@ -1356,12 +1356,12 @@ func TestBadStoreFile(t *testing.T) {
 		t.Parallel()
 	}
 	fname := os.TempDir() + "/" + "tmp_bad_store.test"
-	reportRemove(fname)
+	reportRemove(fname, t)
 	err := ioutil.WriteFile(fname, []byte("not a real store file"), 0600)
 	if err != nil {
 		log.Fatal("Writefile error", err)
 	}
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	f, err := os.Open(fname)
 	if err != nil || f == nil {
 		t.Errorf("could not reopen file: %v", fname)
@@ -1388,7 +1388,7 @@ func TestEvictSomeItems(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -1428,7 +1428,7 @@ func TestEvictSomeItems(t *testing.T) {
 func TestJoinWithFileErrors(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -1478,7 +1478,7 @@ func TestJoinWithFileErrors(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname2 := f2.Name()
-	defer reportRemove(fname2)
+	defer reportRemove(fname2, t)
 	defer func() {
 		err := f2.Close()
 		if err != nil {
@@ -1765,7 +1765,7 @@ func TestVisitItemsDescend(t *testing.T) {
 func TestKeyCompareForCollectionCallback(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	if err != nil {
 		t.Error("Unable to create file:", fname)
 	}
@@ -1824,7 +1824,7 @@ func TestKeyCompareForCollectionCallback(t *testing.T) {
 	if err != nil {
 		log.Fatal("Close Error", err)
 	}
-	reportRemove(fname)
+	reportRemove(fname, t)
 
 }
 
@@ -1839,7 +1839,7 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 func TestPersistDeleteEveryItem(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -2211,7 +2211,7 @@ func TestMemoryFlushRevert(t *testing.T) {
 func TestFlushRevertEmptyStore(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -2257,7 +2257,7 @@ func TestFlushRevertEmptyStore(t *testing.T) {
 func TestFlushRevert(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -2403,7 +2403,7 @@ func TestFlushRevert(t *testing.T) {
 func TestFlushRevertWithReadError(t *testing.T) {
 	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -2592,7 +2592,7 @@ func TestNumInfo(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -2649,7 +2649,7 @@ func TestWriteEmptyItemsErr(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -2684,7 +2684,7 @@ func TestWriteItemsErr(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -2744,7 +2744,7 @@ func TestStatErr(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -2800,7 +2800,7 @@ func TestNodeLocWriteErr(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -3056,7 +3056,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -3138,7 +3138,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 	numSets := 0
 	numKeys := 10
 	for i := 0; i < 100; i++ {
-		for j := 0; j < 1000; j++ {
+		for j := 0; j < 100; j++ {
 			ks := fmt.Sprintf("%03d", rand.Int()%numKeys)
 			k := []byte(ks)
 			r := rand.Int() % 100
@@ -3162,6 +3162,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 			} else {
 				// Close and reopen the store.
 				stop()
+				f.Close()
 				f, _ = os.OpenFile(fname, os.O_RDWR, 0666)
 				s, x, counts = start(f)
 			}
@@ -3182,7 +3183,7 @@ func TestEvictRefCountRandom(t *testing.T) {
 		log.Fatal(err)
 	}
 	fname := f.Name()
-	defer reportRemove(fname)
+	defer reportRemove(fname, t)
 	if useTestParallel {
 		t.Parallel()
 	}
