@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/luci/gkvlite"
+	"github.com/cbhvn/gkvlite"
 )
 
 func TestSlabStore(t *testing.T) {
@@ -127,7 +127,8 @@ func TestSlabStoreRandom(t *testing.T) {
 	numSets := 0
 	numKeys := 10
 	for i := 0; i < 100; i++ {
-		for j := 0; j < 1000; j++ {
+		fmt.Println("Loop", i)
+		for j := 0; j < 100; j++ {
 			kr := rand.Int() % numKeys
 			ks := fmt.Sprintf("%03d", kr)
 			k := []byte(ks)

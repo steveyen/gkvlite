@@ -178,7 +178,7 @@ func (iloc *itemLoc) read(c *Collection, withValue bool) (icur *Item, err error)
 
 		keyLength := ds.populate(b).getKeyLength()
 
-		i := c.store.ItemAlloc(c, keyLength)
+		i := c.store.ItemAlloc(c, uint32(keyLength))
 		if i == nil {
 			return nil, errors.New("ItemAlloc() failed")
 		}

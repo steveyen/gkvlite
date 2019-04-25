@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/luci/gkvlite"
+	"github.com/cbhvn/gkvlite"
 )
 
 var keyFormat = flag.String("key-format", "string",
@@ -17,7 +17,7 @@ var indent = flag.Bool("indent", false,
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "gkvlite file view/inspect tool\n")
-	fmt.Fprintf(os.Stderr, "  suports gkvlite file versions: %d\n", gkvlite.VERSION)
+	fmt.Fprintf(os.Stderr, "  suports gkvlite file versions: %d\n", gkvlite.Version)
 	fmt.Fprintf(os.Stderr, "\nusage: %s [flags] gkvlite-file [cmd [cmd-specific-args ...]]\n",
 		os.Args[0])
 	fmt.Fprintf(os.Stderr, "\nexamples:\n")

@@ -15,7 +15,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/luci/gkvlite"
+	"github.com/cbhvn/gkvlite"
+	"github.com/couchbase/go-slab"
 )
 
 var maxOps = flag.Int("ops", 0,
@@ -157,7 +158,7 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		i.Val = b
 		return nil
 	}
-	itemAlloc := func(c *gkvlite.Collection, keyLength keyP) *gkvlite.Item {
+	itemAlloc := func(c *gkvlite.Collection, keyLength uint32) *gkvlite.Item {
 		var n *ItemNode
 		if freeItemNodes != nil {
 			n = freeItemNodes
@@ -288,7 +289,7 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 			pri := rand.Int31()
 			var it *gkvlite.Item
 			if scb.ItemAlloc != nil {
-				it = scb.ItemAlloc(x, keyP(len(k)))
+				it = scb.ItemAlloc(x, uint32(len(k)))
 			} else {
 				it = &gkvlite.Item{Key: make([]byte, len(k))}
 			}
