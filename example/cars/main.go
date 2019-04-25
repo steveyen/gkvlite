@@ -48,8 +48,31 @@ func main() {
 		// but not "bmw".
 		// If we want to stop visiting, return false;
 		// otherwise return true to keep visiting.
+		fmt.Println("VisitItemsAscend: ", string(i.Key), "->", string(i.Val))
 		return true
 	})
+
+	it := c.IterateAscend([]byte("ford"), true)
+	for it.Next() {
+		fmt.Println("IterateAscend: ", string(it.Result().Key), "->", string(it.Result().Val))
+	}
+
+	it = c.IterateAscend([]byte{}, true)
+	for it.Next() {
+		k := string(it.Result().Key)
+		fmt.Println("IterateAscend (1): ", k, "->", string(it.Result().Val))
+		if k == "mercedes" {
+			fmt.Println("IterateAscend (1):  Found what I need. Closing...")
+			it.Close()
+		}
+	}
+
+	fmt.Println("Descend starting with x will miss x, x = tesla")
+	it = c.IterateDescend([]byte("tesla"), true)
+	for it.Next() {
+		k := string(it.Result().Key)
+		fmt.Println("IterateDescend: ", k, "->", string(it.Result().Val))
+	}
 
 	// Let's get a snapshot.
 	snap := s.Snapshot()

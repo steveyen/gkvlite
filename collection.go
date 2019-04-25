@@ -4,29 +4,31 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
-	"sync"
-	"strconv"
 	"log"
+	"math/rand"
+	"strconv"
+	"sync"
 )
+
 // ByteAble is a type that
 // can be turned into a byte array
 type ByteAble interface {
 	ToBa() []byte
 }
+
 func toBa(st interface{}) []byte {
 	var bs []byte
 	switch v := st.(type) {
 	case int:
 		bs = []byte(strconv.Itoa(v))
-  case []int:
-    var st string
-    var comma string
-    for _,j := range v {
-      st += comma + strconv.Itoa(j)
-      comma = ","
-    }
-    bs = []byte(st)
+	case []int:
+		var st string
+		var comma string
+		for _, j := range v {
+			st += comma + strconv.Itoa(j)
+			comma = ","
+		}
+		bs = []byte(st)
 	case string:
 		bs = []byte(v)
 	case []byte:
@@ -39,6 +41,7 @@ func toBa(st interface{}) []byte {
 
 	return bs
 }
+
 // KeyCompare defines a function for custom key comparison
 // User-supplied key comparison func should return 0 if a == b,
 // -1 if a < b, and +1 if a > b.  For example: bytes.Compare()
@@ -135,6 +138,7 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 		}
 	}
 }
+
 // GetAny get value by any compatable key
 func (t *Collection) GetAny(key interface{}) (val []byte, err error) {
 	return t.Get(toBa(key))
@@ -153,15 +157,18 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 	}
 	return nil, nil
 }
+
 // ExistAny returns true of the key (of any supported datatyp) exists
-func (t *Collection) ExistAny (key interface{}) bool {
-  return t.Exist(toBa(key))
+func (t *Collection) ExistAny(key interface{}) bool {
+	return t.Exist(toBa(key))
 }
+
 // Exist returns true if the key exists in the collection
-func (t *Collection) Exist (key []byte) bool {
-  val, _ := t.GetItem(key, false)
-  return val != nil
+func (t *Collection) Exist(key []byte) bool {
+	val, _ := t.GetItem(key, false)
+	return val != nil
 }
+
 // SetItem in a collection
 // Replace or insert an item of a given key.
 // A random item Priority (e.g., rand.Int31()) will usually work well,
@@ -201,15 +208,18 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	t.rootDecRef(rnl)
 	return nil
 }
+
 // SetAny a key and value in a compatable data type
-func (t *Collection) SetAny(key , val interface{}) error {
+func (t *Collection) SetAny(key, val interface{}) error {
 	return t.Set(toBa(key), toBa(val))
 }
+
 // Set a key and value
 // Replace or insert an item of a given key.
 func (t *Collection) Set(key []byte, val []byte) error {
 	return t.SetItem(&Item{Key: key, Val: val, Priority: rand.Int31()})
 }
+
 // DeleteAny will delete any key of a compatable type
 func (t *Collection) DeleteAny(key interface{}) (wasDeleted bool, err error) {
 	return t.Delete(toBa(key))
@@ -311,6 +321,106 @@ type ItemVisitor func(i *Item) bool
 // return true if you wish to keep visiting
 type ItemVisitorEx func(i *Item, depth uint64) bool
 
+type iteratorVisitor func(t *Collection, v ItemVisitor) error
+
+type ItemIterator interface {
+	Next() bool
+	Result() *Item
+	Close()
+	Err() error
+}
+
+func (t *Collection) IterateAscend(target []byte, withValue bool) ItemIterator {
+	it := newIterator(target, withValue)
+	go t.iteratorVisitorAscend(it)
+	return it
+}
+
+func (t *Collection) IterateDescend(target []byte, withValue bool) ItemIterator {
+	it := newIterator(target, withValue)
+	go t.iteratorVisitorDescend(it)
+	return it
+}
+
+type iterator struct {
+	target    []byte
+	withValue bool
+	next      chan bool
+	items     chan *Item
+	closed    bool
+	result    *Item
+	err       error
+}
+
+func newIterator(target []byte, withValue bool) *iterator {
+	it := iterator{}
+	it.target = target
+	it.withValue = withValue
+	it.next = make(chan bool)
+	it.items = make(chan *Item)
+	return &it
+}
+
+func (it *iterator) Next() bool {
+	if it.closed {
+		return false
+	}
+	it.next <- true
+	i, ok := <-it.items
+	if !ok || it.err != nil {
+		close(it.next)
+		it.closed = true
+		return false
+	}
+	it.result = i
+	return true
+}
+
+func (it *iterator) Close() {
+	if it.closed {
+		return
+	}
+	close(it.next)
+	it.closed = true
+}
+
+func (it *iterator) Result() *Item {
+	return it.result
+}
+
+func (it *iterator) Err() error {
+	return it.err
+}
+func (t *Collection) iteratorVisitorAscend(it *iterator) {
+	t.iterate(it, func(c *Collection, v ItemVisitor) error {
+		return c.VisitItemsAscend(it.target, it.withValue, v)
+	})
+}
+
+func (t *Collection) iteratorVisitorDescend(it *iterator) {
+	t.iterate(it, func(c *Collection, v ItemVisitor) error {
+		return c.VisitItemsDescend(it.target, it.withValue, v)
+	})
+}
+
+func (t *Collection) iterate(it *iterator, v iteratorVisitor) {
+	defer func() {
+		close(it.items)
+		// drain
+		for range it.next {
+		}
+	}()
+
+	if _, ok := <-it.next; !ok {
+		return
+	}
+	it.err = v(t, func(i *Item) bool {
+		it.items <- i
+		_, ok := <-it.next
+		return ok
+	})
+}
+
 // VisitItemsAscend visits the collection's items in ascending order
 // Specifically visit items greater-than-or-equal to the target key in ascending order.
 func (t *Collection) VisitItemsAscend(target []byte, withValue bool, v ItemVisitor) error {
@@ -372,9 +482,9 @@ func (t *Collection) VisitItemsRandom(
 
 	for j := lenBlock + 1; j > 0; j-- {
 		for i, si := range blockStore {
-      // The behaviour we want is to visit the first item in each of blockStore
-      // then on the second item update blockStore to point to that second item
-      // repeat for each item in the block
+			// The behaviour we want is to visit the first item in each of blockStore
+			// then on the second item update blockStore to point to that second item
+			// repeat for each item in the block
 			first := true
 			vis := func(itm *Item, depth uint64) bool {
 
@@ -473,6 +583,7 @@ func (t *Collection) determineBlocks() (num, leng int, err error) {
 	}
 	return int(cnt), 1, nil
 }
+
 // RandBm Random Block Munging
 // a demonstration prototype for the random sorting of Blocks
 func RandBm(slice [][]byte) [][]byte {

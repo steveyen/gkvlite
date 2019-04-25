@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"unsafe"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const useTestParallel = true
@@ -3321,6 +3323,45 @@ func TestEvictRefCountRandom(t *testing.T) {
 			log.Fatal("Close Error", err)
 		}
 	}
+}
+
+func TestIteratorEmpty(t *testing.T) {
+	s, err := NewStore(nil)
+	assert.Nil(t, err)
+	c := s.SetCollection("x", nil)
+	it := c.IterateAscend([]byte{}, true)
+	assert.False(t,
+		it.Next())
+	assert.Nil(t, it.Err())
+	i := it.(*iterator)
+	assert.True(t, i.closed)
+}
+
+func TestIterator(t *testing.T) {
+	s, err := NewStore(nil)
+	assert.Nil(t, err)
+	c := s.SetCollection("x", nil)
+	assert.Nil(t,
+		c.SetAny("1", "a"))
+	// Iterator will not create snapshot until first Next()
+	it := c.IterateAscend([]byte{}, true)
+	assert.Nil(t,
+		c.SetAny("2", "b"))
+	// Creating snapshot now
+	assert.True(t,
+		it.Next())
+	assert.Nil(t, it.Err())
+	assert.True(t,
+		it.Next())
+	assert.Nil(t, it.Err())
+	i := it.(*iterator)
+	assert.False(t, i.closed)
+	assert.Nil(t,
+		c.SetAny("3", "c"))
+	assert.False(t,
+		it.Next())
+	assert.True(t, i.closed)
+	assert.Nil(t, it.Err())
 }
 
 // perm returns a random permutation of n Int items in the range [0, n).
