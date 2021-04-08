@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cbhvn/gkvlite"
+	"github.com/cbehopkins/gkvlite"
 )
 
 func TestSlabStore(t *testing.T) {

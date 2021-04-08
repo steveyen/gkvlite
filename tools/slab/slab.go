@@ -15,7 +15,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cbhvn/gkvlite"
+	"github.com/cbehopkins/gkvlite"
 	"github.com/couchbase/go-slab"
 )
 

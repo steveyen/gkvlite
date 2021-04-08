@@ -1,4 +1,4 @@
-module github.com/cbhvn/gkvlite
+module github.com/cbehopkins/gkvlite
 
 go 1.12
 

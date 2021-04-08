@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cbhvn/gkvlite"
+	"github.com/cbehopkins/gkvlite"
 )
 
 func checkerr(err error) {
