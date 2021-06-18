@@ -6,14 +6,29 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"os"
 	"runtime"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"unsafe"
+
+	"github.com/stretchr/testify/assert"
 )
+
+const useTestParallel = true
+
+func reportRemove(fname string, t *testing.T) {
+	if _, err := os.Stat(fname); err == nil {
+		err = os.Remove(fname)
+		if err != nil {
+			t.Fatal("Failed to remove file", fname)
+		}
+	}
+}
 
 type mockfile struct {
 	f           *os.File
@@ -153,7 +168,7 @@ func TestStoreMem(t *testing.T) {
 					testIdx, test.exp, i.Key)
 			}
 		case "ups":
-			err := x.SetItem(&Item{
+			err = x.SetItem(&Item{
 				Key:      []byte(test.val),
 				Val:      []byte(test.val),
 				Priority: int32(test.pri),
@@ -190,6 +205,9 @@ func TestStoreMem(t *testing.T) {
 			}
 		case "ups":
 			err := xx.Set([]byte(test.val), []byte(test.val))
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
 			if err != nil {
 				t.Errorf("test: %v, expected ups nil error, got: %v",
 					testIdx, err)
@@ -235,11 +253,14 @@ func TestStoreMem(t *testing.T) {
 
 func loadCollection(x *Collection, arr []string) {
 	for i, s := range arr {
-		x.SetItem(&Item{
+		err := x.SetItem(&Item{
 			Key:      []byte(s),
 			Val:      []byte(s),
 			Priority: int32(i),
 		})
+		if err != nil {
+			log.Fatal("Set error", err)
+		}
 	}
 }
 
@@ -366,13 +387,21 @@ func TestVisitStoreMem(t *testing.T) {
 }
 
 func TestStoreFile(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, err := os.Create(fname)
-	if err != nil || f == nil {
-		t.Errorf("could not create file: %v", fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
 	}
-
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, err := NewStore(f)
 	if err != nil || s == nil {
 		t.Errorf("expected NewStore(f) to work, err: %v", err)
@@ -418,7 +447,10 @@ func TestStoreFile(t *testing.T) {
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected single key Flush() to have no error, err: %v", err)
 	}
-	f.Sync()
+	err = f.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 
 	i, err := x.GetItem([]byte("a"), true)
 	if err != nil {
@@ -443,6 +475,16 @@ func TestStoreFile(t *testing.T) {
 	// ------------------------------------------------
 
 	f2, err := os.Open(fname) // Test reading the file.
+	if err != nil {
+		t.Error("File2 Open error:", err)
+	}
+	defer func() {
+		err := f2.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+
 	if err != nil || f2 == nil {
 		t.Errorf("could not reopen file: %v", fname)
 	}
@@ -451,18 +493,18 @@ func TestStoreFile(t *testing.T) {
 		t.Errorf("expected NewStore(f) to work, err: %v", err)
 	}
 	if len(s2.GetCollectionNames()) != 1 || s2.GetCollectionNames()[0] != "x" {
-		t.Errorf("expected 1 coll name x")
+		t.Error("expected 1 coll name x")
 	}
 	x2 := s2.GetCollection("x")
 	if x2 == nil {
-		t.Errorf("expected x2 to be there")
+		t.Error("expected x2 to be there")
 	}
 	i, err = x2.GetItem([]byte("a"), true)
 	if err != nil {
 		t.Errorf("expected s2.GetItem(a) to not error, err: %v", err)
 	}
 	if i == nil {
-		t.Errorf("expected s2.GetItem(a) to return non-nil item")
+		t.Error("expected s2.GetItem(a) to return non-nil item")
 	}
 	if string(i.Key) != "a" {
 		t.Errorf("expected s2.GetItem(a) to return key a, got: %v", i.Key)
@@ -472,7 +514,7 @@ func TestStoreFile(t *testing.T) {
 	}
 	i2, err := x2.GetItem([]byte("not-there"), true)
 	if i2 != nil || err != nil {
-		t.Errorf("expected miss to miss nicely.")
+		t.Error("expected miss to miss nicely.")
 	}
 	numItems, numBytes, err = x2.GetTotals()
 	if err != nil || numItems != 1 || numBytes != 2 {
@@ -487,39 +529,42 @@ func TestStoreFile(t *testing.T) {
 	// x2 has its own snapshot, so should not see the new items.
 	i, err = x2.GetItem([]byte("b"), true)
 	if i != nil || err != nil {
-		t.Errorf("expected b miss to miss nicely.")
+		t.Error("expected b miss to miss nicely.")
 	}
 	i, err = x2.GetItem([]byte("c"), true)
 	if i != nil || err != nil {
-		t.Errorf("expected c miss to miss nicely.")
+		t.Error("expected c miss to miss nicely.")
 	}
 
 	// Even after Flush().
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected Flush() to have no error, err: %v", err)
 	}
-	f.Sync()
+	err = f.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 
 	i, err = x2.GetItem([]byte("b"), true)
 	if i != nil || err != nil {
-		t.Errorf("expected b miss to still miss nicely.")
+		t.Error("expected b miss to still miss nicely.")
 	}
 	i, err = x2.GetItem([]byte("c"), true)
 	if i != nil || err != nil {
-		t.Errorf("expected c miss to still miss nicely.")
+		t.Error("expected c miss to still miss nicely.")
 	}
 
 	i, err = x.GetItem([]byte("a"), true)
 	if i == nil || err != nil {
-		t.Errorf("expected a to be in x.")
+		t.Error("expected a to be in x.")
 	}
 	i, err = x.GetItem([]byte("b"), true)
 	if i == nil || err != nil {
-		t.Errorf("expected b to be in x.")
+		t.Error("expected b to be in x.")
 	}
 	i, err = x.GetItem([]byte("c"), true)
 	if i == nil || err != nil {
-		t.Errorf("expected c to be in x.")
+		t.Error("expected c to be in x.")
 	}
 
 	visitExpectCollection(t, x, "a", []string{"a", "b", "c"}, nil)
@@ -542,16 +587,22 @@ func TestStoreFile(t *testing.T) {
 	if err != nil || f3 == nil {
 		t.Errorf("could not reopen file: %v", fname)
 	}
+	defer func() {
+		err := f3.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
 	s3, err := NewStore(f3)
 	if err != nil || s3 == nil {
 		t.Errorf("expected NewStore(f) to work, err: %v", err)
 	}
 	if len(s3.GetCollectionNames()) != 1 || s3.GetCollectionNames()[0] != "x" {
-		t.Errorf("expected 1 coll name x")
+		t.Error("expected 1 coll name x")
 	}
 	x3 := s3.GetCollection("x")
 	if x3 == nil {
-		t.Errorf("expected x2 to be there")
+		t.Error("expected x2 to be there")
 	}
 
 	visitExpectCollection(t, x, "a", []string{"a", "b", "c"}, nil)
@@ -560,15 +611,15 @@ func TestStoreFile(t *testing.T) {
 
 	i, err = x3.GetItem([]byte("a"), true)
 	if i == nil || err != nil {
-		t.Errorf("expected a to be in x3.")
+		t.Error("expected a to be in x3.")
 	}
 	i, err = x3.GetItem([]byte("b"), true)
 	if i == nil || err != nil {
-		t.Errorf("expected b to be in x3.")
+		t.Error("expected b to be in x3.")
 	}
 	i, err = x3.GetItem([]byte("c"), true)
 	if i == nil || err != nil {
-		t.Errorf("expected c to be in x3.")
+		t.Error("expected c to be in x3.")
 	}
 
 	// ------------------------------------------------
@@ -580,9 +631,21 @@ func TestStoreFile(t *testing.T) {
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected Flush() to have no error, err: %v", err)
 	}
-	f.Sync()
+	err = f.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 
 	f4, err := os.Open(fname) // Another file reader.
+	if err != nil {
+		t.Error("File4 Open error:", err)
+	}
+	defer func() {
+		err := f4.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
 	s4, err := NewStore(f4)
 	x4 := s4.GetCollection("x")
 
@@ -593,15 +656,15 @@ func TestStoreFile(t *testing.T) {
 
 	i, err = x4.GetItem([]byte("a"), true)
 	if i == nil || err != nil {
-		t.Errorf("expected a to be in x4.")
+		t.Error("expected a to be in x4.")
 	}
 	i, err = x4.GetItem([]byte("b"), true)
 	if i != nil || err != nil {
-		t.Errorf("expected b to not be in x4.")
+		t.Error("expected b to not be in x4.")
 	}
 	i, err = x4.GetItem([]byte("c"), true)
 	if i == nil || err != nil {
-		t.Errorf("expected c to be in x4.")
+		t.Error("expected c to be in x4.")
 	}
 
 	numItems, numBytes, err = x.GetTotals()
@@ -641,9 +704,21 @@ func TestStoreFile(t *testing.T) {
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected Flush() to have no error, err: %v", err)
 	}
-	f.Sync()
+	err = f.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 
 	f5, err := os.Open(fname) // Another file reader.
+	if err != nil {
+		t.Error("File5 Open error:", err)
+	}
+	defer func() {
+		err := f5.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
 	s5, err := NewStore(f5)
 	x5 := s5.GetCollection("x")
 
@@ -710,6 +785,16 @@ func TestStoreFile(t *testing.T) {
 
 	// Try some withValue false.
 	f5a, err := os.Open(fname) // Another file reader.
+	if err != nil {
+		t.Error("File5a Open error:", err)
+	}
+	defer func() {
+		err := f5a.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+
 	s5a, err := NewStore(f5a)
 	x5a := s5a.GetCollection("x")
 
@@ -746,9 +831,22 @@ func TestStoreFile(t *testing.T) {
 	if err := s.Flush(); err != nil {
 		t.Errorf("expected Flush() to have no error, err: %v", err)
 	}
-	f.Sync()
+	err = f.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
 
 	f6, err := os.Open(fname) // Another file reader.
+	if err != nil {
+		t.Error("File6 Open error:", err)
+	}
+	defer func() {
+		err := f6.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+
 	s6, err := NewStore(f6)
 	x6 := s6.GetCollection("x")
 
@@ -831,11 +929,11 @@ func TestStoreFile(t *testing.T) {
 	}
 
 	for ccTestIdx, ccTest := range ccTests {
-		ccName := fmt.Sprintf("tmpCompactCopy-%v.test", ccTestIdx)
-		os.Remove(ccName)
+		ccName := fmt.Sprintf(os.TempDir()+"/"+"tmpCompactCopy-%v.test", ccTestIdx)
+		reportRemove(ccName, t)
 		ccFile, err := os.Create(ccName)
 		if err != nil || f == nil {
-			t.Errorf("%v: could not create file: %v", ccTestIdx, fname)
+			t.Errorf("%v: could not create file: %v", ccTestIdx, ccName)
 		}
 		cc, err := ccTest.src.CopyTo(ccFile, ccTest.fevery)
 		if err != nil {
@@ -862,8 +960,10 @@ func TestStoreFile(t *testing.T) {
 					ccTestIdx, err)
 			}
 		}
-		ccFile.Close()
-
+		err = ccFile.Close()
+		if err != nil {
+			log.Fatal("Close error", err)
+		}
 		// Reopen the snapshot and see that it's right.
 		ccFile, err = os.Open(ccName)
 		cc, err = NewStore(ccFile)
@@ -886,17 +986,29 @@ func TestStoreFile(t *testing.T) {
 					finfoSrc.Size(), finfoCpy.Size())
 			}
 		}
-		ccFile.Close()
-		os.Remove(ccName)
+		err = ccFile.Close()
+		if err != nil {
+			log.Fatal("Close error", err)
+		}
+		reportRemove(ccName, t)
 	}
 }
 
 func TestStoreMultipleCollections(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, err := os.Create(fname)
-	if err != nil || f == nil {
-		t.Errorf("could not create file: %v", fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
 	}
 
 	s, err := NewStore(f)
@@ -938,7 +1050,6 @@ func TestStoreMultipleCollections(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected flush to work")
 	}
-	f.Close()
 
 	f1, err := os.OpenFile(fname, os.O_RDWR, 0666)
 	s1, err := NewStore(f1)
@@ -981,15 +1092,31 @@ func TestStoreMultipleCollections(t *testing.T) {
 
 	err = s1.Flush()
 	if err != nil {
-		t.Errorf("expected flush to work")
+		t.Error("expected flush to work")
 	}
-	f1.Sync()
-	f1.Close()
+	err = f1.Sync()
+	if err != nil {
+		log.Fatal("Sync Error", err)
+	}
+	err = f1.Close()
+	if err != nil {
+		log.Fatal("Close Error", err)
+	}
 
 	f2, err := os.Open(fname)
+	if err != nil {
+		t.Error("Open Error on f2:", err)
+	}
+	defer func() {
+		err := f2.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+
 	s2, err := NewStore(f2)
 	if err != nil {
-		t.Errorf("expected NewStore to work")
+		t.Error("expected NewStore to work")
 	}
 	if len(s2.GetCollectionNames()) != 2 {
 		t.Errorf("expected 2 colls, got %v", s2.GetCollectionNames())
@@ -1027,40 +1154,86 @@ func TestStoreMultipleCollections(t *testing.T) {
 }
 
 func TestStoreConcurrentVisits(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	if err != nil {
+		t.Error("File Create Error", err)
+	}
+	if useTestParallel {
+		t.Parallel()
+	}
+
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
 	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
-	s.Flush()
-	f.Close()
+	err = s.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
+	err = f.Close()
+	if err != nil {
+		log.Fatal("Close Error", err)
+	}
 
-	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
-	s1, _ := NewStore(f1)
+	f1, err := os.OpenFile(fname, os.O_RDWR, 0666)
+	if err != nil {
+		t.Error("File Create Error", err)
+	}
+	s1, err := NewStore(f1)
+	if err != nil {
+		t.Error("Unable to create Store", err)
+	}
 	x1 := s1.GetCollection("x")
+	if x1 == nil {
+		t.Error("Error loading in collection x1")
+	}
+	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil)
+	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil)
 
+	var wg sync.WaitGroup
+	wg.Add(100)
 	for i := 0; i < 100; i++ {
 		go func() {
 			visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"},
 				func(i *Item) {
 					runtime.Gosched() // Yield to test concurrency.
 				})
+			wg.Done()
 		}()
 	}
+	wg.Wait()
+	err = f1.Close()
+	if err != nil {
+		log.Fatal("Close Error", err)
+	}
+	reportRemove(fname, t)
+
 }
 
 func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
 	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
-	s.Flush()
-	f.Close()
+	err = s.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
+	err = f.Close()
+	if err != nil {
+		log.Fatal("Close Error", err)
+	}
 
 	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
 	s1, _ := NewStore(f1)
@@ -1079,40 +1252,11 @@ func TestStoreConcurrentDeleteDuringVisits(t *testing.T) {
 				toDeleteKey, err)
 		}
 	})
-}
-
-func TestStoreConcurrentInsertDuringVisits(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
-	s, _ := NewStore(f)
-	x := s.SetCollection("x", nil)
-	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
-	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
-	s.Flush()
-	f.Close()
-
-	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
-	s1, _ := NewStore(f1)
-	x1 := s1.GetCollection("x")
-
-	exp := []string{"a", "b", "c", "d", "e"}
-	add := []string{"A", "1", "E", "2", "C"}
-	toAdd := int32(0)
-
-	// Concurrent mutations like inserts should not affect a visit()
-	// that's already inflight.
-	visitExpectCollection(t, x1, "a", exp, func(i *Item) {
-		go func() {
-			a := atomic.AddInt32(&toAdd, 1)
-			toAddKey := []byte(add[a-1])
-			if err := x1.Set(toAddKey, toAddKey); err != nil {
-				t.Errorf("expected concurrent set to work on key: %v, got: %v",
-					toAddKey, err)
-			}
-		}()
-		runtime.Gosched() // Yield to test concurrency.
-	})
+	err = f1.Close()
+	if err != nil {
+		log.Fatal("Close Error", err)
+	}
+	reportRemove(fname, t)
 }
 
 func TestWasDeleted(t *testing.T) {
@@ -1160,7 +1304,10 @@ func BenchmarkSets(b *testing.B) {
 	v := []byte("")
 	b.ResetTimer() // Ignore time from above.
 	for i := 0; i < b.N; i++ {
-		x.Set(keys[i%len(keys)], v)
+		err := x.Set(keys[i%len(keys)], v)
+		if err != nil {
+			log.Fatal("Set Error", err)
+		}
 	}
 }
 
@@ -1169,11 +1316,17 @@ func BenchmarkGets(b *testing.B) {
 	x := s.SetCollection("x", nil)
 	v := []byte("")
 	for i := 0; i < b.N; i++ {
-		x.Set([]byte(strconv.Itoa(i)), v)
+		err := x.Set([]byte(strconv.Itoa(i)), v)
+		if err != nil {
+			log.Fatal("Set Error", err)
+		}
 	}
 	b.ResetTimer() // Ignore time from above.
 	for i := 0; i < b.N; i++ {
-		x.Get([]byte(strconv.Itoa(i)))
+		_, err := x.Get([]byte(strconv.Itoa(i)))
+		if err != nil {
+			log.Fatal("Get Error", err)
+		}
 	}
 }
 
@@ -1193,61 +1346,100 @@ func TestPrivateCollection(t *testing.T) {
 	s, _ := NewStore(nil)
 	x := s.MakePrivateCollection(nil)
 	if x == nil {
-		t.Errorf("expected private collection")
+		t.Error("expected private collection")
 	}
 	if len(s.GetCollectionNames()) != 0 {
-		t.Errorf("expected private collection to be unlisted")
+		t.Error("expected private collection to be unlisted")
 	}
 }
 
 func TestBadStoreFile(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	ioutil.WriteFile(fname, []byte("not a real store file"), 0600)
-	defer os.Remove(fname)
+	if useTestParallel {
+		t.Parallel()
+	}
+	fname := os.TempDir() + "/" + "tmp_bad_store.test"
+	reportRemove(fname, t)
+	err := ioutil.WriteFile(fname, []byte("not a real store file"), 0600)
+	if err != nil {
+		log.Fatal("Writefile error", err)
+	}
+	defer reportRemove(fname, t)
 	f, err := os.Open(fname)
 	if err != nil || f == nil {
 		t.Errorf("could not reopen file: %v", fname)
 	}
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+
 	s, err := NewStore(f)
 	if err == nil {
-		t.Errorf("expected NewStore(f) to fail")
+		t.Error("expected NewStore(f) to fail")
 	}
 	if s != nil {
-		t.Errorf("expected NewStore(f) to fail with s")
+		t.Error("expected NewStore(f) to fail with s")
 	}
 }
 
 func TestEvictSomeItems(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, _ := NewStore(f)
+
 	x := s.SetCollection("x", nil)
 	numEvicted := uint64(0)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
 	for i := 0; i < 1000; i++ {
 		visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
-		s.Flush()
+		err := s.Flush()
+		if err != nil {
+			log.Fatal("Flush Error", err)
+		}
 		numEvicted += x.EvictSomeItems()
 	}
 	for i := 0; i < 1000; i++ {
 		visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
 		loadCollection(x, []string{"e", "d", "a"})
-		s.Flush()
+		err := s.Flush()
+		if err != nil {
+			log.Fatal("Flush Error", err)
+		}
 		numEvicted += x.EvictSomeItems()
 	}
 	if numEvicted == 0 {
-		t.Errorf("expected some evictions")
+		t.Error("expected some evictions")
 	}
 }
 
 func TestJoinWithFileErrors(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
-	defer os.Remove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	errAfter := 0x1000000
 	numReads := 0
 
@@ -1272,26 +1464,39 @@ func TestJoinWithFileErrors(t *testing.T) {
 	}
 
 	loadCollection(xOrig, []string{"a", "b", "c", "d", "e", "f"})
-	sOrig.Flush()
+	err = sOrig.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
 	if m.numStat != 1 {
 		t.Errorf("expected 1 numStat, got: %#v", m)
 	}
 	if m.numTruncate != 0 {
 		t.Errorf("expected 0 truncates, got: %#v", m)
 	}
-
-	fname2 := "tmp2.test"
-	os.Remove(fname2)
-	f2, _ := os.Create(fname2)
-	defer os.Remove(fname2)
+	var f2 *os.File
+	f2, err = ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname2 := f2.Name()
+	defer reportRemove(fname2, t)
+	defer func() {
+		err := f2.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
 
 	sMore, _ := NewStore(f2)
 	xMore := sMore.SetCollection("x", nil)
 	loadCollection(xMore, []string{"5", "4", "3", "2", "1", "0"})
-	sMore.Flush()
+	err = sMore.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
 
 	var res *nodeLoc
-	var err error
 
 	// ----------------------------------------
 
@@ -1307,19 +1512,19 @@ func TestJoinWithFileErrors(t *testing.T) {
 	}
 	root := rnl.root
 	if root == nil || root.isEmpty() {
-		t.Errorf("expected an x2 root")
+		t.Error("expected an x2 root")
 	}
 	if root.Loc().isEmpty() {
-		t.Errorf("expected an x2 root to be on disk")
+		t.Error("expected an x2 root to be on disk")
 	}
 	if root.Node() != nil {
-		t.Errorf("expected an x2 root to not be loaded into memory yet")
+		t.Error("expected an x2 root to not be loaded into memory yet")
 	}
 
 	errAfter = 0x10000000 // Attempt with no errors.
 	numReads = 0
 
-	res, err = s2.join(x2, root, empty_nodeLoc, nil)
+	res, err = s2.join(x2, root, &emptyNodeLoc, nil)
 	if err != nil {
 		t.Errorf("expected no error")
 	}
@@ -1351,25 +1556,25 @@ func TestJoinWithFileErrors(t *testing.T) {
 		rnl2 := x2.root
 		root2 := rnl2.root
 		if root2 == nil || root2.isEmpty() {
-			t.Errorf("expected an x2 root")
+			t.Error("expected an x2 root")
 		}
 		if root2.Loc().isEmpty() {
-			t.Errorf("expected an x2 root to be on disk")
+			t.Error("expected an x2 root to be on disk")
 		}
 		if root2.Node() != nil {
-			t.Errorf("expected an x2 root to not be loaded into memory yet")
+			t.Error("expected an x2 root to not be loaded into memory yet")
 		}
 
 		rnl3 := x3.root
 		root3 := rnl3.root
 		if root3 == nil || root3.isEmpty() {
-			t.Errorf("expected an x3 root")
+			t.Error("expected an x3 root")
 		}
 		if root3.Loc().isEmpty() {
-			t.Errorf("expected an x3 root to be on disk")
+			t.Error("expected an x3 root to be on disk")
 		}
 		if root3.Node() != nil {
-			t.Errorf("expected an x3 root to not be loaded into memory yet")
+			t.Error("expected an x3 root to not be loaded into memory yet")
 		}
 
 		errAfter = i
@@ -1407,7 +1612,10 @@ func TestStoreStats(t *testing.T) {
 		t.Errorf("expected 0 nodeAllocs, got: %v", m["nodeAllocs"])
 	}
 
-	x.Set([]byte("hello"), []byte("world"))
+	err = x.Set([]byte("hello"), []byte("world"))
+	if err != nil {
+		log.Fatal("Set Error", err)
+	}
 	s.Stats(n)
 	if n["fileSize"] != m["fileSize"] {
 		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
@@ -1416,7 +1624,10 @@ func TestStoreStats(t *testing.T) {
 		t.Errorf("expected 1 nodeAllocs, got: %#v, %#v", n, m)
 	}
 
-	x.Set([]byte("hello"), []byte("there"))
+	err = x.Set([]byte("hello"), []byte("there"))
+	if err != nil {
+		log.Fatal("Set Error", err)
+	}
 	s.Stats(n)
 	if n["fileSize"] != m["fileSize"] {
 		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
@@ -1425,7 +1636,10 @@ func TestStoreStats(t *testing.T) {
 		t.Errorf("expected 3 nodeAllocs, got: %#v, %#v", n, m)
 	}
 
-	x.Delete([]byte("hello"))
+	success, err := x.Delete([]byte("hello"))
+	if !success || (err != nil) {
+		log.Fatal("Delete Error", err)
+	}
 	s.Stats(n)
 	if n["fileSize"] != m["fileSize"] {
 		t.Errorf("expected 0 fileSize, got: %#v, %#v", n, m)
@@ -1438,13 +1652,16 @@ func TestStoreStats(t *testing.T) {
 func TestVisitItemsAscendEx(t *testing.T) {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
-		t.Errorf("expected memory-only NewStore to work")
+		t.Error("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
 	n := 40
 	for i := 0; i < n; i++ {
 		k := fmt.Sprintf("%v", i)
-		x.Set([]byte(k), []byte(k))
+		err := x.Set([]byte(k), []byte(k))
+		if err != nil {
+			log.Fatal("Set Error", err)
+		}
 	}
 	maxDepth := uint64(0)
 	t.Logf("dumping tree for manual balancedness check")
@@ -1467,6 +1684,70 @@ func TestVisitItemsAscendEx(t *testing.T) {
 			maxDepth, n)
 	}
 }
+func TestVisitItemsRandom(t *testing.T) {
+	tf := func(x *Collection, br func(i *Item, depth uint64) bool) error {
+		return x.VisitItemsRandom(br)
+	}
+	err := testBlockHarness(tf)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+func TestVisitItemsAscendBlockEx(t *testing.T) {
+	tf := func(x *Collection, br func(i *Item, depth uint64) bool) error {
+		return x.VisitItemsAscendBlockEx(true, RandBm, br)
+	}
+	err := testBlockHarness(tf)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func testBlockHarness(runner func(*Collection, func(i *Item, depth uint64) bool) error) error {
+	s, err := NewStore(nil)
+	if err != nil || s == nil {
+		return fmt.Errorf("expected memory-only NewStore to work")
+	}
+	x := s.SetCollection("x", bytes.Compare)
+	n := 40
+	for i := 0; i < n; i++ {
+		k := fmt.Sprintf("%v", i)
+		err := x.Set([]byte(k), []byte{})
+		if err != nil {
+			log.Fatal("Set Error", err)
+		}
+	}
+
+	tstMap := make(map[int]struct{})
+	for i := 0; i < n; i++ {
+		tstMap[i] = struct{}{}
+	}
+	blockRun := func(i *Item, depth uint64) bool {
+
+		ib := i.Key
+		ii, err0 := strconv.Atoi(string(ib))
+		if err0 == nil {
+			if _, ok := tstMap[ii]; ok {
+				fmt.Println("Item is:", ii)
+				delete(tstMap, ii)
+			} else {
+				log.Fatal("Map error", ii)
+			}
+		} else {
+			log.Fatal("Err in integer conversion:", ii, err0)
+		}
+		return true
+	}
+
+	err = runner(x, blockRun)
+	if err != nil {
+		return fmt.Errorf("expected visit ex to work, got: %v", err)
+	}
+	if len(tstMap) != 0 {
+		return fmt.Errorf("Excess Map %v", tstMap)
+	}
+	return nil
+}
 
 func TestVisitItemsDescend(t *testing.T) {
 	s, err := NewStore(nil)
@@ -1484,15 +1765,27 @@ func TestVisitItemsDescend(t *testing.T) {
 }
 
 func TestKeyCompareForCollectionCallback(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	if err != nil {
+		t.Error("Unable to create file:", fname)
+	}
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
 	visitExpectCollection(t, x, "a", []string{"a", "b", "c", "d", "e"}, nil)
-	s.Flush()
-	f.Close()
+	err = s.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
+	err = f.Close()
+	if err != nil {
+		log.Fatal("Close Error", err)
+	}
 
 	comparisons := 0
 	myKeyCompare := func(a, b []byte) int {
@@ -1500,19 +1793,28 @@ func TestKeyCompareForCollectionCallback(t *testing.T) {
 		return bytes.Compare(a, b)
 	}
 
-	f1, _ := os.OpenFile(fname, os.O_RDWR, 0666)
+	f1, err := os.OpenFile(fname, os.O_RDWR, 0666)
+	if err != nil {
+		t.Error("Unable to open file:", fname)
+	}
 	s1, err := NewStoreEx(f1, StoreCallbacks{
 		KeyCompareForCollection: func(collName string) KeyCompare {
 			return myKeyCompare
 		},
 	})
 	if err != nil {
-		t.Errorf("expected NewStoreEx with non-nil KeyCompareForCollection to work")
+		t.Error("expected NewStoreEx with non-nil KeyCompareForCollection to work")
 	}
 	x1 := s1.GetCollection("x")
 	visitExpectCollection(t, x1, "a", []string{"a", "b", "c", "d", "e"}, nil)
-	x1.Get([]byte("a"))
-	x1.Get([]byte("b"))
+	_, err = x1.Get([]byte("a"))
+	if err != nil {
+		log.Fatal("Get Error", err)
+	}
+	_, err = x1.Get([]byte("b"))
+	if err != nil {
+		log.Fatal("Get Error", err)
+	}
 
 	if comparisons == 0 {
 		t.Errorf("expected invocations of myKeyCompare")
@@ -1520,6 +1822,12 @@ func TestKeyCompareForCollectionCallback(t *testing.T) {
 	if x1.Name() != "x" {
 		t.Errorf("expected same name after reload")
 	}
+	err = f1.Close()
+	if err != nil {
+		log.Fatal("Close Error", err)
+	}
+	reportRemove(fname, t)
+
 }
 
 func TestMemoryDeleteEveryItem(t *testing.T) {
@@ -1531,10 +1839,16 @@ func TestMemoryDeleteEveryItem(t *testing.T) {
 }
 
 func TestPersistDeleteEveryItem(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	defer os.Remove(fname)
-	f, _ := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if useTestParallel {
+		t.Parallel()
+	}
+
 	s, _ := NewStore(f)
 	c := 0
 	testDeleteEveryItem(t, s, 10000, 100, func() {
@@ -1545,13 +1859,16 @@ func TestPersistDeleteEveryItem(t *testing.T) {
 		}
 	})
 	if c == 0 {
-		t.Errorf("expected cb to get invoked")
+		t.Error("expected cb to get invoked")
 	}
-	err := s.Flush()
+	err = s.Flush()
 	if err != nil {
 		t.Errorf("expected last Flush to work, err: %v", err)
 	}
-	f.Close()
+	err = f.Close()
+	if err != nil {
+		log.Fatal("Close Error", err)
+	}
 
 	f2, err := os.Open(fname)
 	if err != nil {
@@ -1563,7 +1880,7 @@ func TestPersistDeleteEveryItem(t *testing.T) {
 	}
 	x := s2.SetCollection("x", bytes.Compare)
 	if x == nil {
-		t.Errorf("expected x to be there")
+		t.Error("expected x to be there")
 	}
 	m := 0
 	err = x.VisitItemsAscend(nil, true, func(i *Item) bool {
@@ -1571,12 +1888,15 @@ func TestPersistDeleteEveryItem(t *testing.T) {
 		return true
 	})
 	if err != nil {
-		t.Errorf("expected Visit to work, err: %v", err)
+		t.Errorf("expected visit to work, err: %v", err)
 	}
 	if m != 0 {
 		t.Errorf("expected 0 items, got: %v", m)
 	}
-	f2.Close()
+	err = f2.Close()
+	if err != nil {
+		log.Fatal("Close Error", err)
+	}
 }
 
 func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
@@ -1585,6 +1905,9 @@ func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
 	for i := 0; i < n; i++ {
 		err := x.Set([]byte(fmt.Sprintf("%d", i)), []byte{})
 		if err != nil {
+			log.Fatal("Set Error", err)
+		}
+		if err != nil {
 			t.Errorf("expected SetItem to work, %v", i)
 		}
 		if i%every == 0 {
@@ -1592,10 +1915,13 @@ func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
 		}
 	}
 	m := 0
-	x.VisitItemsAscend(nil, true, func(i *Item) bool {
+	err := x.VisitItemsAscend(nil, true, func(i *Item) bool {
 		m++
 		return true
 	})
+	if err != nil {
+		log.Fatal("Ascend Error", err)
+	}
 	if m != n {
 		t.Errorf("expected %v items, got: %v", n, m)
 	}
@@ -1612,10 +1938,13 @@ func testDeleteEveryItem(t *testing.T, s *Store, n int, every int,
 		}
 	}
 	m = 0
-	x.VisitItemsAscend(nil, true, func(i *Item) bool {
+	err = x.VisitItemsAscend(nil, true, func(i *Item) bool {
 		m++
 		return true
 	})
+	if err != nil {
+		log.Fatal("Ascend Error", err)
+	}
 	if m != 0 {
 		t.Errorf("expected 0 items, got: %v", m)
 	}
@@ -1626,24 +1955,24 @@ func TestItemCopy(t *testing.T) {
 		Key:       []byte("hi"),
 		Val:       []byte("world"),
 		Priority:  1234,
-		Transient: unsafe.Pointer(&node{}),
+		Transient: &node{},
 	}
 	j := i.Copy()
 	if !bytes.Equal(j.Key, i.Key) || !bytes.Equal(j.Val, i.Val) ||
 		j.Priority != i.Priority || j.Transient != i.Transient {
-		t.Errorf("expected item copy to work")
+		t.Error("expected item copy to work")
 	}
 }
 
 func TestCurFreeNodes(t *testing.T) {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
-		t.Errorf("expected memory-only NewStore to work")
+		t.Error("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	n := x.mkNode(empty_itemLoc, empty_nodeLoc, empty_nodeLoc, 0, 0)
+	n := x.mkNode(&emptyItemLoc, &emptyNodeLoc, &emptyNodeLoc, 0, 0)
 	f := allocStats
-	x.freeNode_unlocked(n, nil)
+	x.freeNodeUnlocked(n, nil)
 	if f.FreeNodes+1 != allocStats.FreeNodes {
 		t.Errorf("expected freeNodes to increment")
 	}
@@ -1656,27 +1985,27 @@ func TestCurFreeNodes(t *testing.T) {
 func TestCollectionStats(t *testing.T) {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
-		t.Errorf("expected memory-only NewStore to work")
+		t.Error("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
 	g := x.AllocStats()
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
 	h := x.AllocStats()
 	if h.MkNodes <= g.MkNodes {
-		t.Errorf("expected MkNodes to be more")
+		t.Error("expected MkNodes to be more")
 	}
 	if h.MkNodeLocs <= g.MkNodeLocs {
-		t.Errorf("expected MkNodeLocs to be more")
+		t.Error("expected MkNodeLocs to be more")
 	}
 	if h.MkRootNodeLocs <= g.MkRootNodeLocs {
-		t.Errorf("expected MkRootNodeLocs to be more")
+		t.Error("expected MkRootNodeLocs to be more")
 	}
 }
 
 func TestDump(t *testing.T) {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
-		t.Errorf("expected memory-only NewStore to work")
+		t.Error("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
 	loadCollection(x, []string{"e", "d", "a", "c", "b", "c", "a"})
@@ -1687,37 +2016,37 @@ func TestDump(t *testing.T) {
 func TestStoreClose(t *testing.T) {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
-		t.Errorf("expected memory-only NewStore to work")
+		t.Error("expected memory-only NewStore to work")
 	}
-	if s.coll == unsafe.Pointer(nil) {
-		t.Errorf("expected coll before Close()")
-	}
-	s.Close()
-	if s.coll != unsafe.Pointer(nil) {
-		t.Errorf("expected no coll after Close()")
+	if s.coll == nil {
+		t.Error("expected coll before Close()")
 	}
 	s.Close()
-	if s.coll != unsafe.Pointer(nil) {
-		t.Errorf("expected no coll after re-Close()")
+	if s.coll != nil {
+		t.Error("expected no coll after Close()")
 	}
 	s.Close()
-	if s.coll != unsafe.Pointer(nil) {
-		t.Errorf("expected no coll after re-Close()")
+	if s.coll != nil {
+		t.Error("expected no coll after re-Close()")
+	}
+	s.Close()
+	if s.coll != nil {
+		t.Error("expected no coll after re-Close()")
 	}
 
 	// Now, with a collection
 	s, _ = NewStore(nil)
 	s.SetCollection("x", bytes.Compare)
-	if s.coll == unsafe.Pointer(nil) {
-		t.Errorf("expected coll before Close()")
+	if s.coll == nil {
+		t.Error("expected coll before Close()")
 	}
 	s.Close()
-	if s.coll != unsafe.Pointer(nil) {
-		t.Errorf("expected no coll after Close()")
+	if s.coll != nil {
+		t.Error("expected no coll after Close()")
 	}
 	s.Close()
-	if s.coll != unsafe.Pointer(nil) {
-		t.Errorf("expected no coll after Close()")
+	if s.coll != nil {
+		t.Error("expected no coll after Close()")
 	}
 }
 
@@ -1727,10 +2056,10 @@ func TestItemNumValBytes(t *testing.T) {
 	s, err := NewStoreEx(nil, StoreCallbacks{
 		ItemValLength: func(c *Collection, i *Item) int {
 			if c != x {
-				t.Errorf("expected colls to be the same")
+				t.Error("expected colls to be the same")
 			}
 			if h != i {
-				t.Errorf("expected items to be the same")
+				t.Error("expected items to be the same")
 			}
 			return 1313
 		},
@@ -1748,31 +2077,43 @@ func TestItemNumValBytes(t *testing.T) {
 func TestReclaimRootChain(t *testing.T) {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
-		t.Errorf("expected memory-only NewStore to work")
+		t.Error("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
-	x.SetItem(&Item{
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbb"),
 		Priority: 200,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	s2 := s.Snapshot()
 	x2 := s2.GetCollection("x")
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbbb"),
 		Priority: 200,
 	})
-	x.SetItem(&Item{
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaaa"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	v, err := x.Get([]byte("a"))
 	if v == nil || !bytes.Equal(v, []byte("aaaa")) {
 		t.Errorf("expected aaaa, got: %v\n", v)
@@ -1786,33 +2127,45 @@ func TestReclaimRootChain(t *testing.T) {
 func TestReclaimRootChainMultipleMutations(t *testing.T) {
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
-		t.Errorf("expected memory-only NewStore to work")
+		t.Error("expected memory-only NewStore to work")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
-	x.SetItem(&Item{
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbb"),
 		Priority: 200,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	s2 := s.Snapshot()
 	x2 := s2.GetCollection("x")
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbbb"),
 		Priority: 200,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	s3 := s.Snapshot()
 	x3 := s3.GetCollection("x")
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaaa"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	v, err := x.Get([]byte("a"))
 	if v == nil || !bytes.Equal(v, []byte("aaaa")) {
 		t.Errorf("expected aaaa, got: %v\n", v)
@@ -1840,26 +2193,38 @@ func TestMemoryFlushRevert(t *testing.T) {
 	s, _ := NewStore(nil)
 	err := s.FlushRevert()
 	if err == nil {
-		t.Errorf("expected memory-only FlushRevert to fail")
+		t.Error("expected memory-only FlushRevert to fail")
 	}
 	x := s.SetCollection("x", bytes.Compare)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	err = s.FlushRevert()
 	if err == nil {
-		t.Errorf("expected memory-only FlushRevert to fail")
+		t.Error("expected memory-only FlushRevert to fail")
 	}
 }
 
 func TestFlushRevertEmptyStore(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, _ := NewStore(f)
-	err := s.FlushRevert()
+	err = s.FlushRevert()
 	if err != nil {
 		t.Errorf("expected flush revert on empty store to work, err: %v", err)
 	}
@@ -1871,7 +2236,10 @@ func TestFlushRevertEmptyStore(t *testing.T) {
 	if s.GetCollection("x") != nil {
 		t.Errorf("expected flush revert to provide no collections")
 	}
-	s.Flush()
+	err = s.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
 	err = s.FlushRevert()
 	if err != nil {
 		t.Errorf("expected flush revert on empty store to work, err: %v", err)
@@ -1889,17 +2257,33 @@ func TestFlushRevertEmptyStore(t *testing.T) {
 }
 
 func TestFlushRevert(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, err := os.Create(fname)
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
+
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
-	s.Flush()
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = s.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
 	stat0, err := f.Stat()
 	if err != nil {
 		t.Errorf("expected stat to work")
@@ -1907,12 +2291,18 @@ func TestFlushRevert(t *testing.T) {
 	if stat0.Size() <= rootsLen {
 		t.Errorf("expected file size to be >0, got: %v", stat0.Size())
 	}
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbb"),
 		Priority: 200,
 	})
-	s.Flush()
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = s.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
 	stat1, err := f.Stat()
 	if err != nil {
 		t.Errorf("expected stat to work")
@@ -2013,11 +2403,18 @@ func TestFlushRevert(t *testing.T) {
 }
 
 func TestFlushRevertWithReadError(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, err := os.Create(fname)
-	defer os.Remove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	readShouldErr := false
 	m := &mockfile{
 		f: f,
@@ -2031,12 +2428,18 @@ func TestFlushRevertWithReadError(t *testing.T) {
 
 	s, _ := NewStore(m)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
-	s.Flush()
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = s.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
 
 	readShouldErr = true
 	err = s.FlushRevert()
@@ -2052,11 +2455,11 @@ func TestCollectionMisc(t *testing.T) {
 	}
 	x := s.SetCollection("x", bytes.Compare)
 
-	e0, e1, e2, err := s.split(x, empty_nodeLoc, nil, nil)
+	e0, e1, e2, err := s.split(x, &emptyNodeLoc, nil, nil)
 	if err != nil ||
-		e0 != empty_nodeLoc ||
-		e1 != empty_nodeLoc ||
-		e2 != empty_nodeLoc {
+		e0 != &emptyNodeLoc ||
+		e1 != &emptyNodeLoc ||
+		e2 != &emptyNodeLoc {
 		t.Errorf("expected split of empty node loc to be empty")
 	}
 
@@ -2085,7 +2488,10 @@ func TestCollectionMisc(t *testing.T) {
 		Val:      []byte("aaa"),
 		Priority: 100,
 	}
-	x.SetItem(i)
+	err = x.SetItem(i)
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	i.Key = nil // Introduce bad condition.
 	_, err = x.Get([]byte("a"))
 	if err == nil {
@@ -2111,11 +2517,11 @@ func TestDoubleFreeNode(t *testing.T) {
 		}
 	}()
 	withAllocLocks(func() {
-		x.freeNode_unlocked(nil, nil)
+		x.freeNodeUnlocked(nil, nil)
 		c++
-		x.freeNode_unlocked(n, nil)
+		x.freeNodeUnlocked(n, nil)
 		c++
-		x.freeNode_unlocked(n, nil)
+		x.freeNodeUnlocked(n, nil)
 		c++
 	})
 }
@@ -2146,6 +2552,9 @@ func TestDoubleFreeNodeLoc(t *testing.T) {
 }
 
 func TestDoubleFreeRootNodeLoc(t *testing.T) {
+	if useTestParallel {
+		t.SkipNow()
+	}
 	s, err := NewStore(nil)
 	if err != nil || s == nil {
 		t.Errorf("expected memory-only NewStore to work")
@@ -2180,11 +2589,21 @@ func TestNodeLocRead(t *testing.T) {
 }
 
 func TestNumInfo(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, err := os.Create(fname)
-	defer os.Remove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	readShouldErr := false
 	m := &mockfile{
 		f: f,
@@ -2198,34 +2617,50 @@ func TestNumInfo(t *testing.T) {
 
 	s, _ := NewStore(m)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
-	s.Flush()
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = s.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
 
 	readShouldErr = true
 
 	rnl := x.rootAddRef()
-	rnl.root.node = unsafe.Pointer(nil) // Evict node from memory to force reading.
+	rnl.root.node = nil // Evict node from memory to force reading.
 
-	_, _, _, _, err = numInfo(s, rnl.root, empty_nodeLoc)
+	_, _, _, _, err = numInfo(s, rnl.root, &emptyNodeLoc)
 	if err == nil {
 		t.Errorf("expected numInfo to error")
 	}
-	_, _, _, _, err = numInfo(s, empty_nodeLoc, rnl.root)
+	_, _, _, _, err = numInfo(s, &emptyNodeLoc, rnl.root)
 	if err == nil {
 		t.Errorf("expected numInfo to error")
 	}
 }
 
 func TestWriteEmptyItemsErr(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
-	defer os.Remove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	writeShouldErr := false
 	m := &mockfile{
 		f: f,
@@ -2246,11 +2681,21 @@ func TestWriteEmptyItemsErr(t *testing.T) {
 }
 
 func TestWriteItemsErr(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
-	defer os.Remove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	writeShouldErr := false
 	m := &mockfile{
 		f: f,
@@ -2264,21 +2709,30 @@ func TestWriteItemsErr(t *testing.T) {
 
 	s, _ := NewStore(m)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbb"),
 		Priority: 100,
 	})
-	x.SetItem(&Item{
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = x.SetItem(&Item{
 		Key:      []byte("c"),
 		Val:      []byte("ccc"),
 		Priority: 10,
 	})
-	x.SetItem(&Item{
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 10,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 
 	writeShouldErr = true
 	if s.Flush() == nil {
@@ -2287,22 +2741,46 @@ func TestWriteItemsErr(t *testing.T) {
 }
 
 func TestStatErr(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, err := os.Create(fname)
-	defer os.Remove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	s, _ := NewStore(f)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("a"),
 		Val:      []byte("aaa"),
 		Priority: 100,
 	})
-	s.Flush()
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
+	err = s.Flush()
+	if err != nil {
+		log.Fatal("Flush Error", err)
+	}
 
 	f2, err := os.Open(fname) // Test reading the file.
-
+	if err != nil {
+		t.Error("Error opening file:", fname)
+	}
+	defer func() {
+		err := f2.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
 	m := &mockfile{
 		f: f2,
 		stat: func() (fi os.FileInfo, err error) {
@@ -2311,19 +2789,29 @@ func TestStatErr(t *testing.T) {
 	}
 	s2, err := NewStore(m)
 	if err == nil {
-		t.Errorf("expected store open to fail due to stat err")
+		t.Error("expected store open to fail due to stat err")
 	}
 	if s2 != nil {
-		t.Errorf("expected store open to fail due to stat err")
+		t.Error("expected store open to fail due to stat err")
 	}
 }
 
 func TestNodeLocWriteErr(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
-	defer os.Remove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	writeShouldErr := false
 	m := &mockfile{
 		f: f,
@@ -2337,11 +2825,14 @@ func TestNodeLocWriteErr(t *testing.T) {
 
 	s, _ := NewStore(m)
 	x := s.SetCollection("x", nil)
-	x.SetItem(&Item{
+	err = x.SetItem(&Item{
 		Key:      []byte("b"),
 		Val:      []byte("bbb"),
 		Priority: 100,
 	})
+	if err != nil {
+		log.Fatal("Set error", err)
+	}
 	rnl := x.rootAddRef()
 
 	writeShouldErr = true
@@ -2350,7 +2841,7 @@ func TestNodeLocWriteErr(t *testing.T) {
 	}
 	writeShouldErr = false
 
-	rnl.root.node = unsafe.Pointer(nil) // Force a nil node.
+	rnl.root.node = nil // Force a nil node.
 	if rnl.root.write(s) != nil {
 		t.Errorf("expected write node on nil node to work")
 	}
@@ -2536,7 +3027,7 @@ func TestStoreRefCountRandom(t *testing.T) {
 				numSets++
 				v := fmt.Sprintf("%d", numSets)
 				pri := rand.Int31()
-				err := x.SetItem(&Item{
+				err = x.SetItem(&Item{
 					Key:      k,
 					Val:      []byte(v),
 					Priority: pri,
@@ -2562,11 +3053,21 @@ func TestStoreRefCountRandom(t *testing.T) {
 }
 
 func TestPersistRefCountRandom(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
-	defer os.Remove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}()
+	if useTestParallel {
+		t.Parallel()
+	}
 	counts := map[string]int{}
 
 	itemAddRef := func(c *Collection, i *Item) {
@@ -2616,12 +3117,14 @@ func TestPersistRefCountRandom(t *testing.T) {
 	s, x, counts := start(f)
 
 	stop := func() {
-		s.Flush()
+		err := s.Flush()
+		if err != nil {
+			log.Fatal("Flush Error", err)
+		}
 		s.Close()
 		if len(counts) != 0 {
 			t.Errorf("counts not empty after Close(), got: %#v\n", counts)
 		}
-		f.Close()
 	}
 
 	mustJustOneRef := func(msg string) {
@@ -2637,7 +3140,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 	numSets := 0
 	numKeys := 10
 	for i := 0; i < 100; i++ {
-		for j := 0; j < 1000; j++ {
+		for j := 0; j < 100; j++ {
 			ks := fmt.Sprintf("%03d", rand.Int()%numKeys)
 			k := []byte(ks)
 			r := rand.Int() % 100
@@ -2645,7 +3148,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 				numSets++
 				v := fmt.Sprintf("%d", numSets)
 				pri := rand.Int31()
-				err := x.SetItem(&Item{
+				err = x.SetItem(&Item{
 					Key:      k,
 					Val:      []byte(v),
 					Priority: pri,
@@ -2661,6 +3164,7 @@ func TestPersistRefCountRandom(t *testing.T) {
 			} else {
 				// Close and reopen the store.
 				stop()
+				f.Close()
 				f, _ = os.OpenFile(fname, os.O_RDWR, 0666)
 				s, x, counts = start(f)
 			}
@@ -2676,11 +3180,15 @@ func TestPersistRefCountRandom(t *testing.T) {
 }
 
 func TestEvictRefCountRandom(t *testing.T) {
-	fname := "tmp.test"
-	os.Remove(fname)
-	f, _ := os.Create(fname)
-	defer os.Remove(fname)
-
+	f, err := ioutil.TempFile(os.TempDir(), "gkvlite_")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fname := f.Name()
+	defer reportRemove(fname, t)
+	if useTestParallel {
+		t.Parallel()
+	}
 	start := func(f *os.File) (*Store, *Collection, map[string]int) {
 		counts := map[string]int{}
 		var s *Store
@@ -2734,12 +3242,18 @@ func TestEvictRefCountRandom(t *testing.T) {
 	s, x, counts := start(f)
 
 	stop := func() {
-		s.Flush()
+		err := s.Flush()
+		if err != nil {
+			log.Fatal("Flush Error", err)
+		}
 		s.Close()
 		if len(counts) != 0 {
 			t.Errorf("counts not empty after Close(), got: %#v\n", counts)
 		}
-		f.Close()
+		err = f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
 		f = nil
 	}
 
@@ -2772,7 +3286,7 @@ func TestEvictRefCountRandom(t *testing.T) {
 				numSets++
 				v := fmt.Sprintf("%d", numSets)
 				pri := rand.Int31()
-				err := x.SetItem(&Item{
+				err = x.SetItem(&Item{
 					Key:      k,
 					Val:      []byte(v),
 					Priority: pri,
@@ -2803,14 +3317,59 @@ func TestEvictRefCountRandom(t *testing.T) {
 		}
 		mustJustOneRef(fmt.Sprintf("i: %d", i))
 	}
+	if f != nil {
+		err := f.Close()
+		if err != nil {
+			log.Fatal("Close Error", err)
+		}
+	}
+}
+
+func TestIteratorEmpty(t *testing.T) {
+	s, err := NewStore(nil)
+	assert.Nil(t, err)
+	c := s.SetCollection("x", nil)
+	it := c.IterateAscend([]byte{}, true)
+	assert.False(t,
+		it.Next())
+	assert.Nil(t, it.Err())
+	i := it.(*iterator)
+	assert.True(t, i.closed)
+}
+
+func TestIterator(t *testing.T) {
+	s, err := NewStore(nil)
+	assert.Nil(t, err)
+	c := s.SetCollection("x", nil)
+	assert.Nil(t,
+		c.SetAny("1", "a"))
+	// Iterator will not create snapshot until first Next()
+	it := c.IterateAscend([]byte{}, true)
+	assert.Nil(t,
+		c.SetAny("2", "b"))
+	// Creating snapshot now
+	assert.True(t,
+		it.Next())
+	assert.Nil(t, it.Err())
+	assert.True(t,
+		it.Next())
+	assert.Nil(t, it.Err())
+	i := it.(*iterator)
+	assert.False(t, i.closed)
+	assert.Nil(t,
+		c.SetAny("3", "c"))
+	assert.False(t,
+		it.Next())
+	assert.True(t, i.closed)
+	assert.Nil(t, it.Err())
 }
 
 // perm returns a random permutation of n Int items in the range [0, n).
 func perm(n int) (out [][]byte) {
-    for _, v := range rand.Perm(n) {
-        out = append(out, []byte(strconv.Itoa(v)))
-    }
-    return out
+	for _, v := range rand.Perm(n) {
+		out = append(out, []byte(strconv.Itoa(v)))
+	}
+	return out
 }
 
 const benchmarkSize = 10000
@@ -2826,7 +3385,13 @@ func BenchmarkRandInsert(b *testing.B) {
 		x := tr.SetCollection("x", nil)
 		b.StartTimer()
 		for _, item := range insertP {
-			x.Set(item, item)
+			err := x.Set(item, item)
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
 			i++
 			if i >= b.N {
 				return
@@ -2846,11 +3411,20 @@ func BenchmarkRandDelete(b *testing.B) {
 		tr, _ := NewStore(nil)
 		x := tr.SetCollection("x", nil)
 		for _, item := range insertP {
-			x.Set(item, item)
+			err := x.Set(item, item)
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
 		}
 		b.StartTimer()
 		for _, item := range removeP {
-			x.Delete(item)
+			success, err := x.Delete(item)
+			if !success || (err != nil) {
+				log.Fatal("Delete Error", err)
+			}
 			i++
 			if i >= b.N {
 				return
@@ -2870,11 +3444,23 @@ func BenchmarkRandGet(b *testing.B) {
 		tr, _ := NewStore(nil)
 		x := tr.SetCollection("x", nil)
 		for _, item := range insertP {
-			x.Set(item, item)
+			err := x.Set(item, item)
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
+			if err != nil {
+				log.Fatal("Set Error", err)
+			}
 		}
 		b.StartTimer()
 		for _, item := range removeP {
-			x.Get(item)
+			_, err := x.Get(item)
+			if err != nil {
+				log.Fatal("Get Error", err)
+			}
+			if err != nil {
+				log.Fatal("Get Error", err)
+			}
 			i++
 			if i >= b.N {
 				return

@@ -2,6 +2,10 @@
 *~
 *.test
 *.tmp
+.idea
 tmp
 tools/view/view
 tools/slab/slab
+tools/view/view.exe
+tools/slab/slab.exe
+test.gkvlite

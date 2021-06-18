@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/steveyen/gkvlite"
+	"github.com/cbehopkins/gkvlite"
 )
 
 func TestSlabStore(t *testing.T) {
@@ -127,7 +127,7 @@ func TestSlabStoreRandom(t *testing.T) {
 	numSets := 0
 	numKeys := 10
 	for i := 0; i < 100; i++ {
-		for j := 0; j < 1000; j++ {
+		for j := 0; j < 100; j++ {
 			kr := rand.Int() % numKeys
 			ks := fmt.Sprintf("%03d", kr)
 			k := []byte(ks)
@@ -149,7 +149,7 @@ func TestSlabStoreRandom(t *testing.T) {
 				numSets++
 				b := arena.Alloc(kr * kr * kr * kr)
 				pri := rand.Int31()
-				it := scb.ItemAlloc(x, uint16(len(k)))
+				it := scb.ItemAlloc(x, uint32(len(k)))
 				copy(it.Key, k)
 				it.Val = b
 				it.Priority = pri

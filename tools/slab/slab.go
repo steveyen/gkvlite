@@ -14,10 +14,9 @@ import (
 	"os"
 	"sort"
 	"testing"
-	"unsafe"
 
-	"github.com/steveyen/gkvlite"
-	"github.com/steveyen/go-slab"
+	"github.com/cbehopkins/gkvlite"
+	"github.com/couchbase/go-slab"
 )
 
 var maxOps = flag.Int("ops", 0,
@@ -59,9 +58,9 @@ func main() {
 	if len(args) < 1 {
 		log.Fatalf("error: missing dbFileName")
 	}
-	if *pctSets + *pctDeletes + *pctEvicts + *pctReopens > 100 {
+	if *pctSets+*pctDeletes+*pctEvicts+*pctReopens > 100 {
 		log.Fatalf("error: percentages are > 100%% (%d%%+%d%%+%d%%+%d%%)",
-			*pctSets, *pctDeletes, *pctEvicts + *pctReopens)
+			*pctSets, *pctDeletes, *pctEvicts, *pctReopens)
 	}
 	run(args[0], *useSlab, *flushEvery, *maxItemBytes,
 		*maxOps, *maxItems, *pctSets, *pctDeletes, *pctEvicts, *pctReopens)
@@ -84,7 +83,7 @@ func readBufChain(arena *slab.Arena, maxBufSize int, r io.ReaderAt, offset int64
 	}
 	remaining := valLength - uint32(n)
 	if remaining > 0 {
-		next, err := readBufChain(arena, maxBufSize, r, offset + int64(n), remaining)
+		next, err := readBufChain(arena, maxBufSize, r, offset+int64(n), remaining)
 		if err != nil {
 			arena.DecRef(b)
 			return nil, err
@@ -137,7 +136,7 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		s := 0
 		b := i.Val
 		for b != nil {
-			_, err := w.WriteAt(b, offset + int64(s))
+			_, err := w.WriteAt(b, offset+int64(s))
 			if err != nil {
 				return err
 			}
@@ -159,7 +158,7 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		i.Val = b
 		return nil
 	}
-	itemAlloc := func(c *gkvlite.Collection, keyLength uint16) *gkvlite.Item {
+	itemAlloc := func(c *gkvlite.Collection, keyLength uint32) *gkvlite.Item {
 		var n *ItemNode
 		if freeItemNodes != nil {
 			n = freeItemNodes
@@ -167,11 +166,11 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 			n.next = nil
 		} else {
 			n = &ItemNode{}
-			n.item.Transient = unsafe.Pointer(n)
+			n.item.Transient = n
 		}
 		if n.refs != 0 ||
 			n.item.Key != nil || n.item.Val != nil || n.item.Priority != 0 ||
-			n.item.Transient != unsafe.Pointer(n) {
+			n.item.Transient != n {
 			panic("unexpected ItemNode refs or item fields")
 		}
 		n.refs = 1
@@ -180,11 +179,11 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 		return &n.item
 	}
 	itemAddRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
-		n := (*ItemNode)(i.Transient)
+		n := i.Transient.(*ItemNode)
 		n.refs++
 	}
 	itemDecRef := func(c *gkvlite.Collection, i *gkvlite.Item) {
-		n := (*ItemNode)(i.Transient)
+		n := i.Transient.(*ItemNode)
 		n.refs--
 		if n.refs == 0 {
 			if i.Key == nil {
@@ -215,8 +214,8 @@ func setupStoreArena(t *testing.T, maxBufSize int) (
 
 func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 	maxOps, maxItems, pctSets, pctDeletes, pctEvicts, pctReopens int) {
-	fmt.Printf("fname: %s, useSlab: %v, flushEvery: %d" +
-		", maxItemBytes: %d, maxOps: %d, maxItems: %d" +
+	fmt.Printf("fname: %s, useSlab: %v, flushEvery: %d"+
+		", maxItemBytes: %d, maxOps: %d, maxItems: %d"+
 		", pctSets: %d, pctDeletes; %d, pctEvicts: %d, pctReopens: %d\n",
 		fname, useSlab, flushEvery, maxItemBytes,
 		maxOps, maxItems, pctSets, pctDeletes, pctEvicts, pctReopens)
@@ -290,7 +289,7 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 			pri := rand.Int31()
 			var it *gkvlite.Item
 			if scb.ItemAlloc != nil {
-				it = scb.ItemAlloc(x, uint16(len(k)))
+				it = scb.ItemAlloc(x, uint32(len(k)))
 			} else {
 				it = &gkvlite.Item{Key: make([]byte, len(k))}
 			}
@@ -335,16 +334,16 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 			}
 		}
 
-		if flushEvery > 0 && i % flushEvery == 0 {
+		if flushEvery > 0 && i%flushEvery == 0 {
 			numFlushes++
 			s.Flush()
 		}
 
-		if i % 10000 == 0 {
+		if i%10000 == 0 {
 			if arena != nil && *slabStats == true {
 				arena.Stats(arenaStats)
 				mk := []string{}
-				for k, _ := range arenaStats {
+				for k := range arenaStats {
 					mk = append(mk, k)
 				}
 				sort.Strings(mk)
@@ -352,7 +351,7 @@ func run(fname string, useSlab bool, flushEvery int, maxItemBytes int,
 					log.Printf("%s = %d", k, arenaStats[k])
 				}
 			}
-			log.Printf("i: %d, numGets: %d, numSets: %d, numDeletes: %d" +
+			log.Printf("i: %d, numGets: %d, numSets: %d, numDeletes: %d"+
 				", numEvicts: %d, numReopens: %d, numFlushes: %d\n",
 				i, numGets, numSets, numDeletes, numEvicts, numReopens, numFlushes)
 		}

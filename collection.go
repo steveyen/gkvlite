@@ -4,17 +4,50 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
+	"strconv"
 	"sync"
-	"sync/atomic"
-	"unsafe"
 )
 
+// ByteAble is a type that
+// can be turned into a byte array
+type ByteAble interface {
+	ToBa() []byte
+}
+
+func toBa(st interface{}) []byte {
+	var bs []byte
+	switch v := st.(type) {
+	case int:
+		bs = []byte(strconv.Itoa(v))
+	case []int:
+		var st string
+		var comma string
+		for _, j := range v {
+			st += comma + strconv.Itoa(j)
+			comma = ","
+		}
+		bs = []byte(st)
+	case string:
+		bs = []byte(v)
+	case []byte:
+		bs = v
+	case ByteAble:
+		bs = v.ToBa()
+	default:
+		log.Fatalf("Unknown Type in toBa Conversion %T\n", st)
+	}
+
+	return bs
+}
+
+// KeyCompare defines a function for custom key comparison
 // User-supplied key comparison func should return 0 if a == b,
 // -1 if a < b, and +1 if a > b.  For example: bytes.Compare()
 type KeyCompare func(a, b []byte) int
 
-// A persistable collection of ordered key-values (Item's).
+// Collection implements a persistable ordered key-values (Item's).
 type Collection struct {
 	name    string // May be "" for a private collection.
 	store   *Store
@@ -25,7 +58,7 @@ type Collection struct {
 
 	allocStats AllocStats // User must serialize access (e.g., see locks in alloc.go).
 
-	AppData unsafe.Pointer // For app-specific data; atomic CAS recommended.
+	AppData interface{} // For app-specific data.
 }
 
 type rootNodeLoc struct {
@@ -47,6 +80,7 @@ type rootNodeLoc struct {
 	reclaimLater [3]*node
 }
 
+// Name returns as a string the name of the collection
 func (t *Collection) Name() string {
 	return t.name
 }
@@ -65,7 +99,8 @@ func (t *Collection) closeCollection() { // Just "close" is a keyword.
 	}
 }
 
-// Retrieve an item by its key.  Use withValue of false if you don't
+// GetItem from the collection by key
+// Use withValue of false if you don't
 // need the item's value (Item.Val may be nil), which might be able
 // to save on I/O and memory resources, especially for large values.
 // The returned Item should be treated as immutable.
@@ -104,6 +139,12 @@ func (t *Collection) GetItem(key []byte, withValue bool) (i *Item, err error) {
 	}
 }
 
+// GetAny get value by any compatable key
+func (t *Collection) GetAny(key interface{}) (val []byte, err error) {
+	return t.Get(toBa(key))
+}
+
+// Get value by key
 // Retrieve a value by its key.  Returns nil if the item is not in the
 // collection.  The returned value should be treated as immutable.
 func (t *Collection) Get(key []byte) (val []byte, err error) {
@@ -117,6 +158,18 @@ func (t *Collection) Get(key []byte) (val []byte, err error) {
 	return nil, nil
 }
 
+// ExistAny returns true of the key (of any supported datatyp) exists
+func (t *Collection) ExistAny(key interface{}) bool {
+	return t.Exist(toBa(key))
+}
+
+// Exist returns true if the key exists in the collection
+func (t *Collection) Exist(key []byte) bool {
+	val, _ := t.GetItem(key, false)
+	return val != nil
+}
+
+// SetItem in a collection
 // Replace or insert an item of a given key.
 // A random item Priority (e.g., rand.Int31()) will usually work well,
 // but advanced users may consider using non-random item priorities
@@ -138,7 +191,7 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	root := rnl.root
 	n := t.mkNode(nil, nil, nil, 1, uint64(len(item.Key))+uint64(item.NumValBytes(t)))
 	t.store.ItemAddRef(t, item)
-	n.item.item = unsafe.Pointer(item) // Avoid garbage via separate init.
+	n.item.item = item // Avoid garbage via separate init.
 	nloc := t.mkNodeLoc(n)
 	defer t.freeNodeLoc(nloc)
 	r, err := t.store.union(t, root, nloc, &rnl.reclaimMark)
@@ -156,12 +209,23 @@ func (t *Collection) SetItem(item *Item) (err error) {
 	return nil
 }
 
+// SetAny a key and value in a compatable data type
+func (t *Collection) SetAny(key, val interface{}) error {
+	return t.Set(toBa(key), toBa(val))
+}
+
+// Set a key and value
 // Replace or insert an item of a given key.
 func (t *Collection) Set(key []byte, val []byte) error {
 	return t.SetItem(&Item{Key: key, Val: val, Priority: rand.Int31()})
 }
 
-// Deletes an item of a given key.
+// DeleteAny will delete any key of a compatable type
+func (t *Collection) DeleteAny(key interface{}) (wasDeleted bool, err error) {
+	return t.Delete(toBa(key))
+}
+
+// Delete an item of a given key.
 func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	if t.store.readOnly {
 		return false, errors.New("store is read only")
@@ -204,6 +268,7 @@ func (t *Collection) Delete(key []byte) (wasDeleted bool, err error) {
 	return true, nil
 }
 
+// MinItem returns the minimum item
 // Retrieves the item with the "smallest" key.
 // The returned item should be treated as immutable.
 func (t *Collection) MinItem(withValue bool) (*Item, error) {
@@ -211,6 +276,7 @@ func (t *Collection) MinItem(withValue bool) (*Item, error) {
 		func(n *node) (*nodeLoc, bool) { return &n.left, true })
 }
 
+// MaxItem returns the maximum item
 // Retrieves the item with the "largest" key.
 // The returned item should be treated as immutable.
 func (t *Collection) MaxItem(withValue bool) (*Item, error) {
@@ -218,6 +284,7 @@ func (t *Collection) MaxItem(withValue bool) (*Item, error) {
 		func(n *node) (*nodeLoc, bool) { return &n.right, true })
 }
 
+// EvictSomeItems from the tree trading performance for memory
 // Evict some clean items found by randomly walking a tree branch.
 // For concurrent users, only the single mutator thread should call
 // EvictSomeItems(), making it serialized with mutations.
@@ -226,13 +293,9 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 		return 0
 	}
 	i, err := t.store.walk(t, false, func(n *node) (*nodeLoc, bool) {
-		if !n.item.Loc().isEmpty() {
-			i := n.item.Item()
-			if i != nil && atomic.CompareAndSwapPointer(&n.item.item,
-				unsafe.Pointer(i), unsafe.Pointer(nil)) {
-				t.store.ItemDecRef(t, i)
-				numEvicted++
-			}
+		if j := n.Evict(); j != nil {
+			t.store.ItemDecRef(t, j)
+			numEvicted++
 		}
 		next := &n.left
 		if (rand.Int() & 0x01) == 0x01 {
@@ -249,22 +312,305 @@ func (t *Collection) EvictSomeItems() (numEvicted uint64) {
 	return numEvicted
 }
 
+// ItemVisitor is a function type for things that can visit an item
+// return true if you wish to keep visiting
 type ItemVisitor func(i *Item) bool
+
+// ItemVisitorEx is a function type for things that can visit an item
+// as ItemVisitor but with current depth information provided
+// return true if you wish to keep visiting
 type ItemVisitorEx func(i *Item, depth uint64) bool
 
-// Visit items greater-than-or-equal to the target key in ascending order.
+type iteratorVisitor func(t *Collection, v ItemVisitor) error
+
+type ItemIterator interface {
+	Next() bool
+	Result() *Item
+	Close()
+	Err() error
+}
+
+func (t *Collection) IterateAscend(target []byte, withValue bool) ItemIterator {
+	it := newIterator(target, withValue)
+	go t.iteratorVisitorAscend(it)
+	return it
+}
+
+func (t *Collection) IterateDescend(target []byte, withValue bool) ItemIterator {
+	it := newIterator(target, withValue)
+	go t.iteratorVisitorDescend(it)
+	return it
+}
+
+type iterator struct {
+	target    []byte
+	withValue bool
+	next      chan bool
+	items     chan *Item
+	closed    bool
+	result    *Item
+	err       error
+}
+
+func newIterator(target []byte, withValue bool) *iterator {
+	it := iterator{}
+	it.target = target
+	it.withValue = withValue
+	it.next = make(chan bool)
+	it.items = make(chan *Item)
+	return &it
+}
+
+func (it *iterator) Next() bool {
+	if it.closed {
+		return false
+	}
+	it.next <- true
+	i, ok := <-it.items
+	if !ok || it.err != nil {
+		close(it.next)
+		it.closed = true
+		return false
+	}
+	it.result = i
+	return true
+}
+
+func (it *iterator) Close() {
+	if it.closed {
+		return
+	}
+	close(it.next)
+	it.closed = true
+}
+
+func (it *iterator) Result() *Item {
+	return it.result
+}
+
+func (it *iterator) Err() error {
+	return it.err
+}
+func (t *Collection) iteratorVisitorAscend(it *iterator) {
+	t.iterate(it, func(c *Collection, v ItemVisitor) error {
+		return c.VisitItemsAscend(it.target, it.withValue, v)
+	})
+}
+
+func (t *Collection) iteratorVisitorDescend(it *iterator) {
+	t.iterate(it, func(c *Collection, v ItemVisitor) error {
+		return c.VisitItemsDescend(it.target, it.withValue, v)
+	})
+}
+
+func (t *Collection) iterate(it *iterator, v iteratorVisitor) {
+	defer func() {
+		close(it.items)
+		// drain
+		for range it.next {
+		}
+	}()
+
+	if _, ok := <-it.next; !ok {
+		return
+	}
+	it.err = v(t, func(i *Item) bool {
+		it.items <- i
+		_, ok := <-it.next
+		return ok
+	})
+}
+
+// VisitItemsAscend visits the collection's items in ascending order
+// Specifically visit items greater-than-or-equal to the target key in ascending order.
 func (t *Collection) VisitItemsAscend(target []byte, withValue bool, v ItemVisitor) error {
 	return t.VisitItemsAscendEx(target, withValue,
 		func(i *Item, depth uint64) bool { return v(i) })
 }
 
-// Visit items less-than the target key in descending order.
+// VisitItemsDescend visits the collection's items in descending order
+// Specifically visit items less-than the target key in descending order.
 func (t *Collection) VisitItemsDescend(target []byte, withValue bool, v ItemVisitor) error {
 	return t.VisitItemsDescendEx(target, withValue,
 		func(i *Item, depth uint64) bool { return v(i) })
 }
 
-// Visit items greater-than-or-equal to the target key in ascending order; with depth info.
+// MaxBlockCnt is the maximum number of blocks we will split the collection into
+const MaxBlockCnt = 1024
+
+// BlockMangler will possibly re-arrange the order of the blocks
+type BlockMangler func([][]byte) [][]byte
+
+// VisitItemsRandom Visit Items in collection in Random order
+// Warning this takes way more work as we have to do 2 full passes
+// through the collection to sort it into bins
+// Suggest you make careful use of locks outside this and
+// within the visitor to prevent deadlocks
+func (t *Collection) VisitItemsRandom(
+	visitor ItemVisitorEx,
+) error {
+	numBlocks, lenBlock, err := t.determineBlocks()
+	if err != nil {
+		return err
+	}
+	if (lenBlock < 1) || (numBlocks < 1) {
+		return fmt.Errorf("Impossible block sizes,%d,%d", lenBlock, numBlocks)
+	}
+	blockStore := make([][]byte, 0, numBlocks)
+
+	var j int
+	v := func(i *Item, depth uint64) bool {
+		if j == 0 {
+			blockStore = append(blockStore, i.Key)
+			j = 1
+		} else if j >= lenBlock {
+			j = 0
+		} else {
+			j++
+		}
+		return true
+	}
+	si, err := t.MinItem(false)
+	if err != nil {
+		return err
+	}
+	err = t.VisitItemsAscendEx(si.Key, false, v)
+	if err != nil {
+		return err
+	}
+	blockStore = RandBm(blockStore)
+
+	for j := lenBlock + 1; j > 0; j-- {
+		for i, si := range blockStore {
+			// The behaviour we want is to visit the first item in each of blockStore
+			// then on the second item update blockStore to point to that second item
+			// repeat for each item in the block
+			first := true
+			vis := func(itm *Item, depth uint64) bool {
+
+				if first {
+					first = false
+					return visitor(itm, depth)
+				}
+				first = true
+				blockStore[i] = itm.Key
+				return false
+			}
+			err = t.VisitItemsAscendEx(si, true, vis)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// VisitItemsAscendBlockEx divides the collection keys into blocks
+// and visits the items in those
+// This is useful not for speed, but if you need a none linear visit order
+func (t *Collection) VisitItemsAscendBlockEx(
+	withValue bool,
+	blockMan BlockMangler,
+	visitor ItemVisitorEx,
+) error {
+	numBlocks, lenBlock, err := t.determineBlocks()
+	//log.Println("There are ", numBlocks, " of Length ", lenBlock)
+	if err != nil {
+		return err
+	}
+	if (lenBlock < 1) || (numBlocks < 1) {
+		return fmt.Errorf("Impossible block sizes,%d,%d", lenBlock, numBlocks)
+	}
+	blockStore := make([][]byte, 0, numBlocks)
+
+	var j int
+	v := func(i *Item, depth uint64) bool {
+		if j == 0 {
+			blockStore = append(blockStore, i.Key)
+			j = 1
+		} else if j >= lenBlock {
+			j = 0
+		} else {
+			j++
+		}
+		return true
+	}
+	si, err := t.MinItem(false)
+	if err != nil {
+		return err
+	}
+	err = t.VisitItemsAscendEx(si.Key, false, v)
+	if err != nil {
+		return err
+	}
+	if blockMan != nil {
+		blockStore = blockMan(blockStore)
+	}
+	for _, si := range blockStore {
+		j := 0
+		vis := func(i *Item, depth uint64) bool {
+			if j > lenBlock {
+				panic("impossible")
+				//return false
+			} else if j == (lenBlock) {
+				visitor(i, depth)
+				return false
+			}
+			j++
+			return visitor(i, depth)
+		}
+		//ii, _ := strconv.Atoi(string(si))
+		//log.Println("Starting a visit at:", ii)
+		err = t.VisitItemsAscendEx(si, withValue, vis)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (t *Collection) determineBlocks() (num, leng int, err error) {
+	var cnt int64
+	cnt, err = t.Len()
+	if err != nil {
+		return 0, 0, err
+	}
+	if cnt > MaxBlockCnt {
+		size := cnt / MaxBlockCnt
+		if cnt%MaxBlockCnt != 0 {
+			size++
+		}
+		return MaxBlockCnt, int(size), nil
+	}
+	return int(cnt), 1, nil
+}
+
+// RandBm Random Block Munging
+// a demonstration prototype for the random sorting of Blocks
+func RandBm(slice [][]byte) [][]byte {
+	for i := range slice {
+		j := rand.Intn(i + 1)
+		slice[i], slice[j] = slice[j], slice[i]
+	}
+	return slice
+}
+
+// Len returns the number of items in the collection
+// beware this requires walking the whole structure
+// Len is lengthy
+func (t *Collection) Len() (l int64, err error) {
+	visitor := func(i *Item, depth uint64) bool {
+		l++
+		return true
+	}
+	si, err := t.MinItem(false)
+	if err != nil {
+		return
+	}
+	err = t.VisitItemsAscendEx(si.Key, false, visitor)
+	return
+}
+
+// VisitItemsAscendEx items greater-than-or-equal to the target key in ascending order; with depth info.
 func (t *Collection) VisitItemsAscendEx(target []byte, withValue bool,
 	visitor ItemVisitorEx) error {
 	rnl := t.rootAddRef()
@@ -292,7 +638,7 @@ func (t *Collection) VisitItemsAscendEx(target []byte, withValue bool,
 	return err
 }
 
-// Visit items less-than the target key in descending order; with depth info.
+// VisitItemsDescendEx items less-than the target key in descending order; with depth info.
 func (t *Collection) VisitItemsDescendEx(target []byte, withValue bool,
 	visitor ItemVisitorEx) error {
 	rnl := t.rootAddRef()
@@ -311,7 +657,7 @@ func descendChoice(cmp int, n *node) (bool, *nodeLoc, *nodeLoc) {
 	return cmp > 0, &n.right, &n.left
 }
 
-// Returns total number of items and total key bytes plus value bytes.
+// GetTotals returns total number of items and total key bytes plus value bytes.
 func (t *Collection) GetTotals() (numItems uint64, numBytes uint64, err error) {
 	rnl := t.rootAddRef()
 	defer t.rootDecRef(rnl)
@@ -323,6 +669,7 @@ func (t *Collection) GetTotals() (numItems uint64, numBytes uint64, err error) {
 	return nNode.numNodes, nNode.numBytes, nil
 }
 
+// MarshalJSON is a standard JSON marshaller
 // Returns JSON representation of root node file location.
 func (t *Collection) MarshalJSON() ([]byte, error) {
 	rnl := t.rootAddRef()
@@ -330,15 +677,17 @@ func (t *Collection) MarshalJSON() ([]byte, error) {
 	return rnl.MarshalJSON()
 }
 
+// MarshalJSON is a standard JSON marshaller
 // Returns JSON representation of root node file location.
 func (rnl *rootNodeLoc) MarshalJSON() ([]byte, error) {
 	loc := rnl.root.Loc()
 	if loc.isEmpty() {
-		return json.Marshal(ploc_empty)
+		return json.Marshal(plocEmpty)
 	}
 	return json.Marshal(loc)
 }
 
+// UnmarshalJSON is a standard JSON unmarshaller
 // Unmarshals JSON representation of root node file location.
 func (t *Collection) UnmarshalJSON(d []byte) error {
 	p := ploc{}
@@ -349,19 +698,20 @@ func (t *Collection) UnmarshalJSON(d []byte) error {
 		t.rootLock = &sync.Mutex{}
 	}
 	nloc := t.mkNodeLoc(nil)
-	nloc.loc = unsafe.Pointer(&p)
+	nloc.loc = &p
 	if !t.rootCAS(nil, t.mkRootNodeLoc(nloc)) {
-		return errors.New("concurrent mutation during UnmarshalJSON().")
+		return errors.New("Concurrent mutation during UnmarshalJSON()")
 	}
 	return nil
 }
 
+// AllocStats returns the allocation stats for the collection
 func (t *Collection) AllocStats() (res AllocStats) {
 	withAllocLocks(func() { res = t.allocStats })
 	return res
 }
 
-// Writes dirty items of a collection BUT (WARNING) does NOT write new
+// Write dirty items of a collection BUT (WARNING) does NOT write new
 // root records.  Use Store.Flush() to write root records, which would
 // make these writes visible to the next file re-opening/re-loading.
 func (t *Collection) Write() error {
@@ -451,23 +801,23 @@ func (t *Collection) rootAddRef() *rootNodeLoc {
 func (t *Collection) rootDecRef(r *rootNodeLoc) {
 	t.rootLock.Lock()
 	freeNodeLock.Lock()
-	t.rootDecRef_unlocked(r)
+	t.rootDecRefUnlocked(r)
 	freeNodeLock.Unlock()
 	t.rootLock.Unlock()
 }
 
-func (t *Collection) rootDecRef_unlocked(r *rootNodeLoc) {
+func (t *Collection) rootDecRefUnlocked(r *rootNodeLoc) {
 	r.refs--
 	if r.refs > 0 {
 		return
 	}
 	if r.chainedCollection != nil && r.chainedRootNodeLoc != nil {
-		r.chainedCollection.rootDecRef_unlocked(r.chainedRootNodeLoc)
+		r.chainedCollection.rootDecRefUnlocked(r.chainedRootNodeLoc)
 	}
-	t.reclaimNodes_unlocked(r.root.Node(), &r.reclaimLater, &r.reclaimMark)
+	t.reclaimNodesUnlocked(r.root.Node(), &r.reclaimLater, &r.reclaimMark)
 	for i := 0; i < len(r.reclaimLater); i++ {
 		if r.reclaimLater[i] != nil {
-			t.reclaimNodes_unlocked(r.reclaimLater[i], nil, &r.reclaimMark)
+			t.reclaimNodesUnlocked(r.reclaimLater[i], nil, &r.reclaimMark)
 			r.reclaimLater[i] = nil
 		}
 	}

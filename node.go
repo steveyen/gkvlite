@@ -3,8 +3,8 @@ package gkvlite
 import (
 	"encoding/binary"
 	"fmt"
+	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 // A persistable node.
@@ -15,109 +15,194 @@ type node struct {
 	next               *node // For free-list tracking.
 }
 
-// A persistable node and its persistence location.
-type nodeLoc struct {
-	loc  unsafe.Pointer // *ploc - can be nil if node is dirty (not yet persisted).
-	node unsafe.Pointer // *node - can be nil if node is not fetched into memory yet.
-	next *nodeLoc       // For free-list tracking.
-}
-
-var empty_nodeLoc = &nodeLoc{} // Sentinel.
-
-func (nloc *nodeLoc) Loc() *ploc {
-	return (*ploc)(atomic.LoadPointer(&nloc.loc))
-}
-
-func (nloc *nodeLoc) Node() *node {
-	return (*node)(atomic.LoadPointer(&nloc.node))
-}
-
-func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
-	if src == nil {
-		return nloc.Copy(empty_nodeLoc)
-	}
-	atomic.StorePointer(&nloc.loc, unsafe.Pointer(src.Loc()))
-	atomic.StorePointer(&nloc.node, unsafe.Pointer(src.Node()))
-	return nloc
-}
-
-func (nloc *nodeLoc) isEmpty() bool {
-	return nloc == nil || (nloc.Loc().isEmpty() && nloc.Node() == nil)
-}
-
-func (nloc *nodeLoc) write(o *Store) error {
-	if nloc != nil && nloc.Loc().isEmpty() {
-		node := nloc.Node()
-		if node == nil {
-			return nil
+func (n *node) Evict() *Item {
+	if !n.item.Loc().isEmpty() {
+		i := n.item.Item()
+		if i != nil && n.item.casItem(i, nil) {
+			return i
 		}
-		offset := atomic.LoadInt64(&o.size)
-		length := ploc_length + ploc_length + ploc_length + 8 + 8
-		b := make([]byte, length)
-		pos := 0
-		pos = node.item.Loc().write(b, pos)
-		pos = node.left.Loc().write(b, pos)
-		pos = node.right.Loc().write(b, pos)
-		binary.BigEndian.PutUint64(b[pos:pos+8], node.numNodes)
-		pos += 8
-		binary.BigEndian.PutUint64(b[pos:pos+8], node.numBytes)
-		pos += 8
-		if pos != length {
-			return fmt.Errorf("nodeLoc.write() pos: %v didn't match length: %v",
-				pos, length)
-		}
-		if _, err := o.file.WriteAt(b, offset); err != nil {
-			return err
-		}
-		atomic.StoreInt64(&o.size, offset+int64(length))
-		atomic.StorePointer(&nloc.loc,
-			unsafe.Pointer(&ploc{Offset: offset, Length: uint32(length)}))
 	}
 	return nil
 }
 
-func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
-	if nloc == nil {
-		return nil, nil
+var nodeLocGL = sync.RWMutex{}
+
+const nodeMutex = false
+
+// A persistable node and its persistence location.
+type nodeLoc struct {
+	loc  *ploc    // *ploc - can be nil if node is dirty (not yet persisted).
+	node *node    // *node - can be nil if node is not fetched into memory yet.
+	next *nodeLoc // For free-list tracking.
+}
+
+var emptyNodeLoc = nodeLoc{} // Sentinel.
+
+func (nloc *nodeLoc) Loc() *ploc {
+	if nodeMutex {
+		nodeLocGL.RLock()
+		defer nodeLocGL.RUnlock()
 	}
-	n = nloc.Node()
-	if n != nil {
-		return n, nil
+	return nloc.loc
+}
+
+func (nloc *nodeLoc) setLoc(n *ploc) {
+	if nodeMutex {
+		nodeLocGL.Lock()
+		defer nodeLocGL.Unlock()
 	}
-	loc := nloc.Loc()
-	if loc.isEmpty() {
-		return nil, nil
+	nloc.loc = n
+}
+
+func (nloc *nodeLoc) Node() *node {
+	if nodeMutex {
+		nodeLocGL.RLock()
+		defer nodeLocGL.RUnlock()
 	}
-	if loc.Length != uint32(ploc_length+ploc_length+ploc_length+8+8) {
-		return nil, fmt.Errorf("unexpected node loc.Length: %v != %v",
-			loc.Length, ploc_length+ploc_length+ploc_length+8+8)
+	return nloc.node
+}
+
+func (nloc *nodeLoc) setNode(n *node) {
+	if nodeMutex {
+		nodeLocGL.Lock()
+		defer nodeLocGL.Unlock()
 	}
-	b := make([]byte, loc.Length)
-	if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
-		return nil, err
+	nloc.node = n
+}
+
+func (nloc *nodeLoc) LocNode() (*ploc, *node) {
+	if nodeMutex {
+		nodeLocGL.RLock()
+		defer nodeLocGL.RUnlock()
 	}
-	pos := 0
-	atomic.AddUint64(&o.nodeAllocs, 1)
+	return nloc.loc, nloc.node
+}
+func (n *node) setNumBytes(b []byte, pos int) {
+	n.numBytes = binary.BigEndian.Uint64(b[pos : pos+8])
+}
+func (n *node) setNumNodes(b []byte, pos int) {
+	n.numNodes = binary.BigEndian.Uint64(b[pos : pos+8])
+}
+
+func (nloc *nodeLoc) Copy(src *nodeLoc) *nodeLoc {
+	if src == nil {
+		return nloc.Copy(&emptyNodeLoc)
+	}
+
+	if nodeMutex {
+		nodeLocGL.Lock()
+		defer nodeLocGL.Unlock()
+	}
+	// NOTE: This trick only works because of the global lock. No reason to lock
+	// src independently of nlock.
+	nloc.loc = src.loc
+	nloc.node = src.node
+	return nloc
+}
+
+func (nloc *nodeLoc) isEmpty() bool {
+	if nodeMutex {
+		nodeLocGL.RLock()
+		defer nodeLocGL.RUnlock()
+	}
+	return nloc == nil || (nloc.loc.isEmpty() && nloc.node == nil)
+}
+
+func (nloc *nodeLoc) write(o *Store) error {
+	loc, node := nloc.LocNode()
+
+	if nloc != nil && loc.isEmpty() {
+		if node == nil {
+			return nil
+		}
+		// Load current size from store
+		offset := o.getSize()
+		length := plocLength + plocLength + plocLength + 8 + 8
+		b, err := node.populateDiskStruct(length)
+		if err != nil {
+			return err
+		}
+		if _, err := o.file.WriteAt(b, offset); err != nil {
+			return err
+		}
+		o.setSize(offset + int64(length))
+		nloc.setLoc(&ploc{Offset: offset, Length: uint32(length)})
+	}
+	return nil
+}
+
+// populateDiskStruct Created a byte array to write to the disk
+// This is popluated from the current node data
+func (n node) populateDiskStruct(length int) (b []byte, err error) {
+	b = make([]byte, length)
+	var pos int
+	pos = n.item.Loc().write(b, pos)
+	pos = n.left.Loc().write(b, pos)
+	pos = n.right.Loc().write(b, pos)
+	binary.BigEndian.PutUint64(b[pos:pos+8], n.numNodes)
+	pos += 8
+	binary.BigEndian.PutUint64(b[pos:pos+8], n.numBytes)
+	pos += 8
+	if pos != length {
+		return b, fmt.Errorf("nodeLoc.write() pos: %v didn't match length: %v",
+			pos, length)
+	}
+	return
+}
+
+// Populate a new node structure from the byte array supplied
+// The byte array contains the data read from the disk
+func populateNode(b []byte) (n *node, err error) {
 	n = &node{}
 	var p *ploc
+	var pos int
 	p = &ploc{}
 	p, pos = p.read(b, pos)
-	n.item.loc = unsafe.Pointer(p)
+	n.item.loc = p
 	p = &ploc{}
 	p, pos = p.read(b, pos)
-	n.left.loc = unsafe.Pointer(p)
+	n.left.loc = p
 	p = &ploc{}
 	p, pos = p.read(b, pos)
-	n.right.loc = unsafe.Pointer(p)
-	n.numNodes = binary.BigEndian.Uint64(b[pos : pos+8])
+	n.right.loc = p
+	n.setNumNodes(b, pos)
 	pos += 8
-	n.numBytes = binary.BigEndian.Uint64(b[pos : pos+8])
+	n.setNumBytes(b, pos)
 	pos += 8
 	if pos != len(b) {
 		return nil, fmt.Errorf("nodeLoc.read() pos: %v didn't match length: %v",
 			pos, len(b))
 	}
-	atomic.StorePointer(&nloc.node, unsafe.Pointer(n))
+	return n, nil
+}
+func (nloc *nodeLoc) read(o *Store) (n *node, err error) {
+	if nloc == nil {
+		return nil, nil
+	}
+	loc, n := nloc.LocNode()
+	if n != nil {
+		return n, nil
+	}
+	if loc.isEmpty() {
+		return nil, nil
+	}
+	if loc.Length != uint32(plocLength+plocLength+plocLength+8+8) {
+		return nil, fmt.Errorf("unexpected node loc.Length: %v != %v",
+			loc.Length, plocLength+plocLength+plocLength+8+8)
+	}
+	b := make([]byte, loc.Length)
+	if _, err := o.file.ReadAt(b, loc.Offset); err != nil {
+		return nil, err
+	}
+
+	atomic.AddUint64(&o.nodeAllocs, 1)
+
+	n, err = populateNode(b)
+	if err != nil {
+		return n, err
+	}
+
+	nloc.setNode(n)
 	return n, nil
 }
 

@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
+// Package global free lists & locks
+// Allows memory based lists to be global for efficiency
 var freeNodeLock sync.Mutex
 var freeNodes *node
 
@@ -16,8 +17,11 @@ var freeNodeLocs *nodeLoc
 var freeRootNodeLocLock sync.Mutex
 var freeRootNodeLocs *rootNodeLoc
 
+// This is maintained as a package global statistics
+// allows tracking of stats on a collection vs package
 var allocStats AllocStats
 
+// AllocStats holds allocation statistics for profiling
 type AllocStats struct {
 	MkNodes      int64
 	FreeNodes    int64 // Number of invocations of the freeNode() API.
@@ -72,7 +76,7 @@ func (t *Collection) reclaimMarkUpdate(nloc *nodeLoc,
 	return n
 }
 
-func (t *Collection) reclaimNodes_unlocked(n *node,
+func (t *Collection) reclaimNodesUnlocked(n *node,
 	reclaimLater *[3]*node, reclaimMark *node) int64 {
 	if n == nil {
 		return 0
@@ -95,9 +99,9 @@ func (t *Collection) reclaimNodes_unlocked(n *node,
 	if !n.right.isEmpty() {
 		right = n.right.Node()
 	}
-	t.freeNode_unlocked(n, reclaimMark)
-	numLeft := t.reclaimNodes_unlocked(left, reclaimLater, reclaimMark)
-	numRight := t.reclaimNodes_unlocked(right, reclaimLater, reclaimMark)
+	t.freeNodeUnlocked(n, reclaimMark)
+	numLeft := t.reclaimNodesUnlocked(left, reclaimLater, reclaimMark)
+	numRight := t.reclaimNodesUnlocked(right, reclaimLater, reclaimMark)
 	return 1 + numLeft + numRight
 }
 
@@ -134,7 +138,7 @@ func (t *Collection) mkNode(itemIn *itemLoc, leftIn *nodeLoc, rightIn *nodeLoc,
 	return n
 }
 
-func (t *Collection) freeNode_unlocked(n *node, reclaimMark *node) {
+func (t *Collection) freeNodeUnlocked(n *node, reclaimMark *node) {
 	if n == nil || n == reclaimMark {
 		return
 	}
@@ -145,9 +149,9 @@ func (t *Collection) freeNode_unlocked(n *node, reclaimMark *node) {
 	if i != nil {
 		t.store.ItemDecRef(t, i)
 	}
-	n.item = *empty_itemLoc
-	n.left = *empty_nodeLoc
-	n.right = *empty_nodeLoc
+	n.item = itemLoc{}
+	n.left = nodeLoc{}
+	n.right = nodeLoc{}
 	n.numNodes = 0
 	n.numBytes = 0
 	n.next = freeNodes
@@ -173,22 +177,22 @@ func (t *Collection) mkNodeLoc(n *node) *nodeLoc {
 		allocStats.CurFreeNodeLocs--
 		freeNodeLocLock.Unlock()
 	}
-	nloc.loc = unsafe.Pointer(nil)
-	nloc.node = unsafe.Pointer(n)
+	nloc.loc = nil
+	nloc.node = n
 	nloc.next = nil
 	return nloc
 }
 
 // Assumes that the caller serializes invocations.
 func (t *Collection) freeNodeLoc(nloc *nodeLoc) {
-	if nloc == nil || nloc == empty_nodeLoc {
+	if nloc == nil || nloc == &emptyNodeLoc {
 		return
 	}
 	if nloc.next != nil {
 		panic("double free nodeLoc")
 	}
-	nloc.loc = unsafe.Pointer(nil)
-	nloc.node = unsafe.Pointer(nil)
+	nloc.loc = nil
+	nloc.node = nil
 
 	freeNodeLocLock.Lock()
 	nloc.next = freeNodeLocs

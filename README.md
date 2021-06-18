@@ -3,7 +3,7 @@ gkvlite
 
 gkvlite is a simple, ordered, ACID, key-value persistence library for Go.
 
-[![GoDoc](https://godoc.org/github.com/steveyen/gkvlite?status.svg)](https://godoc.org/github.com/steveyen/gkvlite) [![Build Status](https://drone.io/github.com/steveyen/gkvlite/status.png)](https://drone.io/github.com/steveyen/gkvlite/latest) [![Coverage Status](https://coveralls.io/repos/steveyen/gkvlite/badge.png)](https://coveralls.io/r/steveyen/gkvlite)
+[![GoDoc](https://godoc.org/github.com/cbhvn/gkvlite?status.svg)](https://godoc.org/github.com/cbhvn/gkvlite) [![Build Status](https://travis-ci.org/cbhvn/gkvlite.svg?branch=master)](https://travis-ci.org/cbhvn/gkvlite)[![Coverage Status](https://coveralls.io/repos/github/cbhvn/gkvlite/badge.svg?branch=master)](https://coveralls.io/github/cbhvn/gkvlite?branch=master)
 
 Overview
 ========
@@ -28,7 +28,7 @@ Key concepts
 * A Store can have zero or more Collections.
 * A Collection can have zero or more Items.
 * An Item is a key and value.
-* A key is a []byte, max length 64KB (length is uint16).
+* A key is a []byte, max length 4GB/64kB (length is uint32/uint16).
 * A value is a []byte, max length 4GB (length is uint32).
 
 ACID properties
@@ -163,7 +163,7 @@ Examples
 
     import (
         "os"
-        "github.com/steveyen/gkvlite"
+        "github.com/cbhvn/gkvlite"
     )
     
     f, err := os.Create("/tmp/test.gkvlite")
